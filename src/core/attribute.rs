@@ -53,6 +53,24 @@ impl Attribute {
         }
     }
 
+    /// An attribute whose value is formatted from a `Display` straight into escaped form, for
+    /// a key known at compile time. What `html!` uses for `key = expr`.
+    pub(crate) fn from_display(key: &'static str, value: &impl std::fmt::Display) -> Self {
+        use std::fmt::Write as _;
+        let mut escaped = String::new();
+        // Writing into a `String` cannot fail; a `Display` impl that errors leaves a short value.
+        let _ = write!(
+            crate::core::escape::AttributeWriter(&mut escaped),
+            "{value}"
+        );
+        Self {
+            key: Cow::Borrowed(key),
+            value: escaped,
+            is_boolean: false,
+            is_trusted_url: false,
+        }
+    }
+
     /// Appends ` word` to the stored value, escaping only the new part.
     ///
     /// What `add_class` needs: the stored value is already escaped, so rebuilding the

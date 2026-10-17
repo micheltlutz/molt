@@ -70,6 +70,11 @@ pub enum Node {
 pub struct Markup(String);
 
 impl Markup {
+    /// Takes the string out, so a caller that owns the node does not copy it.
+    pub(crate) fn into_string(self) -> String {
+        self.0
+    }
+
     /// The content, already escaped or neutralised as its node requires.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -116,6 +121,16 @@ impl Node {
         let raw = content.as_ref();
         let mut escaped = String::with_capacity(raw.len());
         write_escaped_text(&mut escaped, raw, false);
+        Self::Text(Markup(escaped))
+    }
+
+    /// A text node formatted from a `Display` value directly into its escaped form, with no
+    /// intermediate `String`. What `html!` uses for `(expr)`.
+    pub(crate) fn text_display(value: &impl std::fmt::Display) -> Self {
+        use std::fmt::Write as _;
+        let mut escaped = String::new();
+        // Writing into a `String` cannot fail; a `Display` impl that errors leaves a short value.
+        let _ = write!(crate::core::escape::TextWriter(&mut escaped), "{value}");
         Self::Text(Markup(escaped))
     }
 
