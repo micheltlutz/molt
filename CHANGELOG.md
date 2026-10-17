@@ -5,9 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+`molt-framework` starts its own version line at 0.1.0. The 1.0.0 and 1.0.1 entries below
+were released as `winged-rust`.
+
 ## [Unreleased]
 
-## [1.1.0] - 2026-10-17
+## [0.1.0] - 2026-10-17
 
 ### Renamed
 
