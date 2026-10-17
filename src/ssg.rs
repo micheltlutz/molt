@@ -8,6 +8,7 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::core::{Node, Render, RenderOptions};
 use crate::document::Document;
@@ -124,19 +125,27 @@ impl StaticSiteGenerator {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        if destination.exists() {
-            fs::remove_file(&destination)?;
+        // Copy beside the destination and rename over it, so a failed copy leaves the old
+        // file in place instead of the delete-then-copy gap this used to have.
+        let temporary = temporary_path(&destination);
+        if let Err(error) = fs::copy(from, &temporary) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
         }
-        fs::copy(from, destination)?;
+        if let Err(error) = fs::rename(&temporary, &destination) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
+        }
         Ok(())
     }
 
     /// Removes the output directory, optionally recreating it empty.
     ///
     /// # Errors
-    /// Returns an error if the output directory is unsafe to delete — empty, the
-    /// filesystem root, or containing a `..` component. Winged-Swift's version has no such
-    /// guard and will happily recurse through whatever it is pointed at.
+    /// Returns an error if the output directory is unsafe to delete — empty, a filesystem
+    /// root, a top-level directory, the home directory, the working directory or one of its
+    /// ancestors, or containing a `..` component. Winged-Swift's version has no such guard
+    /// and will happily recurse through whatever it is pointed at.
     pub fn clean(&self, create_directory: bool) -> io::Result<()> {
         guard_destructive_path(&self.output_directory)?;
 
@@ -174,8 +183,13 @@ impl StaticSiteGenerator {
             fs::create_dir_all(parent)?;
         }
 
-        let temporary = destination.with_extension("winged-tmp");
-        let mut file = fs::File::create(&temporary)?;
+        let temporary = temporary_path(&destination);
+        // `create_new` refuses an existing path, symlinks included, so the temporary file
+        // can never be a pre-planted link that redirects the write.
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
         if let Err(error) = write_contents(&mut file) {
             let _ = fs::remove_file(&temporary);
             return Err(error);
@@ -188,19 +202,71 @@ impl StaticSiteGenerator {
     }
 
     /// Joins `path` onto the output directory, rejecting anything that escapes it.
+    ///
+    /// Only plain names are accepted: `..`, a root and a Windows drive prefix (`C:foo`
+    /// replaces the base on `join`) are refused, and so is a path with no file name
+    /// (`""`, `"."`, `"a/"`), which would name the output directory itself. A component
+    /// that already exists as a symlink is refused too, because writing through it lands
+    /// wherever the link points.
+    ///
+    /// The symlink check is not atomic with the write: someone who can create links inside
+    /// the output directory *while it is being generated* can still race it.
     fn resolve(&self, path: &str) -> io::Result<PathBuf> {
-        let candidate = Path::new(path);
-        if candidate.is_absolute() || candidate.components().any(|c| c == Component::ParentDir) {
-            return Err(io::Error::new(
+        let reject = |reason: &str| {
+            Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("path {path:?} escapes the output directory"),
-            ));
+                format!("path {path:?} {reason}"),
+            ))
+        };
+
+        let candidate = Path::new(path);
+        let mut names = 0;
+        for component in candidate.components() {
+            match component {
+                Component::Normal(_) => names += 1,
+                Component::CurDir => {}
+                _ => return reject("escapes the output directory"),
+            }
         }
-        Ok(self.output_directory.join(candidate))
+        if names == 0 || path.ends_with(['/', '\\']) {
+            return reject("does not name a file");
+        }
+
+        let mut resolved = self.output_directory.clone();
+        for component in candidate.components() {
+            if let Component::Normal(name) = component {
+                resolved.push(name);
+                // Absent components cannot be links; only existing ones are inspected.
+                if fs::symlink_metadata(&resolved).is_ok_and(|m| m.file_type().is_symlink()) {
+                    return reject("passes through a symbolic link");
+                }
+            }
+        }
+        Ok(resolved)
     }
 }
 
+/// A sibling of `destination` that no other writer will pick.
+///
+/// `with_extension` was the wrong tool: it *replaces* the extension, so `index.html` and
+/// `index.xml` both became `index.winged-tmp` and two pages written in parallel shared one
+/// file. The full file name, the process id and a counter make the name unique.
+fn temporary_path(destination: &Path) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let name = destination
+        .file_name()
+        .map_or_else(|| "page".into(), |n| n.to_string_lossy().into_owned());
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    destination.with_file_name(format!(".{name}.molt-{}-{unique}.tmp", std::process::id()))
+}
+
 /// Rejects output directories that are dangerous to delete recursively.
+///
+/// Beyond the empty path, a filesystem root and `..`, this refuses the directory the
+/// process is running in or any ancestor of it (`"."` has a non-empty parent, which is how
+/// the old check let `clean(".")` through), the home directory, and anything fewer than two
+/// levels below the root (`/usr`, `/home`). The guard only reads the filesystem; it never
+/// removes anything, so it can be tested directly.
 fn guard_destructive_path(path: &Path) -> io::Result<()> {
     let reject = |reason: &str| {
         Err(io::Error::new(
@@ -218,7 +284,45 @@ fn guard_destructive_path(path: &Path) -> io::Result<()> {
     if path.components().any(|c| c == Component::ParentDir) {
         return reject("the output directory contains a `..` component");
     }
+
+    let absolute = absolute_path(path)?;
+    let depth = absolute
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    if depth < 2 {
+        return reject("the output directory is a top-level directory");
+    }
+    if let Ok(cwd) = std::env::current_dir().and_then(fs::canonicalize) {
+        if cwd.starts_with(&absolute) {
+            return reject("the output directory is, or contains, the working directory");
+        }
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    if let Some(home) = home.and_then(|h| fs::canonicalize(h).ok()) {
+        if home == absolute {
+            return reject("the output directory is the home directory");
+        }
+    }
     Ok(())
+}
+
+/// `path` made absolute and, when it exists, with symlinks resolved.
+fn absolute_path(path: &Path) -> io::Result<PathBuf> {
+    if let Ok(canonical) = fs::canonicalize(path) {
+        return Ok(canonical);
+    }
+    let mut absolute = fs::canonicalize(std::env::current_dir()?)?;
+    for component in path.components() {
+        match component {
+            Component::Normal(name) => absolute.push(name),
+            Component::RootDir | Component::Prefix(_) => {
+                absolute = PathBuf::from(component.as_os_str());
+            }
+            _ => {}
+        }
+    }
+    Ok(absolute)
 }
 
 /// Turns per-page results into one error naming every failure.
@@ -249,7 +353,8 @@ mod tests {
 
     impl TempDir {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("molt-{name}"));
+            // The process id keeps two test runs (or two checkouts) off the same directory.
+            let path = std::env::temp_dir().join(format!("molt-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).expect("temp dir is creatable");
             Self(path)
@@ -260,6 +365,16 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// Whether `dir` holds exactly these entries, i.e. no temporary file was left behind.
+    fn only_files_named(dir: &Path, names: &[&str]) -> bool {
+        let mut found: Vec<String> = fs::read_dir(dir)
+            .expect("readable")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        found.sort();
+        found == names
     }
 
     fn page(text: &str) -> Document {
@@ -299,7 +414,7 @@ mod tests {
             written,
             page.render_with(&RenderOptions::pretty()).into_bytes()
         );
-        assert!(!dir.0.join("index.winged-tmp").exists());
+        assert!(only_files_named(&dir.0, &["index.html"]));
     }
 
     /// Ports `StaticSiteGeneratorTests.generateCreatesNestedDirectories`.
@@ -387,6 +502,117 @@ mod tests {
         let site = StaticSiteGenerator::new(&dir.0);
         assert!(site.write_file("x", "../escaped.html").is_err());
         assert!(site.write_file("x", "/etc/escaped.html").is_err());
+    }
+
+    #[test]
+    fn a_path_that_does_not_name_a_file_is_rejected() {
+        let dir = TempDir::new("nameless");
+        let site = StaticSiteGenerator::new(&dir.0);
+        for path in ["", ".", "./", "a/", "a\\", "a/../../x.html", "C:\\x.html"] {
+            // `C:\x.html` is an ordinary file name on Unix, so it is only rejected on Windows.
+            if path.starts_with("C:") && !cfg!(windows) {
+                continue;
+            }
+            let outcome = site.write_file("x", path);
+            assert!(outcome.is_err(), "{path:?} should be rejected");
+        }
+        // Nothing was created beside the output directory by `with_extension`.
+        let parent = dir.0.parent().expect("temp dir has a parent");
+        let name = dir
+            .0
+            .file_name()
+            .expect("named")
+            .to_string_lossy()
+            .into_owned();
+        assert!(!parent.join(format!("{name}.winged-tmp")).exists());
+        assert!(only_files_named(&dir.0, &[]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_inside_the_output_directory_is_not_followed() {
+        let dir = TempDir::new("symlink");
+        let outside = dir.0.join("outside");
+        fs::create_dir_all(&outside).expect("created");
+        let out = dir.0.join("out");
+        fs::create_dir_all(&out).expect("created");
+        std::os::unix::fs::symlink(&outside, out.join("link")).expect("linked");
+
+        let site = StaticSiteGenerator::new(&out);
+        assert!(site.write_file("x", "link/x.html").is_err());
+        let asset = dir.0.join("a.css");
+        fs::write(&asset, "a{}").expect("written");
+        assert!(site.copy_asset(&asset, "link/a.css").is_err());
+        assert!(only_files_named(&outside, &[]));
+    }
+
+    /// `with_extension` made `index.html` and `index.xml` share `index.winged-tmp`.
+    #[test]
+    fn pages_with_the_same_stem_do_not_share_a_temporary_file() {
+        let dir = TempDir::new("stem");
+        let site = StaticSiteGenerator::new(&dir.0);
+        std::thread::scope(|scope| {
+            for round in 0..8 {
+                for name in ["index.html", "index.xml", "index.htm"] {
+                    let site = &site;
+                    scope.spawn(move || {
+                        site.write_file(&format!("{name}:{round}"), name)
+                            .expect("written");
+                    });
+                }
+            }
+        });
+        assert!(only_files_named(
+            &dir.0,
+            &["index.htm", "index.html", "index.xml"]
+        ));
+        for name in ["index.html", "index.xml", "index.htm"] {
+            let content = fs::read_to_string(dir.0.join(name)).expect("readable");
+            assert!(
+                content.starts_with(&format!("{name}:")),
+                "{name}: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_failed_asset_copy_keeps_the_previous_file() {
+        let dir = TempDir::new("asset-atomic");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        let source = dir.0.join("source.css");
+        fs::write(&source, "old").expect("written");
+        site.copy_asset(&source, "style.css").expect("copied");
+
+        assert!(
+            site.copy_asset(dir.0.join("missing.css"), "style.css")
+                .is_err()
+        );
+        assert_eq!(
+            fs::read_to_string(dir.0.join("out/style.css")).expect("readable"),
+            "old"
+        );
+        assert!(only_files_named(&dir.0.join("out"), &["style.css"]));
+    }
+
+    /// `Path::new(".").parent()` is `Some("")`, so the old guard let `clean(".")` through.
+    #[test]
+    fn the_clean_guard_refuses_the_working_directory_and_what_contains_it() {
+        let cwd = std::env::current_dir().expect("cwd");
+        let mut unsafe_paths = vec![PathBuf::from("."), PathBuf::from("./"), cwd.clone()];
+        unsafe_paths.extend(cwd.ancestors().skip(1).map(Path::to_path_buf));
+        unsafe_paths.push(PathBuf::from("/usr"));
+        if let Some(home) = std::env::var_os("HOME") {
+            unsafe_paths.push(PathBuf::from(home));
+        }
+        for path in unsafe_paths {
+            assert!(
+                guard_destructive_path(&path).is_err(),
+                "{path:?} should be refused"
+            );
+        }
+        // A directory of its own, even one that does not exist yet, is fine.
+        assert!(guard_destructive_path(&cwd.join("dist")).is_ok());
+        assert!(guard_destructive_path(Path::new("dist")).is_ok());
     }
 
     /// Ports `StaticSiteGeneratorTests.generateMultipleWritesEveryPage`.
