@@ -8,6 +8,7 @@ use crate::core::escape::escape_xml;
 
 /// One entry in a feed.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RssItem {
     /// The item headline.
     pub title: String,
@@ -85,6 +86,7 @@ impl RssItem {
 /// assert!(xml.contains("<title>1.2 — tyres &amp; chain</title>"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RssGenerator {
     /// The channel title.
     pub title: String,

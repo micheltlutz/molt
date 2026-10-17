@@ -28,6 +28,8 @@ exclude = [
 # `molt-framework` while the library keeps the short name: `use molt::prelude::*`.
 [lib]
 name = "molt"
+# `cdylib` is what wasm-pack links; it is also built on a native `cargo build`, which is
+# harmless but not free. Library users only get the `rlib`.
 crate-type = ["cdylib", "rlib"]
 
 [features]
@@ -36,8 +38,9 @@ default = ["ssg"]
 ssg = []
 # WebAssembly bindings. Gated on the feature, never on target_arch — see PORTING.md.
 wasm = ["dep:wasm-bindgen"]
-# Parallel bulk generation. Sound only because the node tree is Send + Sync.
-parallel = ["dep:rayon"]
+# Parallel bulk generation (implies `ssg`: it only parallelises `generate_multiple`).
+# Sound only because the node tree is Send + Sync.
+parallel = ["ssg", "dep:rayon"]
 
 [dependencies]
 wasm-bindgen = { version = "0.2", optional = true }

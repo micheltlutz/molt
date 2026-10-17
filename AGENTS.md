@@ -83,8 +83,8 @@ Five steps. Skipping any of them fails `./scripts/verify.sh`.
 
 1. Add the entry to the `define_elements!` table in `src/elements/mod.rs`, with a doc
    comment naming the tag.
-2. If it is a void element, add it to `VOID_TAGS` in `src/core/tags.rs` — **keep the array
-   sorted**, `is_void` binary-searches it — and update the length.
+2. If it is a void element, add it to `VOID_TAGS` in `src/core/tags.rs` — **keep the slice
+   sorted**, `is_void` binary-searches it. It is a `&[&str]`, so there is no length to update.
 3. If its whitespace is significant, add it to `WHITESPACE_SENSITIVE_TAGS`.
 4. Run `./scripts/generate-tag-catalog.sh` and commit the regenerated
    `docs/tag-catalog.md`.

@@ -18,6 +18,7 @@ use crate::core::escape::escape_xml;
 /// assert!(xml.contains("<priority>1.0</priority>"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct SitemapUrl {
     /// The absolute URL of the page.
     pub loc: String,

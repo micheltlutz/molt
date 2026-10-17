@@ -13,6 +13,7 @@ use crate::core::{Element, Node};
 /// Winged-Swift accepts any string. This enum catches the typos while
 /// [`Role::Custom`] keeps the door open for roles it does not know.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Role {
     /// `role="banner"` — the page header.
     Banner,
@@ -66,6 +67,7 @@ impl Role {
 
 /// Something in the tree that will be hard or impossible to use with assistive technology.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct A11yIssue {
     /// The tag the problem was found on.
     pub tag: String,

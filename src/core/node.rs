@@ -23,6 +23,7 @@ use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_s
 /// assert_eq!(node.render(), "<div>hi</div>");
 /// ```
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Node {
     /// An element with a tag name, attributes and children.
     Element(Element),
