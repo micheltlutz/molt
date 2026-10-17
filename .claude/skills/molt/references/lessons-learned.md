@@ -604,6 +604,13 @@ claim was true all along; the CI simply had never tested it.
   platform support, a feature flag), read its log once and confirm the thing it claims.
 - **Rule.** A new job that fails is information, not noise: this one was the only reason the
   gap was found.
+- **And the real compiler found more.** Once the 1.85 leg ran 1.85, it failed under the CI's
+  `-D warnings` on a lint the newer compiler does not raise there (`unused_allocation`), in a
+  test of mine, `Box::new(el).render()`. Reproduce a CI failure with the CI's own flags
+  (`RUSTFLAGS="-D warnings"`), not the bare command: I had already run the suite on 1.85.1
+  without them and it passed. The lint was right in a way that mattered: calling `.render()`
+  on a `Box<Element>` auto-derefs to the element's method, so that test never exercised
+  `impl Render for Box<T>`. Going through a generic `fn through<T: Render>(t: T)` does.
 
 - **Guard.** `.github/workflows/ci.yml`
 

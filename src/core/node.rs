@@ -789,15 +789,17 @@ mod tests {
 
     #[test]
     fn references_boxes_and_options_render_like_what_they_hold() {
-        // Through a generic bound, so the `&T` impl is what runs.
+        // Through a generic bound, so the impl for the wrapper (`&T`, `Box<T>`, `Option<T>`) is
+        // what runs. Calling `.render()` on a `Box<Element>` would auto-deref to the element's
+        // own method and test nothing about the `Box` impl.
         fn through<T: Render>(value: T) -> String {
             value.render()
         }
         let el = p().text("x");
         assert_eq!(through(&el), "<p>x</p>");
-        assert_eq!(Box::new(el.clone()).render(), "<p>x</p>");
-        assert_eq!(Some(el.clone()).render(), "<p>x</p>");
-        assert_eq!(None::<Element>.render(), "");
+        assert_eq!(through(Box::new(el.clone())), "<p>x</p>");
+        assert_eq!(through(Some(el.clone())), "<p>x</p>");
+        assert_eq!(through(None::<Element>), "");
         let dynamic: Box<dyn Render> = Box::new(el);
         assert_eq!(dynamic.render(), "<p>x</p>");
     }
