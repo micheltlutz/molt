@@ -1,5 +1,19 @@
 # Findings for Winged-Swift
 
+> **Historical.** Winged-Swift is to be discontinued after Molt 1.0.0. These findings were
+> reported to its repository on 2026-10-17, and this file is kept as the record of what was
+> found and how Molt answered it.
+>
+> | # | filed as |
+> | --- | --- |
+> | 1–3, 4, 5, 8 | six **draft security advisories** (private, maintainers only), because the Winged-Swift `SECURITY.md` asks for private disclosure of vulnerabilities |
+> | 6 | [issue #52](https://github.com/micheltlutz/Winged-Swift/issues/52) |
+> | 7 | [issue #53](https://github.com/micheltlutz/Winged-Swift/issues/53) |
+>
+> **Finding 9 ("writes are not atomic") was withdrawn.** It was wrong: Winged-Swift writes
+> atomically (`atomically: true`; `Document.write(toFile:)` uses a temporary file and a move).
+> The temporary-file collision it had been paired with was a bug in the Rust port, not in Swift.
+
 Molt is a port of Winged-Swift, and porting means reading it closely. These are the places
 where the Swift behaviour is unsafe or wrong, that Molt fixes instead of copying. They are
 written down so they can be reported upstream and fixed there too.
@@ -10,8 +24,8 @@ checked against that source on the date of this file's commit; none is inferred 
 Whether a finding is exploitable in a given Swift site depends on how that site passes data.
 
 Each entry gives the Swift location, the input that shows it, what Molt does, and the Molt
-test that asserts it. The Molt side is in [`PORTING.md`](../PORTING.md) and
-[`CHANGELOG.md`](../CHANGELOG.md).
+test that asserts it. The Molt side is in [`PORTING.md`](PORTING.md) and
+[`CHANGELOG.md`](../../CHANGELOG.md).
 
 | # | severity | Swift | Molt |
 | --- | --- | --- | --- |
@@ -23,7 +37,6 @@ test that asserts it. The Molt side is in [`PORTING.md`](../PORTING.md) and
 | 6 | low | `escapeXML` keeps characters XML 1.0 cannot hold | dropped |
 | 7 | low | `isPermaLink="true"` for every guid | only for `http(s)` |
 | 8 | low | sitemap and feed links are not checked | `http(s)` only |
-| 9 | low | writes are not atomic | temp file + rename |
 
 ## 1. `<` and `>` in attribute values under raw-text parents
 
@@ -107,15 +120,6 @@ test that asserts it. The Molt side is in [`PORTING.md`](../PORTING.md) and
 - **Molt:** a `loc` or `link` that is not an absolute `http(s)` URL is omitted.
   Tests: `an_entry_whose_loc_is_not_http_is_left_out`,
   `a_link_that_is_not_http_is_left_out_of_the_feed`.
-
-## 9. Writes are not atomic
-
-- **Swift:** the generator writes in place, so a reader or a failed write can see a partial
-  page, and two pages written in parallel are not isolated.
-- **Molt:** a unique temporary file in the destination directory, then a rename;
-  `copy_asset` copies beside the destination and renames.
-  Tests: `pages_with_the_same_stem_do_not_share_a_temporary_file`,
-  `a_failed_asset_copy_keeps_the_previous_file`.
 
 ## Not findings
 

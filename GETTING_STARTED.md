@@ -162,4 +162,3 @@ call returns; reusing one throws `null pointer passed to rust`.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, and the limits of it. Read it before you
   render anything a user typed.
 - [`docs/tag-catalog.md`](docs/tag-catalog.md): every element constructor.
-- [`PORTING.md`](PORTING.md): how Molt differs from Winged-Swift, and why.

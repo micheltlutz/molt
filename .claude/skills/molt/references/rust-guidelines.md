@@ -145,7 +145,7 @@ From the Rust API Guidelines, as applied here:
   destructive function on the real working directory.
 - A test that must not run in parallel with others (global allocator counters) is a **single**
   `#[test]` in its own file.
-- Golden fixtures are copied from Winged-Swift and never hand-edited. A fixture diff in a PR is
+- Golden fixtures are compared byte for byte and never hand-edited. A fixture diff in a PR is
   the signal that markup changed; say so in the PR.
 
 ## 9. Docs and comments

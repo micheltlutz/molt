@@ -1,8 +1,8 @@
 # Pitfalls
 
 Mistakes grouped by **symptom**, so you can find yours by what you saw. Each entry says what
-is going on and the fix. Behaviours inherited from Winged-Swift are marked *(parity)*: they are
-load-bearing and the fixtures encode them.
+is going on and the fix. Behaviours that the golden fixtures encode are marked *(fixtures)*: they
+are load-bearing, and changing one is a breaking change.
 
 ## The output has the wrong characters
 
@@ -10,8 +10,8 @@ load-bearing and the fixtures encode them.
 | --- | --- | --- |
 | `&amp;amp;` or `&amp;lt;` | you escaped before calling `text()`/`attr()`, which escape themselves | pass the raw value |
 | `<b>` shown literally on the page | you used `text()` for markup | `raw_text()` / `Node::raw()` **only for markup you wrote** |
-| an apostrophe becomes `&#x27;` in HTML but `&apos;` in the sitemap | three escapers exist on purpose *(parity)* | do not unify them; `MOLT_SPEC.md` §3.3 shows only one and is wrong |
-| `<` is not escaped inside `alt="…"` | attribute escaping leaves `<` `>` alone *(parity)* | it is escaped automatically under `noscript`/`iframe`/`script`/… |
+| an apostrophe becomes `&#x27;` in HTML but `&apos;` in the sitemap | three escapers exist on purpose *(fixtures)* | do not unify them; the original spec (`docs/history/MOLT_SPEC.md` §3.3) shows only one and is wrong |
+| `<` is not escaped inside `alt="…"` | attribute escaping leaves `<` `>` alone *(fixtures)* | it is escaped automatically under `noscript`/`iframe`/`script`/… |
 | an attribute value breaks out of its quotes | you used `Attribute::raw`, which does **not** escape (it still runs the URL policy) | `Attribute::new`; `raw` only for a value you wrote and already escaped, with a comment |
 | `href="#"` where you wrote a URL | the URL policy blocked `javascript:`, `vbscript:`, `data:text/html` | use a real URL; `trusted_url` only for a URL **you** wrote |
 
@@ -19,7 +19,7 @@ load-bearing and the fixtures encode them.
 
 | you see | cause | fix |
 | --- | --- | --- |
-| children of `<img>`, `<br>`, `<input>` vanish | void elements take no children or content *(parity)* | wrap in a container |
+| children of `<img>`, `<br>`, `<input>` vanish | void elements take no children or content *(fixtures)* | wrap in a container |
 | an element and all its children render nothing | its tag name is invalid (space, `<`, `>`, leading digit, …) | use a valid name: letter, then letters/digits/`-_.:` |
 | an attribute is missing | its name holds a space, quote, `=`, `<`, `>`, `/`, a control character, or is empty | fix the name |
 | a boolean attribute shows as `required="true"` | you used `attr("required", "true")` | `bool_attr("required")` |
@@ -29,9 +29,9 @@ load-bearing and the fixtures encode them.
 
 | you see | cause | fix |
 | --- | --- | --- |
-| `Element::render()` is one line, `Document::render()` is indented | asymmetric on purpose *(parity)* | `render_pretty()` / `render_compact()` / `RenderOptions` |
-| `<pre>`/`<code>`/`<textarea>` contents are not indented | their whitespace is displayed *(parity)* | — |
-| `set_id`/`set_style`/`set_role` replaced my value | those three replace; every other setter appends *(parity)* | call it once, or use `attr` |
+| `Element::render()` is one line, `Document::render()` is indented | asymmetric on purpose *(fixtures)* | `render_pretty()` / `render_compact()` / `RenderOptions` |
+| `<pre>`/`<code>`/`<textarea>` contents are not indented | their whitespace is displayed *(fixtures)* | — |
+| `set_id`/`set_style`/`set_role` replaced my value | those three replace; every other setter appends *(fixtures)* | call it once, or use `attr` |
 | `add_class("a").add_class("b")` gives `class="a b"` | classes append, space-joined | — |
 | attributes are in insertion order | not sorted, on purpose | do not ask for sorting in the crate |
 | pretty output of a deep tree is enormous | one indent per level per line: O(depth²) | render compact, or `with_indent("")`, or bound depth |

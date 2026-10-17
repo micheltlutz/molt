@@ -2,7 +2,7 @@
 //!
 //! Ports `core/RenderOptions.swift` and the render half of `core/HTMLTag.swift`.
 //!
-//! `MOLT_SPEC.md` §2 claims Winged-Swift has a `protocol HTMLRenderable`. It does
+//! `docs/history/MOLT_SPEC.md` §2 claims Winged-Swift has a `protocol HTMLRenderable`. It does
 //! not — the only protocol in that library is `Layout`. The real design is a class
 //! hierarchy whose single overridable primitive is
 //! `write(into:options:indentLevel:)`, and that is what [`Render::write_into`] ports.

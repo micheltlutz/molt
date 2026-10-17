@@ -364,7 +364,7 @@ mod tests {
 
     /// Ports `RSSGeneratorTests.testExplicitGuidWinsOverTheLink`. Differs on one attribute:
     /// Swift writes `isPermaLink="true"` for any guid, which promises readers they may open
-    /// `urn:uuid:1234`; here only a URL guid gets `true` (see `PORTING.md` §12).
+    /// `urn:uuid:1234`; here only a URL guid gets `true` (see `docs/history/PORTING.md` §12).
     #[test]
     fn an_explicit_guid_wins_over_the_link() {
         let xml = channel().generate(&[RssItem::new(

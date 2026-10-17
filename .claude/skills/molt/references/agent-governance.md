@@ -40,7 +40,7 @@ something adjacent.
 
 ## Audit trail
 
-- One logical change per commit; prefixes follow the Winged-Swift CHANGELOG vocabulary
+- One logical change per commit; prefixes are
   (`Add:`, `Fix:`, `Change:`, `Update:`, `Docs:`, `Test:`, `Refactor:`, `Perf:`).
 - The commit body says **why** and, for performance, the numbers. `Closes #N` links the issue.
 - A PR body states: what changed, what was measured, what it deliberately does not do, what
@@ -76,7 +76,7 @@ right: verify the ones you will act on.
 
 - A change needs `unsafe`, a new runtime dependency, or a new public trait.
 - A fixture would have to change.
-- A parity rule (AGENTS.md 3, 5, 6, 7, 8, 9, 10) conflicts with a security fix. Propose the
+- A fixture-encoded rule (AGENTS.md 3, 5, 6, 7, 8, 9, 10) conflicts with a security fix. Propose the
   contextual option (L3) and let the owner choose.
 - The issue and the evidence disagree (L13). Do the evidence-backed thing and say so, or ask.
 - You are about to do something the plan does not list.

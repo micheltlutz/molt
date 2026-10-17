@@ -18,9 +18,8 @@ Fast, type-safe HTML generation for Rust — and for the browser, through WebAss
 
 📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework)
 
-A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1: the same
-composite tree, the same escape-by-default guarantee, the same compact and pretty render
-modes. Verified against the Swift project's own golden fixtures, byte for byte.
+A tree of plain values, escaped by default, rendered compact or pretty. The output is checked
+byte for byte against golden fixtures.
 
 Today Molt is the HTML layer of the framework: the element tree, the renderer, static site
 generation and the WebAssembly build described below.
@@ -100,10 +99,8 @@ tree into one buffer. There is no template parsing step and no reflection.
 **It runs in the browser.** The same tree, the same renderer, compiled to
 `wasm32-unknown-unknown`.
 
-**The tree is `Send + Sync`.** Winged-Swift's `HTMLTag` is a mutable class, which is why a
-Swift tag tree is not `Sendable` and why its `ROADMAP.md` lists that as an unresolved 3.0
-problem. `Node` is a value type, so bulk generation parallelises safely — that is what the
-`parallel` feature is built on.
+**The tree is `Send + Sync`.** `Node` is a value type, so bulk generation parallelises
+safely — that is what the `parallel` feature is built on.
 
 ## Install
 
@@ -184,7 +181,6 @@ worth knowing about when depth comes from untrusted input. See
 - [`GETTING_STARTED.md`](GETTING_STARTED.md): a first page, escaping, `html!`, SEO, a site on disk.
 - [`MIGRATION.md`](MIGRATION.md): from 0.1.0 to 1.0.0, change by change.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
-- [`PORTING.md`](PORTING.md): how Molt differs from Winged-Swift, and why.
 - [`ROADMAP.md`](ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).
 - API reference on [docs.rs](https://docs.rs/molt-framework).
 
@@ -226,5 +222,4 @@ sharing it, and telling me what you built with it help just as much.
 
 MIT — see [`LICENSE`](LICENSE).
 
-Original Swift implementation by
-[Michel Anderson Lutz Teixeira](https://micheltlutz.me).
+Created by [Michel Anderson Lutz Teixeira](https://micheltlutz.me).

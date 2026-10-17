@@ -55,10 +55,10 @@ Rules:
 - Treat names, comment bodies, paths, and indent strings as input too (L2).
 - A neutraliser is proved on its output, not its pattern (L1).
 - Context matters: the same `<` is inert in a quoted attribute and fatal inside `<noscript>`
-  (L3). When parity forbids the safe default everywhere, make it contextual and document it.
+  (L3). When the fixtures forbid the safe default everywhere, make it contextual and document it.
 - `raw_text`, `Node::raw`, `Attribute::raw` take trusted, hand-written markup only. A comment
   next to every use says why it is safe.
-- `<script>` and `<style>` bodies are **not** escaped by default (matches Winged-Swift).
+- `<script>` and `<style>` bodies are **not** escaped by default.
   JSON data goes through `seo::json_ld` / `seo::script_json`, which use `escape_json_script`
   (`<` `>` `&` U+2028 U+2029 as JSON `\u` escapes). HTML-escaping would be wrong there: JSON
   does not decode `&lt;`. Untrusted text in script *code* has no safe form.

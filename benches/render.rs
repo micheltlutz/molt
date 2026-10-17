@@ -1,6 +1,6 @@
 //! Render benchmarks.
 //!
-//! Phase 6 of `MOLT_SPEC.md` §7: 10,000 nodes, compact and pretty.
+//! Phase 6 of `docs/history/MOLT_SPEC.md` §7: 10,000 nodes, compact and pretty.
 //!
 //! The bench profile is `opt-level = 3` (see `Cargo.toml`); the release profile is tuned for
 //! WASM size and would measure the wrong thing. Routines that consume a tree use

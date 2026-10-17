@@ -117,7 +117,12 @@ Rust version returns an error for an empty path, a filesystem root, or a path co
 ### 6. Writes are atomic
 
 `write_file` writes to a temporary file in the destination directory and renames it, so a
-concurrent reader never sees a half-written page. Swift writes in place. `generate` fills
+concurrent reader never sees a half-written page. (Winged-Swift 3.0 writes atomically too:
+`Document.write(toFile:)` goes through a `.winged-tmp` file and a move, and `writeFile` uses
+`atomically: true`. An earlier version of this note said otherwise; it was wrong.) The
+temporary name here is unique per process and per call, because the first version of this
+port replaced the extension and so made `index.html` and `index.xml` share a file — a bug in
+the port, not in Swift. `generate` fills
 that temporary file through `Document::render_to`, which matches `render_with` byte for
 byte and renders each body section on its own.
 

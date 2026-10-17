@@ -14,13 +14,14 @@ unsafe is a security fix and goes in a patch release.
 
 ## Likely next
 
-- **Report the findings upstream.** [`docs/upstream-findings.md`](docs/upstream-findings.md)
-  lists nine places where Winged-Swift 3.0.1 is unsafe or wrong. Opening them there is the
-  next step; it is outstanding because it needs the owner's go-ahead.
 - **Trusted Publishing on crates.io**, and required reviewers on the `release` environment.
   Both are repository settings; the release workflow keeps working with the token until then.
+  ([#77](https://github.com/micheltlutz/molt/issues/77))
+- **The sitemap and the feed in the WebAssembly bindings**, and an optional panic hook.
+  ([#78](https://github.com/micheltlutz/molt/issues/78))
 - **An iterative `Debug`** for `Node` and `Element`. `Clone`, `PartialEq`, `Hash` and `Drop`
   are iterative; `Debug` is the one derive left, so `{:?}` on a very deep tree still aborts.
+  ([#79](https://github.com/micheltlutz/molt/issues/79))
 - **Fuzzing in the nightly workflow.** The targets exist (`scripts/fuzz.sh`: both escapers,
   the URL policy, the JSON-in-script escaper) but need nightly and are not in the pull-request
   gate.
@@ -38,12 +39,12 @@ Reopen with a benchmark that shows the cost, not with "it should be faster".
 - Caching attribute validity for trees that are rendered many times.
   ([#34](https://github.com/micheltlutz/molt/issues/34))
 
-## Winged-Swift features Molt does not have
+## Beyond the HTML layer
 
-Winged-Swift 2.1–2.4 grew a `Site`/`Page` layer, a Markdown parser, a CLI, an Atom feed and a
-`robots.txt` generator. They are out of scope for the core crate: Markdown has `pulldown-cmark`
-and a server has its own routing. If one of them is wanted, it would be a separate crate that
-depends on this one, not a feature of it.
+A `Site`/`Page` model, a Markdown parser, a command-line tool, an Atom feed and a `robots.txt`
+generator are out of scope for the core crate: Markdown has `pulldown-cmark` and a server has
+its own routing. If one of them is wanted, it would be a separate crate that depends on this
+one, not a feature of it.
 
 ## Deliberately not planned
 

@@ -20,7 +20,7 @@ exclude = [
     "/examples/node",
     "/fuzz",
     "/docs/plans",
-    "MOLT_SPEC.md",
+    "/docs/history",
     "molt-logo.jpg",
     "*.code-workspace",
 ]
@@ -37,7 +37,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["ssg"]
 # Static site generation. Pulls in std::fs; compiled out on wasm32 regardless.
 ssg = []
-# WebAssembly bindings. Gated on the feature, never on target_arch — see PORTING.md.
+# WebAssembly bindings. Gated on the feature, never on target_arch — see docs/history/PORTING.md.
 wasm = ["dep:wasm-bindgen"]
 # Parallel bulk generation (implies `ssg`: it only parallelises `generate_multiple`).
 # Sound only because the node tree is Send + Sync.

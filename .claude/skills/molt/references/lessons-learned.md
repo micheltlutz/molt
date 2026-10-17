@@ -43,24 +43,24 @@ W1–W2). Batch C = performance, measured (P0 onward). Batch D = the remaining s
 
 - **Symptom.** `noscript().child(img().attr("alt", "</noscript><img src=x onerror=…>"))` ended
   the `<noscript>` early. `escape_attribute` leaves `<` `>` alone because they cannot end a
-  quoted value, and the Swift fixtures depend on that. (#5, PR #46)
+  quoted value, and the golden fixtures depend on that. (#5, PR #46)
 - **Cause.** Under a raw-text ancestor (`noscript`, `iframe`, `xmp`, `noembed`, `noframes`,
   `script`, `style`, `plaintext`) the parser is not reading attributes at all; the first
   `</tag>` ends the element wherever it appears.
-- **Rule.** When a parity constraint forbids the safe escape everywhere, make it **contextual**:
+- **Rule.** When a fixture constraint forbids the safe escape everywhere, make it **contextual**:
   the writer keeps a counter of enclosing raw-text elements and escapes `<` `>` only there.
-  Do not widen `escape_attribute`; do record the divergence from Winged-Swift in `SECURITY.md`.
+  Do not widen `escape_attribute`; do record the contextual rule in `SECURITY.md`.
   An element's *own* attributes are read before raw-text mode starts and stay plain.
 - **Guard.** `angle_brackets_in_attributes_are_escaped_only_under_raw_text_parents`,
   `the_raw_text_escape_covers_deep_descendants_and_ends_with_the_parent`
 
 ### L4. A `pub` helper taking `&str` must escape, whatever the original did
 
-- **Symptom.** `meta_name("a\"><script>…", "v")` broke out of its attribute. Winged-Swift
-  inserted those names unescaped because its callers pass literals. (#4, PR #47)
-- **Rule.** Porting parity is about *output for valid input*. A `pub` function is called by
+- **Symptom.** `meta_name("a\"><script>…", "v")` broke out of its attribute. The original
+  helper inserted those names unescaped because its callers pass literals. (#4, PR #47)
+- **Rule.** Fixture parity is about *output for valid input*. A `pub` function is called by
   people who are not the original author; assume `&str` is hostile. Legitimate values are
-  unchanged by escaping, so parity costs nothing.
+  unchanged by escaping, so the fixtures cost nothing.
 - **Guard.** `a_hostile_meta_name_cannot_break_out_of_its_attribute`
 
 ### L5. Filesystem paths: five traps in one module
@@ -339,11 +339,11 @@ One control character in a feed title is not an XSS, but it makes the XML ill-fo
 reader rejects every entry. `escape_xml` drops the characters XML 1.0 cannot hold (listed in
 its docs; boundaries tested on both sides, including U+FFFD and U+10000 which are legal).
 Links in a sitemap or feed must be absolute `http(s)`, because readers render them as
-something to click. And a **parity test can encode a bug**: the ported test expected
+something to click. And a **test written from a reference can encode a bug**: a ported test expected
 `isPermaLink="true"` for `urn:uuid:1234`; the RSS 2.0 specification makes `true` a promise
 that readers may open the guid, so the Rust test now expects `false`, says so in its comment,
-and the divergence is listed in `PORTING.md` §12. Check the specification before copying a
-ported assertion.
+and the change is in `CHANGELOG.md`. Check the specification before copying a ported
+assertion.
 
 - **Guard.** `xml_drops_exactly_the_characters_xml_1_0_cannot_hold`,
   `a_link_that_is_not_http_is_left_out_of_the_feed`, `an_explicit_guid_wins_over_the_link`
@@ -480,3 +480,25 @@ back (`gh pr view --json body`) before moving on. The same applies to commit mes
 with `-m "…"`.
 
 - **Guard.** `scripts/check-knowledge-base.sh`
+
+### L33. Re-verify a claim about someone else's code at the moment you publish it
+
+(#80, `docs/history/upstream-findings.md`)
+
+Nine findings about the original library were written down while porting, and eight were
+right. The ninth ("its writes are not atomic") was copied from an earlier note and was
+**wrong**: reading the source once more, right before filing, showed `atomically: true` and a
+temporary file plus a move. The temporary-file collision I had paired with it was a bug in
+the Rust port itself (`with_extension` replaces the extension). Filing it would have put a
+false accusation in another project's tracker, and a false claim had also been sitting in
+`docs/history/PORTING.md`. **Rule:** a statement about code you do not own is checked against
+that code on the day it is published, with the file and line in the report; and a claim that
+is withdrawn is withdrawn in the record too, with the reason.
+
+A second rule from the same task: read the target's own policy before choosing the channel.
+That project's `SECURITY.md` asked for private disclosure, so the six injection-class findings
+went in as **draft security advisories** (visible to maintainers only, publishable later) and
+only the three robustness findings as public issues. A public disclosure cannot be undone; a
+draft can be published in one click.
+
+- **Guard.** `docs/history/upstream-findings.md`

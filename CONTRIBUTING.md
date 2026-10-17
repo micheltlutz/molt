@@ -38,7 +38,7 @@ compiler needs a deliberate MSRV bump and a CHANGELOG entry.
 
 ## Commit messages
 
-Prefix with the kind of change, matching Winged-Swift's CHANGELOG vocabulary:
+Prefix with the kind of change:
 
 ```
 Add: comment nodes to the html! macro
@@ -71,22 +71,13 @@ assert_eq!(div().add_class("a").render(), r#"<div class="a"></div>"#);
 assert_eq!(div().add_class("a").attributes()[0].key(), "class");
 ```
 
-This is not style pedantry: it is why Winged-Swift's test suite survived a complete
-internal rewrite in 2.0 without changing.
-
-Reference the Swift test you ported in a doc comment on the test, so the two stay
-traceable:
-
-```rust
-/// Ports `CSSHelpersTests.testAddClassDoesNotDoubleEscape`.
-#[test]
-fn chaining_add_class_does_not_double_escape() { … }
-```
+This is not style pedantry: it is what lets the internals be rewritten without touching the
+tests.
 
 ## Changing markup
 
-`cargo test --test golden` compares four files against Winged-Swift's own fixtures, byte
-for byte. If your change alters output, that test fails.
+`cargo test --test golden` compares four files against the golden fixtures, byte for byte.
+If your change alters output, that test fails.
 
 That is the system working. Either the change is wrong, or the fixtures genuinely need
 updating:

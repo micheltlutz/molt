@@ -201,8 +201,7 @@ card2.render();
 ## Output changes (no edit needed)
 
 The renderer is the same and the four golden fixtures are unchanged. These differ for the
-inputs named; each one is a bug in 0.1.0 or in Winged-Swift 3.0.1 that Molt fixes rather than
-copies (see `PORTING.md`).
+inputs named; each one is a bug in 0.1.0 that 1.0.0 fixes.
 
 | input | 0.1.0 | 1.0.0 |
 | --- | --- | --- |

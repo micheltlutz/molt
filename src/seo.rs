@@ -1,7 +1,7 @@
 //! SEO metadata: Open Graph, Twitter Cards and the common `<meta>` block.
 //!
 //! Ports `Winged-Swift/Sources/WingedSwift/seo/SEOHelpers.swift`, and implements the
-//! [`SeoBuilder`] from `MOLT_SPEC.md` §6 on top of it — the builder is sugar over
+//! [`SeoBuilder`] from `docs/history/MOLT_SPEC.md` §6 on top of it — the builder is sugar over
 //! these functions, never a second implementation.
 
 use crate::core::escape::escape_json_script;
@@ -174,7 +174,7 @@ pub fn twitter_card(
 /// # A bug fixed in the port
 ///
 /// Winged-Swift's `SEO.common(title:…)` accepts a `title` argument and never uses it — no
-/// `<title>` element is emitted. This version emits one. See `PORTING.md`.
+/// `<title>` element is emitted. This version emits one. See `docs/history/PORTING.md`.
 #[must_use]
 pub fn common(
     page_title: &str,
@@ -213,7 +213,7 @@ pub const DEFAULT_TWITTER_CARD: &str = "summary_large_image";
 
 /// A fluent builder for a page's whole metadata block.
 ///
-/// Implements `MOLT_SPEC.md` §6 on top of the functions above.
+/// Implements `docs/history/MOLT_SPEC.md` §6 on top of the functions above.
 ///
 /// # Examples
 /// ```

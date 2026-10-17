@@ -2,12 +2,8 @@
 #
 # Generates docs/tag-catalog.md from the define_elements! table in src/elements/mod.rs.
 #
-# Port of Winged-Swift/Scripts/generate-tag-catalog.sh, whose best idea is that
-# documentation drift is a build break: --check makes CI fail when the checked-in catalog
+# Documentation drift is a build break: --check makes CI fail when the checked-in catalog
 # no longer matches the source.
-#
-# One bug is fixed in the port. The Swift generator matches `public class [A-Za-z]+:
-# HTMLTag`, which rejects digits, so H1 through H6 are silently missing from its catalog.
 
 set -euo pipefail
 

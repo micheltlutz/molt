@@ -1,7 +1,7 @@
 //! HTML and XML escaping.
 //!
 //! Winged-Swift has three distinct escapers and the golden fixtures depend on the
-//! differences between them. `MOLT_SPEC.md` §3.3 shows only one; following the
+//! differences between them. `docs/history/MOLT_SPEC.md` §3.3 shows only one; following the
 //! spec here would break parity.
 //!
 //! | function | escapes | notes |
