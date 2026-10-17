@@ -39,6 +39,13 @@ run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
 step "2/8  Test"
 run "cargo test --all-features" cargo test --locked --all-features
+# What the CI WebAssembly job runs. It also runs the doc tests for the wasm32 target, where
+# `molt::ssg` does not exist: a guide that uses it broke `develop` once and only CI saw it.
+if command -v wasm-pack >/dev/null 2>&1; then
+  run "wasm-pack test (node)" wasm-pack test --node -- --features wasm
+else
+  printf '  skip  wasm-pack test (wasm-pack is not installed; CI runs it)\n'
+fi
 
 step "3/8  Lint"
 run "cargo fmt --check" cargo fmt --all --check
