@@ -12,12 +12,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-dea584.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
+[![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
 Fast, type-safe HTML generation for Rust — and for the browser, through WebAssembly.
 
-A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 2.0.0: the same
-composite tree, the same escape-by-default guarantee, the same compact and pretty render
-modes. Verified against the Swift project's own golden fixtures, byte for byte.
+📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework)
+
+A tree of plain values, escaped by default, rendered compact or pretty. The output is checked
+byte for byte against golden fixtures.
 
 Today Molt is the HTML layer of the framework: the element tree, the renderer, static site
 generation and the WebAssembly build described below.
@@ -41,14 +43,6 @@ For this project, the name marks a shift in architecture and mindset:
 
 > *Molt is about honoring our origins, shedding unnecessary overhead, and embracing maximum
 > performance.*
-
-### Brand
-
-The logo is a continuous-line geometric mark that combines a lightning bolt (speed), wings
-(lightness, and the Winged-Swift lineage), a gear (Rust engineering) and crab claws
-(Ferris). The primary colour is deep navy/slate (`#1A2B3C`) on white. The typeface is
-[Montserrat](https://fonts.google.com/specimen/Montserrat): Semi-Bold or Bold for the name,
-Light or Regular with +12% tracking for the tagline.
 
 ```rust
 use molt::prelude::*;
@@ -105,10 +99,8 @@ tree into one buffer. There is no template parsing step and no reflection.
 **It runs in the browser.** The same tree, the same renderer, compiled to
 `wasm32-unknown-unknown`.
 
-**The tree is `Send + Sync`.** Winged-Swift's `HTMLTag` is a mutable class, which is why a
-Swift tag tree is not `Sendable` and why its `ROADMAP.md` lists that as an unresolved 3.0
-problem. `Node` is a value type, so bulk generation parallelises safely — that is what the
-`parallel` feature is built on.
+**The tree is `Send + Sync`.** `Node` is a value type, so bulk generation parallelises
+safely — that is what the `parallel` feature is built on.
 
 ## Install
 
@@ -118,7 +110,7 @@ documentation on [docs.rs](https://docs.rs/molt-framework). It is published as
 
 ```toml
 [dependencies]
-molt-framework = "0.1"
+molt-framework = "1.0"
 ```
 
 ```bash
@@ -172,23 +164,9 @@ document.body.innerHTML = page.render();
 The bindings wrap the real tree rather than accumulating pre-rendered strings, so
 `renderPretty()` works and JavaScript drives exactly the renderer Rust does.
 
-## Parity with Winged-Swift
-
-The Swift project ships four golden fixtures. This crate reproduces all four **byte for
-byte**, which is what turns "a port" into a proven port:
-
-| fixture | what it exercises |
-| --- | --- |
-| `marketing-pretty.html` | doctype, `lang`, 17 meta tags, tables, boolean attributes, forms, `<pre><code>`, entity escaping |
-| `marketing-compact.html` | the same tree, minified |
-| `sitemap.xml` | XML escaping, float formatting |
-| `feed.xml` | RSS 2.0 with `atom:self` |
-
-Run `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` to regenerate them. A regenerated
-fixture in a pull-request diff is the signal that markup changed.
-
-Deliberate differences from the Swift API — and the reason for each — are listed in
-[`PORTING.md`](PORTING.md).
+**Handles are consumed.** Builder methods and element arguments move their value into Rust,
+so a handle you have already passed on (or chained from) is gone: using it throws
+`null pointer passed to rust`. Chain calls, or keep the handle each call returns.
 
 ## Known limitations
 
@@ -197,6 +175,14 @@ level above it, so a very deep tree renders a very large string. Rendering itsel
 depth limit — the writer walks an explicit stack rather than recursing — but the size is
 worth knowing about when depth comes from untrusted input. See
 [`SECURITY.md`](SECURITY.md#rendering-depth-is-no-longer-bounded-by-the-stack).
+
+## Documentation
+
+- [`GETTING_STARTED.md`](GETTING_STARTED.md): a first page, escaping, `html!`, SEO, a site on disk.
+- [`MIGRATION.md`](MIGRATION.md): from 0.1.0 to 1.0.0, change by change.
+- [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
+- [`ROADMAP.md`](ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).
+- API reference on [docs.rs](https://docs.rs/molt-framework).
 
 ## Development
 
@@ -210,11 +196,30 @@ cargo bench                # render performance
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`AGENTS.md`](AGENTS.md) if you are an agent.
+Molt is open source and contributions are welcome — a bug report with the input that
+triggered it is as useful as a patch.
+
+- **Found a bug or want a feature?** [Open an issue](https://github.com/micheltlutz/molt/issues).
+  The [`1.0.0` milestone](https://github.com/micheltlutz/molt/milestone/1) lists what is
+  planned.
+- **Found a security problem?** Please do not open a public issue; use
+  [a private security advisory](https://github.com/micheltlutz/molt/security/advisories/new).
+  See [`SECURITY.md`](SECURITY.md).
+- **Sending code?** Branch from `develop`, add a test that asserts on the rendered markup, and
+  run `./scripts/verify.sh` before you open the pull request. The rules and the reasons behind
+  them are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Using an AI agent?** Point it at [`AGENTS.md`](AGENTS.md) and the knowledge base in
+  [`.claude/skills/molt`](.claude/skills/molt/SKILL.md): security rules, Rust practices and the
+  lessons learned getting to 1.0.
+
+### Support the project
+
+If Molt saves you time, you can help keep it maintained by
+**[sponsoring on GitHub](https://github.com/sponsors/micheltlutz)**. Starring the repository,
+sharing it, and telling me what you built with it help just as much.
 
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
 
-Original Swift implementation by
-[Michel Anderson Lutz Teixeira](https://micheltlutz.me).
+Created by [Michel Anderson Lutz Teixeira](https://micheltlutz.me).

@@ -1,12 +1,13 @@
 //! The [`Element`] type and its fluent builder API.
 //!
-//! Ports the state half of `core/HTMLTag.swift`, all of `core/CSSHelpers.swift` and all of
-//! `core/AttributeHelpers.swift`. Those three files are the *complete* chainable surface
-//! of Winged-Swift — there is nothing else.
+//! The chainable surface is this file and nothing else: the attribute, class, style, role,
+//! `data-*` and `aria-*` helpers, text and children.
+
+use std::borrow::Cow;
 
 use crate::core::attribute::Attribute;
-use crate::core::escape::{write_escaped_attribute, write_escaped_text};
-use crate::core::node::Node;
+use crate::core::escape::write_escaped_text;
+use crate::core::node::{Node, Source};
 use crate::core::render::{Render, RenderOptions};
 
 /// An HTML element: a tag name, attributes, optional text content, and children.
@@ -27,20 +28,245 @@ use crate::core::render::{Render, RenderOptions};
 ///     r#"<div class="card" id="hero"><h1>Welcome</h1><p>Fuel, tyres &amp; chain.</p></div>"#
 /// );
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Element {
-    tag: String,
+    // `Cow` for the same reason as `Attribute::key`: the ~90 built-in constructors hand over
+    // a `'static` literal, so `div()` allocates no tag name.
+    tag: Cow<'static, str>,
     attributes: Vec<Attribute>,
     content: Option<String>,
     children: Vec<Node>,
     self_closing: bool,
 }
 
+impl Clone for Element {
+    fn clone(&self) -> Self {
+        match clone_tree(Source::Element(self)) {
+            Node::Element(element) => element,
+            _ => unreachable!("cloning an element yields an element"),
+        }
+    }
+}
+
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        trees_equal(Source::Element(self), Source::Element(other))
+    }
+}
+
+impl Eq for Element {}
+
+impl std::fmt::Display for Element {
+    /// The compact render, or the pretty one with the alternate flag: `{el}` / `{el:#}`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&if f.alternate() {
+            self.render_pretty()
+        } else {
+            self.render()
+        })
+    }
+}
+
+impl std::hash::Hash for Element {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_tree(Source::Element(self), state);
+    }
+}
+
+/// Appends nodes as children, so `element.extend(items)` works beside `children_from`.
+impl<N: Into<Node>> Extend<N> for Element {
+    fn extend<I: IntoIterator<Item = N>>(&mut self, iter: I) {
+        self.children.extend(iter.into_iter().map(Into::into));
+    }
+}
+
+/// Feeds a tree to a hasher with an explicit stack, matching [`trees_equal`]: trees that
+/// compare equal hash equal, and a deep tree cannot overflow the stack on the way.
+pub(crate) fn hash_tree<H: std::hash::Hasher>(root: Source<'_>, state: &mut H) {
+    use std::hash::Hash;
+
+    let mut pending = vec![root];
+    while let Some(source) = pending.pop() {
+        match source {
+            Source::Element(element) | Source::Node(Node::Element(element)) => {
+                0_u8.hash(state);
+                element.tag.hash(state);
+                element.attributes.hash(state);
+                element.content.hash(state);
+                element.self_closing.hash(state);
+                element.children.len().hash(state);
+                pending.extend(element.children.iter().rev().map(Source::Node));
+            }
+            Source::Node(Node::Fragment(children)) => {
+                1_u8.hash(state);
+                children.len().hash(state);
+                pending.extend(children.iter().rev().map(Source::Node));
+            }
+            Source::Node(Node::Text(text)) => {
+                2_u8.hash(state);
+                text.hash(state);
+            }
+            Source::Node(Node::Raw(text)) => {
+                3_u8.hash(state);
+                text.hash(state);
+            }
+            Source::Node(Node::Comment(text)) => {
+                4_u8.hash(state);
+                text.hash(state);
+            }
+        }
+    }
+}
+
+/// A copy of `element` with everything but its children.
+fn shell(element: &Element) -> Element {
+    Element {
+        tag: element.tag.clone(),
+        attributes: element.attributes.clone(),
+        content: element.content.clone(),
+        children: Vec::with_capacity(element.children.len()),
+        self_closing: element.self_closing,
+    }
+}
+
+/// An element or fragment whose children are being copied one at a time.
+enum CloneFrame<'a> {
+    Element {
+        source: &'a [Node],
+        built: Element,
+    },
+    Fragment {
+        source: &'a [Node],
+        built: Vec<Node>,
+    },
+}
+
+/// Deep-copies a tree with an explicit stack, in the same shape as the writer.
+pub(crate) fn clone_tree(root: Source<'_>) -> Node {
+    let mut stack: Vec<CloneFrame<'_>> = Vec::new();
+    let mut descend = Some(root);
+
+    loop {
+        // A finished subtree, once there is one, goes into the frame that was waiting for it.
+        let mut finished = None;
+        if let Some(source) = descend.take() {
+            match source {
+                Source::Element(element) | Source::Node(Node::Element(element)) => {
+                    stack.push(CloneFrame::Element {
+                        source: &element.children,
+                        built: shell(element),
+                    });
+                }
+                Source::Node(Node::Fragment(children)) => stack.push(CloneFrame::Fragment {
+                    source: children,
+                    built: Vec::with_capacity(children.len()),
+                }),
+                Source::Node(Node::Text(text)) => finished = Some(Node::Text(text.clone())),
+                Source::Node(Node::Raw(text)) => finished = Some(Node::Raw(text.clone())),
+                Source::Node(Node::Comment(text)) => finished = Some(Node::Comment(text.clone())),
+            }
+        }
+
+        if finished.is_none() {
+            // Take the next child of the innermost open frame, or close the frame.
+            let Some(frame) = stack.last_mut() else {
+                // Only reachable if `root` was a leaf that `finished` already carried out.
+                return Node::Fragment(Vec::new());
+            };
+            let (source, built_len) = match frame {
+                CloneFrame::Element { source, built } => (*source, built.children.len()),
+                CloneFrame::Fragment { source, built } => (*source, built.len()),
+            };
+            if let Some(next) = source.get(built_len) {
+                descend = Some(Source::Node(next));
+                continue;
+            }
+            finished = stack.pop().map(|frame| match frame {
+                CloneFrame::Element { built, .. } => Node::Element(built),
+                CloneFrame::Fragment { built, .. } => Node::Fragment(built),
+            });
+        }
+
+        let Some(done) = finished else { continue };
+        match stack.last_mut() {
+            None => return done,
+            Some(CloneFrame::Element { built, .. }) => built.children.push(done),
+            Some(CloneFrame::Fragment { built, .. }) => built.push(done),
+        }
+    }
+}
+
+/// Structural equality with an explicit stack of pairs still to compare.
+pub(crate) fn trees_equal(left: Source<'_>, right: Source<'_>) -> bool {
+    let mut pending = vec![(left, right)];
+    while let Some((left, right)) = pending.pop() {
+        match (left, right) {
+            (
+                Source::Element(a) | Source::Node(Node::Element(a)),
+                Source::Element(b) | Source::Node(Node::Element(b)),
+            ) => {
+                if a.tag != b.tag
+                    || a.attributes != b.attributes
+                    || a.content != b.content
+                    || a.self_closing != b.self_closing
+                    || a.children.len() != b.children.len()
+                {
+                    return false;
+                }
+                pending.extend(
+                    a.children
+                        .iter()
+                        .zip(&b.children)
+                        .map(|(a, b)| (Source::Node(a), Source::Node(b))),
+                );
+            }
+            (Source::Node(Node::Fragment(a)), Source::Node(Node::Fragment(b))) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                pending.extend(
+                    a.iter()
+                        .zip(b)
+                        .map(|(a, b)| (Source::Node(a), Source::Node(b))),
+                );
+            }
+            (Source::Node(Node::Text(a)), Source::Node(Node::Text(b)))
+            | (Source::Node(Node::Raw(a)), Source::Node(Node::Raw(b)))
+            | (Source::Node(Node::Comment(a)), Source::Node(Node::Comment(b))) => {
+                if a != b {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
 impl Element {
     /// Creates an element with the given tag name.
     pub fn new(tag: impl Into<String>) -> Self {
+        Self::with_tag(Cow::Owned(tag.into()))
+    }
+
+    /// Creates an element whose tag is a `'static` string, without allocating it.
+    ///
+    /// What the built-in constructors (`div()`, `p()`, …) use. Reach for it when you define
+    /// your own element helpers with a literal tag, such as a custom element.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// assert_eq!(Element::from_static("my-card").text("hi").render(), "<my-card>hi</my-card>");
+    /// ```
+    #[must_use]
+    pub fn from_static(tag: &'static str) -> Self {
+        Self::with_tag(Cow::Borrowed(tag))
+    }
+
+    fn with_tag(tag: Cow<'static, str>) -> Self {
         Self {
-            tag: tag.into(),
+            tag,
             attributes: Vec::new(),
             content: None,
             children: Vec::new(),
@@ -108,6 +334,12 @@ impl Element {
     ///
     /// The documented escape hatch for markup you already trust. `<script>` and `<style>`
     /// use this by default.
+    ///
+    /// **Do not put untrusted data in a `<script>` or `<style>` through this.** The element
+    /// ends at the first `</script` (or `</style`) wherever it appears, including inside a
+    /// JSON string. For JSON data use [`seo::json_ld`](crate::seo::json_ld) or
+    /// [`seo::script_json`](crate::seo::script_json), which escape it; there is no safe way to
+    /// embed untrusted text in script code.
     #[must_use]
     pub fn raw_text(mut self, content: impl Into<String>) -> Self {
         self.content = Some(content.into());
@@ -139,7 +371,6 @@ impl Element {
 
     /// Appends `key="value"`, escaping the value. Does not deduplicate.
     ///
-    /// Ports `setAttribute(key:value:)`.
     #[must_use]
     pub fn attr(self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
         self.add_attribute(Attribute::new(key, value))
@@ -168,8 +399,10 @@ impl Element {
     #[must_use]
     pub fn trusted_url(mut self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
         let attribute = Attribute::trusted_url(key, value);
-        let name = attribute.key().to_string();
-        self.attributes.retain(|existing| existing.key() != name);
+        // Compare against the borrowed key: copying it into a `String` just to call `retain`
+        // was an allocation per call.
+        self.attributes
+            .retain(|existing| existing.key() != attribute.key());
         self.attributes.push(attribute);
         self
     }
@@ -206,9 +439,9 @@ impl Element {
 
     /// Appends several `data-*` attributes.
     ///
-    /// Takes an ordered iterator rather than a map. Winged-Swift's `dataAttributes(_:)`
-    /// takes a Swift `Dictionary`, so its rendered attribute order is nondeterministic
-    /// between runs; this signature makes the output stable. See `PORTING.md`.
+    /// Takes an ordered iterator rather than a map: a hash map would render its
+    /// attributes in a different order from one run to the next, and this makes the output
+    /// stable.
     #[must_use]
     pub fn data_attrs<K: AsRef<str>, V: AsRef<str>>(
         mut self,
@@ -241,7 +474,7 @@ impl Element {
     // MARK: - Replacing helpers
     //
     // `set_id`, `set_style` and `set_role` remove any existing value before appending.
-    // Every other helper appends without deduplication — that asymmetry is Winged-Swift's.
+    // Every other helper appends without deduplication — that asymmetry is deliberate.
 
     /// Sets `id`, replacing any existing one.
     #[must_use]
@@ -261,9 +494,9 @@ impl Element {
         self.replace_attribute("role", role.as_ref())
     }
 
-    fn replace_attribute(mut self, key: &str, value: &str) -> Self {
+    fn replace_attribute(mut self, key: &'static str, value: &str) -> Self {
         self.attributes.retain(|a| a.key() != key);
-        self.attributes.push(Attribute::new(key, value));
+        self.attributes.push(Attribute::new_static(key, value));
         self
     }
 
@@ -272,19 +505,14 @@ impl Element {
     /// Appends a class name to `class`, space-joined.
     ///
     /// Only the new value is escaped — the existing attribute is already escaped, and
-    /// re-escaping it would double-encode. `Tests/WingedSwiftTests/CSSHelpersTests.swift`
-    /// has a regression test for exactly that.
+    /// re-escaping it would double-encode, and a test pins exactly that.
     #[must_use]
     pub fn add_class(mut self, class_name: impl AsRef<str>) -> Self {
         let raw = class_name.as_ref();
         if let Some(existing) = self.attributes.iter_mut().find(|a| a.key() == "class") {
-            let mut merged = existing.value().to_string();
-            merged.push(' ');
-            write_escaped_attribute(&mut merged, raw);
-            // `Attribute::raw` because `merged` is already escaped.
-            *existing = Attribute::raw("class", merged);
+            existing.push_escaped_word(raw);
         } else {
-            self.attributes.push(Attribute::new("class", raw));
+            self.attributes.push(Attribute::new_static("class", raw));
         }
         self
     }
@@ -328,6 +556,44 @@ impl Drop for Element {
 
 #[cfg(test)]
 mod tests {
+
+    /// The hand-written `Clone`/`PartialEq` must agree with what the derives did.
+    #[test]
+    fn a_clone_equals_its_source_and_is_independent() {
+        let source = div()
+            .attr("id", "a")
+            .add_class("x y")
+            .child(p().text("t").child(Node::comment("c")))
+            .child(Node::fragment([
+                Node::text("a"),
+                Node::raw("<b>"),
+                Node::fragment([]),
+                span().into(),
+            ]))
+            .child(Node::text("tail"));
+        let copy = source.clone();
+        assert_eq!(source, copy);
+        assert_eq!(source.render(), copy.render());
+
+        let changed = copy.clone().child(Node::text("more"));
+        assert_ne!(source, changed);
+        assert_eq!(source.render(), copy.render(), "the original is untouched");
+    }
+
+    #[test]
+    fn equality_sees_every_field() {
+        let base = div().attr("id", "a").text("t");
+        assert_eq!(base, div().attr("id", "a").text("t"));
+        assert_ne!(base, div().attr("id", "b").text("t"));
+        assert_ne!(base, div().attr("id", "a").text("u"));
+        assert_ne!(base, span().attr("id", "a").text("t"));
+        assert_ne!(base, div().attr("id", "a").text("t").self_closing(true));
+        assert_ne!(Node::text("a"), Node::raw("a"));
+        assert_ne!(Node::text("a"), Node::comment("a"));
+        assert_ne!(Node::fragment([]), Node::fragment([Node::text("")]));
+        assert_eq!(Node::from(base.clone()), Node::from(base));
+    }
+
     use super::*;
     use crate::core::RenderOptions;
     use crate::elements::{
@@ -335,7 +601,7 @@ mod tests {
         nav, ol, p, script, span, stylesheet, table, td, th, title, tr, ul,
     };
 
-    /// Ports `ThreeZeroTests.trustedURLsRenderAsGiven` on the element builder.
+    /// `trusted_url` on the element builder.
     #[test]
     fn trusted_url_replaces_a_blocked_value() {
         assert_eq!(
@@ -361,7 +627,6 @@ mod tests {
         assert!(!div().is_self_closing());
     }
 
-    /// Ports `CSSHelpersTests.testAddMultipleClasses`.
     #[test]
     fn add_class_appends_to_one_attribute() {
         assert_eq!(
@@ -370,7 +635,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testAddClassDoesNotDoubleEscapeExistingValues`.
     #[test]
     fn chaining_add_class_does_not_double_escape() {
         let rendered = div().add_class("a&b").add_class("c").render();
@@ -378,7 +642,6 @@ mod tests {
         assert!(!rendered.contains("&amp;amp;"));
     }
 
-    /// Ports `CSSHelpersTests.testAddClassEscapesQuotesInsteadOfBreakingOutOfTheAttribute`.
     #[test]
     fn a_quote_in_a_class_name_cannot_break_out() {
         let rendered = div().add_class(r#"a" onload="alert(1)"#).render();
@@ -386,7 +649,6 @@ mod tests {
         assert!(rendered.contains("&quot;"));
     }
 
-    /// Ports `CSSHelpersTests.testAddClassesArray`.
     #[test]
     fn add_classes_appends_all_of_them_in_order() {
         assert_eq!(
@@ -395,14 +657,12 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetIdReplacesExisting`.
     #[test]
     fn set_id_replaces_rather_than_appending() {
         let rendered = div().set_id("first").set_id("second").render();
         assert_eq!(rendered, r#"<div id="second"></div>"#);
     }
 
-    /// Ports `CSSHelpersTests.testSetStyle` and `AttributeHelpersTests.testSetRole`.
     #[test]
     fn set_style_and_set_role_also_replace() {
         let rendered = div()
@@ -413,8 +673,6 @@ mod tests {
         assert_eq!(rendered, r#"<div style="color:blue" role="main"></div>"#);
     }
 
-    /// Ports `AttributeHelpersTests.testDataAttribute` and
-    /// `AttributeHelpersTests.testAriaAttribute`.
     #[test]
     fn data_and_aria_attributes_get_their_prefixes() {
         let rendered = span()
@@ -424,7 +682,7 @@ mod tests {
         assert_eq!(rendered, r#"<span data-id="7" aria-label="Close"></span>"#);
     }
 
-    /// The improvement over Swift: ordered input means stable output.
+    /// Ordered input means stable output.
     #[test]
     fn bulk_attribute_order_is_stable() {
         let build = || {
@@ -438,8 +696,8 @@ mod tests {
         }
     }
 
-    /// No Swift counterpart: `HTMLTag` has no deduplication either, but nothing in its
-    /// suite pins it. Kept as a Rust-side guarantee.
+    /// Plain attributes are appended and never deduplicated; only `set_id`, `set_style` and
+    /// `set_role` replace.
     #[test]
     fn plain_attributes_are_appended_without_deduplication() {
         assert_eq!(
@@ -448,11 +706,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLEscapeTests.testHTMLTagEscapesContentByDefault` and
-    /// `HTMLEscapeTests.testHTMLTagCanDisableEscape`. Swift turns escaping off with an
-    /// `escapeContent:`
-    /// flag on the initialiser; Rust has a separate method instead, so the escape hatch is
-    /// greppable rather than hidden behind a default argument.
+    /// Escaping is the default, and turning it off is a separate method, so the escape hatch
+    /// is greppable rather than hidden behind a default argument.
     #[test]
     fn text_is_escaped_and_raw_text_is_not() {
         assert_eq!(p().text("<b>").render(), "<p>&lt;b&gt;</p>");
@@ -473,10 +728,6 @@ mod tests {
         assert_eq!(list.render(), "<div><p>a</p><p>b</p></div>");
     }
 
-    // Ports `HTMLTagTests`. Swift builds these through a result builder — `html { ... }` —
-    // which wraps everything in `<html>`; the Rust equivalent is an explicit `html_tag()`.
-
-    /// Ports `HTMLTagTests.testHTMLTagCreation`.
     #[test]
     fn a_tag_renders_its_attributes_then_its_content() {
         let tag = Element::new("p")
@@ -486,11 +737,8 @@ mod tests {
         assert_eq!(tag.render(), r#"<p class="text">Hello, World!</p>"#);
     }
 
-    /// Ports `HTMLTagTests.testHTMLTagWithMultipleAttributes`.
-    ///
-    /// Swift's `Img(src:alt:attributes:)` emits the extra attributes *before* `src` and
-    /// `alt`. The Rust `image(src, alt)` constructor puts them first instead, so matching
-    /// this byte for byte means going through the generic builder.
+    /// Extra attributes can come before the typed ones. The `image(src, alt)` constructor puts
+    /// `src` and `alt` first, so this order needs the generic builder.
     #[test]
     fn extra_attributes_can_precede_the_typed_ones() {
         let tag = img()
@@ -505,7 +753,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLBuilder`.
     #[test]
     fn nested_children_render_in_order() {
         let document = html_tag().child(
@@ -523,7 +770,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLBuilderWithAttributes`.
     #[test]
     fn a_container_renders_its_class_before_its_children() {
         let document = html_tag().child(
@@ -539,7 +785,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLTable`.
     #[test]
     fn a_table_renders_its_rows_and_cells() {
         let document = html_tag().child(
@@ -569,7 +814,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLList`.
     #[test]
     fn an_unordered_list_renders_its_items() {
         let document = html_tag().child(
@@ -588,7 +832,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLOrderedList`.
     #[test]
     fn an_ordered_list_renders_its_items() {
         let document = html_tag().child(
@@ -607,11 +850,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLDescriptionList`.
-    ///
-    /// Swift reaches for the untyped `HTMLTag("dt", content:)` here; `Element::new` is the
-    /// same escape hatch in Rust, and the point of the test is that it renders like any
-    /// generated constructor.
+    /// Built with `Element::new` rather than `dl()`/`dt()`/`dd()`: the point of the test is that
+    /// the untyped escape hatch renders like any generated constructor.
     #[test]
     fn a_description_list_renders_terms_and_descriptions() {
         let document = html_tag().child(
@@ -633,7 +873,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLStructuralTags`.
     #[test]
     fn the_structural_tags_nest_into_a_page() {
         let document = html_tag()
@@ -673,11 +912,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLScript`.
-    ///
     /// `raw_text`, not `text`: escaping the body would turn `'Hello World'` into
-    /// `&#39;Hello World&#39;` and the browser would run that literally. Swift's `Script`
-    /// has the same carve-out built into the type.
+    /// `&#39;Hello World&#39;` and the browser would run that literally.
     #[test]
     fn a_script_body_is_not_escaped() {
         let document = html_tag().child(
@@ -692,7 +928,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testMetaWithName`.
     #[test]
     fn meta_renders_both_the_named_and_the_charset_form() {
         let document = html_tag()
@@ -712,7 +947,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLTitle`.
     #[test]
     fn a_title_renders_its_text() {
         let document = html_tag().child(title().text("Title my site"));
@@ -723,7 +957,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLSpan`.
     #[test]
     fn a_span_renders_its_attributes_and_content() {
         let tag = span().attr("class", "text").text("Hello, World!");
@@ -731,11 +964,8 @@ mod tests {
         assert_eq!(tag.render(), r#"<span class="text">Hello, World!</span>"#);
     }
 
-    /// Ports `HTMLTagTests.testHTMLButton`.
-    ///
-    /// Swift's `Button` defaults to `type="button"` and appends it after the caller's
-    /// attributes. `button_typed` in Rust puts the type first, so the order here comes from
-    /// the generic builder.
+    /// `button_typed` puts the type first, so a type after the class comes from the generic
+    /// builder.
     #[test]
     fn a_button_carries_its_type_after_its_class() {
         let document = html_tag().child(button().add_class("button-class").attr("type", "button"));
@@ -746,7 +976,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLButtonChildren`.
     #[test]
     fn a_button_renders_its_children() {
         let document = html_tag().child(
@@ -765,13 +994,8 @@ mod tests {
         );
     }
 
-    // Ports the rest of `CSSHelpersTests` and `AttributeHelpersTests`.
-
-    /// Ports `CSSHelpersTests.testChainingPreservesTheConcreteType`.
-    ///
-    /// Swift needs the test because its helpers are declared on a protocol and could erase
-    /// the tag type. Rust's take `self` and return `Self`, so the type survives by
-    /// construction — what is worth pinning is the attribute order the chain produces.
+    /// The helpers take `self` and return `Self`, so the type survives by construction — what
+    /// is worth pinning is the attribute order the chain produces.
     #[test]
     fn chaining_helpers_keeps_the_element_usable() {
         let card: Element = div().add_class("card").set_id("hero").set_role("region");
@@ -782,7 +1006,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetStyleEscapesQuotes`.
     #[test]
     fn set_style_escapes_quotes() {
         let rendered = div()
@@ -795,7 +1018,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testAddSingleClass`.
     #[test]
     fn a_single_class_renders_on_its_own() {
         assert_eq!(
@@ -804,7 +1026,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetId`.
     #[test]
     fn set_id_renders_an_id_attribute() {
         assert_eq!(
@@ -813,7 +1034,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testChainedHelpers`.
     #[test]
     fn the_helpers_chain_in_the_order_they_are_called() {
         let rendered = div()
@@ -829,11 +1049,8 @@ mod tests {
         );
     }
 
-    /// Ports `AttributeHelpersTests.testMultipleDataAttributes`.
-    ///
-    /// Swift passes a `Dictionary`, whose order is unspecified, so its test can only check
-    /// that both survive. `data_attrs` takes an ordered iterator precisely so the output is
-    /// deterministic, which is what this pins instead.
+    /// `data_attrs` takes an ordered iterator precisely so the output is deterministic, which
+    /// is what this pins.
     #[test]
     fn several_data_attributes_keep_the_order_they_are_given() {
         let rendered = div()
@@ -843,7 +1060,6 @@ mod tests {
         assert_eq!(rendered, r#"<div data-id="123" data-type="product"></div>"#);
     }
 
-    /// Ports `AttributeHelpersTests.testMultipleAriaAttributes`.
     #[test]
     fn several_aria_attributes_keep_the_order_they_are_given() {
         let rendered = nav()
@@ -856,10 +1072,8 @@ mod tests {
         );
     }
 
-    /// Ports `AttributeHelpersTests.testSetAttribute`.
-    ///
-    /// Swift's `setAttribute` appends like every other helper — the name says *set* but it
-    /// does not replace. `attr` is the same operation under an honest name.
+    /// `attr` appends like every other helper — it does not replace an existing key; use
+    /// `set_id`, `set_style` or `set_role` for that.
     #[test]
     fn attr_appends_arbitrary_attributes() {
         let rendered = input_named("text", "email")

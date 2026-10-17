@@ -105,8 +105,8 @@ one here.
 ### 4. `Node::Comment` is new
 
 Winged-Swift has no comment node. `MOLT_SPEC.md` §3.1 asks for one, so it exists.
-Any `--` in the content is rewritten to `- -`, so a comment cannot be closed early and
-inject markup.
+A space is put between every two adjacent hyphens and after a trailing one (`--->` becomes
+`- - ->`), so a comment cannot be closed early and inject markup.
 
 ### 5. `clean()` refuses unsafe paths
 
@@ -117,7 +117,12 @@ Rust version returns an error for an empty path, a filesystem root, or a path co
 ### 6. Writes are atomic
 
 `write_file` writes to a temporary file in the destination directory and renames it, so a
-concurrent reader never sees a half-written page. Swift writes in place. `generate` fills
+concurrent reader never sees a half-written page. (Winged-Swift 3.0 writes atomically too:
+`Document.write(toFile:)` goes through a `.winged-tmp` file and a move, and `writeFile` uses
+`atomically: true`. An earlier version of this note said otherwise; it was wrong.) The
+temporary name here is unique per process and per call, because the first version of this
+port replaced the extension and so made `index.html` and `index.xml` share a file — a bug in
+the port, not in Swift. `generate` fills
 that temporary file through `Document::render_to`, which matches `render_with` byte for
 byte and renders each body section on its own.
 
@@ -141,6 +146,12 @@ write time, and this crate follows 3.0.1: `href`, `src`, `action`, `formaction`,
 `javascript:`, `vbscript:` or `data:text/html` URL. `Attribute::raw` does not escape, but
 it does not skip the check. `trusted_url` does.
 
+This crate goes further than 3.0.1 in four places, all in `url_policy.rs`: `ping`, `manifest`
+and `longdesc` are checked; `srcset` is checked per candidate; `srcdoc` is blocked (written
+empty) unless `trusted_url` is used; and on `iframe`, `frame`, `embed` and `object` a
+`data:` URL is blocked unless it is a raster image. Winged-Swift blocks only `data:text/html`,
+which leaves `data:image/svg+xml` and `data:application/xhtml+xml` working in a frame.
+
 `escape_attribute` still does not escape `<` or `>`. The fixtures and the table above fix
 that escaper; widening it would change markup that is not a URL.
 
@@ -148,6 +159,23 @@ that escaper; widening it would change markup that is not a URL.
 
 `Element::self_closing(true)` emits `>` or ` />` and drops children, including for a tag
 that is not in the void set. The default is `false`. Void tags are unchanged.
+
+### 12. Sitemap and feed output is checked
+
+Three differences from Winged-Swift, all in `sitemap.rs` and `feed.rs`:
+
+- **Characters XML 1.0 cannot hold are dropped.** `escape_xml` removes the control characters
+  U+0000–U+0008, U+000B, U+000C, U+000E–U+001F and U+FFFE/U+FFFF. Swift writes them, and one
+  such character makes the whole document ill-formed.
+- **Links must be absolute `http(s)` URLs.** A sitemap entry whose `loc` is not, and an RSS
+  `<link>` that is not, are left out; a feed reader shows the link as something to click.
+  `javascript:` there is as dangerous as in an `href`. A relative `loc` is not valid in a
+  sitemap in the first place.
+- **`isPermaLink` says the truth.** Swift always writes `isPermaLink="true"`. Here it is
+  `true` only when the guid is an `http(s)` URL; `urn:uuid:…` gets `false`. The RSS 2.0
+  specification makes `true` a promise that readers may open the guid.
+
+The fixtures use `https` links and a URL guid, so they are unaffected.
 
 ### 11. Rust has no default arguments
 

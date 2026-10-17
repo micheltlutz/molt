@@ -1,9 +1,9 @@
 //! Whole-page assembly.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/core/Document.swift`.
 
 use std::io::{self, Write};
 
+use crate::core::node::write_document_root;
 use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 use crate::elements::{body, head, html_tag};
 
@@ -15,8 +15,8 @@ use crate::elements::{body, head, html_tag};
 /// # Rendering default
 ///
 /// **`Document::render` defaults to pretty, while [`Element::render`] defaults to
-/// compact.** That asymmetry is in the Swift original and the golden fixtures depend on it,
-/// so it is preserved rather than tidied up.
+/// compact.** The asymmetry is deliberate and the golden fixtures depend on it, so it is not
+/// tidied up.
 ///
 /// # Examples
 /// ```
@@ -30,6 +30,7 @@ use crate::elements::{body, head, html_tag};
 /// assert!(page.render().starts_with("<!DOCTYPE html>\n<html lang=\"pt-BR\">"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Document {
     /// The document language, rendered as `<html lang="…">`. Omitted when `None`.
     pub lang: Option<String>,
@@ -37,6 +38,20 @@ pub struct Document {
     pub head: Element,
     /// The `<body>` element.
     pub body: Element,
+}
+
+impl Default for Document {
+    /// An empty document with no `lang`, same as `Document::new(None)`.
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+impl std::fmt::Display for Document {
+    /// The pretty render with doctype, same as [`Document::render`].
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.render())
+    }
 }
 
 impl Document {
@@ -92,11 +107,19 @@ impl Document {
     pub fn render_with(&self, options: &RenderOptions) -> String {
         let mut out = String::with_capacity(2048);
         out.push_str("<!DOCTYPE html>\n");
-        self.root().write_into(&mut out, options, 0);
+        // Not `self.root().write_into(..)`: that clones head and body, and `Clone` is
+        // recursive, so a deep body aborted the process before anything was written.
+        write_document_root(
+            self.lang.as_deref(),
+            &self.head,
+            &self.body,
+            &mut out,
+            options,
+        );
         out
     }
 
-    /// Renders the document **pretty-printed** — the Swift default for a document.
+    /// Renders the document **pretty-printed**, which is the default for a document.
     #[must_use]
     pub fn render(&self) -> String {
         self.render_with(&RenderOptions::pretty())
@@ -130,7 +153,9 @@ impl Document {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn render_to(&self, mut sink: impl Write, options: &RenderOptions) -> io::Result<()> {
-        if !streams_by_section(&self.body) {
+        // A depth limit counts `<html>` and `<body>` as open levels, which the section-by-
+        // section path does not see, so it takes the whole-tree path to keep the bytes equal.
+        if options.max_depth.is_some() || !streams_by_section(&self.body) {
             return sink.write_all(self.render_with(options).as_bytes());
         }
         sink.write_all(self.html_open().as_bytes())?;
@@ -144,7 +169,7 @@ impl Document {
     fn html_open(&self) -> String {
         let mut open = String::from("<!DOCTYPE html>\n<html");
         if let Some(lang) = &self.lang {
-            Attribute::new("lang", lang).write_into(&mut open);
+            Attribute::new_static("lang", lang).write_into(&mut open);
         }
         open.push('>');
         open
@@ -221,11 +246,69 @@ fn write_open_tag(element: &Element, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    /// `render_to` streams head and body separately, which cannot see `<html>` and `<body>` as
+    /// open levels; with a depth limit it must still write the bytes `render_with` does.
+    #[test]
+    fn a_depth_limit_gives_the_same_bytes_streamed_and_whole() {
+        use crate::elements::{div, p, title};
+        let page = Document::new(Some("en"))
+            .head_children([title().text("T")])
+            .body_children([
+                div().child(div().child(p().text("deep"))),
+                div().text("flat"),
+            ]);
+        for depth in 0..6 {
+            for base in [RenderOptions::pretty(), RenderOptions::compact()] {
+                let options = base.with_max_depth(depth);
+                let mut streamed = Vec::new();
+                page.render_to(&mut streamed, &options)
+                    .expect("a Vec never fails");
+                assert_eq!(
+                    String::from_utf8(streamed).expect("utf-8"),
+                    page.render_with(&options),
+                    "depth {depth}"
+                );
+            }
+        }
+        // html is level 1, body level 2: a limit of 2 keeps both and drops their children.
+        let rendered = page.render_with(&RenderOptions::compact().with_max_depth(2));
+        assert_eq!(
+            rendered,
+            "<!DOCTYPE html>\n<html lang=\"en\"><head></head><body></body></html>"
+        );
+    }
+
     use super::*;
     use crate::core::Node;
     use crate::elements::{body, h1, h2, head, img, meta, p, section, title};
 
-    /// Ports `DocumentTests.rendersDoctypeAndLanguage`.
+    /// The borrowed-parts writer must produce what rendering a cloned `<html>` tree did.
+    #[test]
+    fn rendering_matches_the_cloned_root_tree_byte_for_byte() {
+        use crate::elements::{div, p, pre, title};
+        let documents = [
+            Document::new(None),
+            Document::new(Some("pt-BR")).head_children([title().text("T")]),
+            Document::new(Some("a\"b")).body_children([div().child(p().text("x")), div()]),
+            Document::new(Some("en")).body_children([Node::fragment([]), Node::text("")]),
+            Document::with_parts(Some("en"), head(), pre().text("  keep  ")),
+            Document::with_parts(None, Element::new("bad tag"), body().text("t")),
+            Document::with_parts(None, head(), body().self_closing(true)),
+        ];
+        for document in &documents {
+            for options in [
+                RenderOptions::pretty(),
+                RenderOptions::compact(),
+                RenderOptions::pretty().with_xhtml_self_closing(true),
+                RenderOptions::compact().with_indent("\t"),
+            ] {
+                let mut expected = String::from("<!DOCTYPE html>\n");
+                document.root().write_into(&mut expected, &options, 0);
+                assert_eq!(document.render_with(&options), expected, "{document:?}");
+            }
+        }
+    }
+
     #[test]
     fn a_document_owns_the_doctype_and_the_lang_attribute() {
         let page = Document::new(Some("pt-BR"));
@@ -235,14 +318,12 @@ mod tests {
         );
     }
 
-    /// Ports `DocumentTests.languageIsOptional`.
     #[test]
     fn the_lang_attribute_is_omitted_when_absent() {
         let page = Document::new(None);
         assert!(page.render().starts_with("<!DOCTYPE html>\n<html>"));
     }
 
-    /// Ports `DocumentTests.rootExposesTheHTMLElementWithoutTheDoctype`.
     #[test]
     fn root_returns_the_tree_without_the_doctype() {
         let page = Document::new(Some("en"));
@@ -250,8 +331,7 @@ mod tests {
         assert!(page.root().render().starts_with("<html lang=\"en\">"));
     }
 
-    /// Ports `DocumentTests.prettyIsTheDefaultForDocuments`. The asymmetry with `Element::render`
-    /// is deliberate — see the type docs.
+    /// The asymmetry with `Element::render` is deliberate — see the type docs.
     #[test]
     fn a_document_renders_pretty_by_default_unlike_an_element() {
         let page = Document::new(Some("en")).head_children([title().text("T")]);
@@ -264,7 +344,6 @@ mod tests {
         );
     }
 
-    /// Ports `DocumentTests.acceptsAnExistingHeadAndBody`.
     #[test]
     fn head_and_body_children_land_in_the_right_place() {
         let page = Document::new(Some("en"))
@@ -276,7 +355,6 @@ mod tests {
         assert!(head_at < body_at);
     }
 
-    /// Ports `DocumentTests.documentIsAValue`.
     #[test]
     fn a_document_is_a_value_and_can_be_shared_across_threads() {
         fn assert_send_sync<T: Send + Sync>() {}
@@ -288,7 +366,6 @@ mod tests {
         assert!(copy.render().contains("changed"));
     }
 
-    /// Ports `DocumentTests.buildersSupportLoopsAndConditions`.
     #[test]
     fn body_children_accept_loops_and_conditions() {
         let show_banner = false;
@@ -304,8 +381,7 @@ mod tests {
         assert!(rendered.contains("<p>line 1</p><p>line 2</p>"));
     }
 
-    /// Ports `ThreeZeroTests.fileMatchesRender` and
-    /// `ThreeZeroTests.bodiesThatCannotStreamStillMatch`.
+    /// Streamed output matches `render_with`, including for bodies that cannot be streamed.
     #[test]
     fn render_to_matches_render_with() {
         let options = [

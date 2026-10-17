@@ -2,15 +2,18 @@
 #
 # One command that is a superset of CI. Run it before reporting that a change is done.
 #
-# Ported from Winged-Swift/Scripts/verify.sh, including its two best ideas: accumulate
-# failures instead of stopping at the first one, so a single run reports every problem;
-# and finish with an end-to-end smoke test that builds a throwaway crate against this
-# checkout, proving the library is actually consumable.
+# Two ideas make it useful: it accumulates failures instead of stopping at the first one, so
+# a single run reports every problem; and it includes an end-to-end smoke test that builds a
+# throwaway crate against this checkout, proving the library is actually consumable.
 
 set -uo pipefail
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; BLUE=$'\033[0;34m'; RESET=$'\033[0m'
 FAILURES=0
+# A private log file: a fixed path in /tmp is one another user on a shared machine can
+# pre-create as a symlink to a file of yours.
+LOG=$(mktemp "${TMPDIR:-/tmp}/molt-verify.XXXXXX")
+trap 'rm -f "$LOG"' EXIT
 
 step() { printf '\n%s==> %s%s\n' "$BLUE" "$1" "$RESET"; }
 ok()   { printf '%s  ok%s  %s\n' "$GREEN" "$RESET" "$1"; }
@@ -18,11 +21,11 @@ fail() { printf '%s  FAIL%s %s\n' "$RED" "$RESET" "$1"; FAILURES=$((FAILURES + 1
 
 run() {
   local label="$1"; shift
-  if "$@" > /tmp/molt-verify.log 2>&1; then
+  if "$@" > "$LOG" 2>&1; then
     ok "$label"
   else
     fail "$label"
-    sed 's/^/      /' /tmp/molt-verify.log | tail -40
+    sed 's/^/      /' "$LOG" | tail -40
   fi
 }
 
@@ -35,6 +38,13 @@ run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
 step "2/7  Test"
 run "cargo test --all-features" cargo test --locked --all-features
+# What the CI WebAssembly job runs. It also runs the doc tests for the wasm32 target, where
+# `molt::ssg` does not exist: a guide that uses it broke `develop` once and only CI saw it.
+if command -v wasm-pack >/dev/null 2>&1; then
+  run "wasm-pack test (node)" wasm-pack test --node -- --features wasm
+else
+  printf '  skip  wasm-pack test (wasm-pack is not installed; CI runs it)\n'
+fi
 
 step "3/7  Lint"
 run "cargo fmt --check" cargo fmt --all --check
@@ -60,7 +70,10 @@ step "6/7  End-to-end smoke test"
 # that compiles in-tree but cannot actually be consumed — a broken feature gate, a type
 # that is not public, a doc example that only works with dev-dependencies in scope.
 SMOKE_DIR="$(mktemp -d)"
-trap 'rm -rf "$SMOKE_DIR"' EXIT
+SMOKE_LOG="$SMOKE_DIR/smoke.log"
+# One trap for both temporaries: a second `trap ... EXIT` replaces the first, which is how the
+# main log file used to be left behind.
+trap 'rm -f "$LOG"; rm -rf "$SMOKE_DIR"' EXIT
 
 mkdir -p "$SMOKE_DIR/src"
 cat > "$SMOKE_DIR/Cargo.toml" <<TOML
@@ -87,7 +100,7 @@ fn main() {
 }
 RS
 
-if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>/tmp/molt-smoke.log); then
+if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>"$SMOKE_LOG"); then
   SMOKE_OUT="$SMOKE_DIR/output.html"
   for expected in '<!DOCTYPE html>' '<h1>It renders</h1>' '&lt;ok&gt;'; do
     if grep -qF -- "$expected" "$SMOKE_OUT"; then
@@ -99,20 +112,16 @@ if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>/tmp/molt-smoke.log); t
   done
 else
   fail "the smoke crate did not build"
-  sed 's/^/      /' /tmp/molt-smoke.log | tail -40
+  sed 's/^/      /' "$SMOKE_LOG" | tail -40
 fi
 
-step "7/7  Winged-Swift cross-references"
-
-# Skips itself when the sibling checkout is absent, which is why it can sit in the gate:
-# CI never has Winged-Swift, and a contributor who does gets told when a `Ports` comment
-# names a test that no longer exists.
-if PARITY=$(./scripts/check-swift-parity.sh 2>&1); then
-  printf '%s\n' "$PARITY" | tail -3 | sed 's/^/      /'
-  ok "cross-references resolve"
+step "7/7  Agent knowledge base"
+# Every lesson in .claude/skills/molt names the tests or files that guard it. A guard that
+# was renamed or deleted is a claim nothing checks any more.
+if [ -x scripts/check-knowledge-base.sh ]; then
+  run "knowledge-base guards resolve" ./scripts/check-knowledge-base.sh
 else
-  fail "a Ports comment names a Swift test that does not exist"
-  printf '%s\n' "$PARITY" | grep stale | sed 's/^/      /'
+  fail "scripts/check-knowledge-base.sh is missing or not executable"
 fi
 
 printf '\n'

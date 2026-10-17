@@ -1,20 +1,71 @@
 //! SEO metadata: Open Graph, Twitter Cards and the common `<meta>` block.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/seo/SEOHelpers.swift`, and implements the
-//! [`SeoBuilder`] from `MOLT_SPEC.md` §6 on top of it — the builder is sugar over
-//! these functions, never a second implementation.
+//! The free functions here build the tags; [`SeoBuilder`] is sugar over them, never a second
+//! implementation.
 
+use crate::core::escape::escape_json_script;
 use crate::core::{Attribute, Element};
-use crate::elements::{meta, title};
+use crate::elements::{meta, script, title};
+
+/// A `<script type="application/ld+json">` carrying structured data for search engines.
+///
+/// `json` is a JSON document, most often built from page fields that include user text. It
+/// is made safe to embed: `<`, `>`, `&`, U+2028 and U+2029 are written as JSON escapes, so a
+/// value containing `</script>` cannot end the element. It is **not validated**; pass valid
+/// JSON, from a serializer rather than string concatenation.
+///
+/// Before this helper the only way was `script().raw_text(json)`, which writes `json` as it is
+/// and lets a `</script>` in any field break out of the element.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// use molt::seo::json_ld;
+///
+/// let tag = json_ld(r#"{"@type":"Article","headline":"</script><script>alert(1)</script>"}"#);
+/// assert_eq!(
+///     tag.render(),
+///     r#"<script type="application/ld+json">{"@type":"Article","headline":"\u003c/script\u003e\u003cscript\u003ealert(1)\u003c/script\u003e"}</script>"#
+/// );
+/// ```
+#[must_use]
+pub fn json_ld(json: &str) -> Element {
+    script_json("application/ld+json", json)
+}
+
+/// A `<script type="…">` holding a JSON document, made safe to embed. See [`json_ld`].
+///
+/// Use it for other data blocks a page reads with `JSON.parse`, such as
+/// `application/json`. `mime` is attribute-escaped. Do not use it for `type="module"` or for
+/// classic scripts: that content is code, not data, and no escaping makes arbitrary code safe.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// use molt::seo::script_json;
+/// assert_eq!(
+///     script_json("application/json", r#"{"id":7}"#).render(),
+///     r#"<script type="application/json">{"id":7}</script>"#
+/// );
+/// ```
+#[must_use]
+pub fn script_json(mime: &str, json: &str) -> Element {
+    // `raw_text` because `<script>` content must not be HTML-escaped, which would write `&lt;`
+    // that JSON does not decode. It is safe here: `escape_json_script` has removed every `<`.
+    script()
+        .attr("type", mime)
+        .raw_text(escape_json_script(json).into_owned())
+}
 
 /// A `<meta name="…" content="…">`.
 ///
-/// The key is inserted unescaped, matching Winged-Swift, which builds its `Meta` keys with
-/// `escape: false` because they are literals the library controls. Values are escaped.
+/// Both `name` and `content` are attribute-escaped. The name is usually a literal, but these
+/// functions are `pub` and take `&str`, so a name built from user input (`og:` plus a field, say) would break out of
+/// the quotes. Every legitimate name (`description`, `og:title`) is unchanged by escaping.
 #[must_use]
 pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("name", name))
+        .add_attribute(Attribute::new_static("name", name))
         .attr("content", content)
 }
 
@@ -22,21 +73,21 @@ pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
 #[must_use]
 pub fn meta_property(property: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("property", property))
+        .add_attribute(Attribute::new_static("property", property))
         .attr("content", content)
 }
 
 /// A `<meta charset="…">`.
 #[must_use]
 pub fn meta_charset(charset: &str) -> Element {
-    meta().add_attribute(Attribute::raw("charset", charset))
+    meta().add_attribute(Attribute::new_static("charset", charset))
 }
 
 /// A `<meta http-equiv="…" content="…">`.
 #[must_use]
 pub fn meta_http_equiv(http_equiv: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("http-equiv", http_equiv))
+        .add_attribute(Attribute::new_static("http-equiv", http_equiv))
         .attr("content", content)
 }
 
@@ -120,8 +171,8 @@ pub fn twitter_card(
 ///
 /// # A bug fixed in the port
 ///
-/// Winged-Swift's `SEO.common(title:…)` accepts a `title` argument and never uses it — no
-/// `<title>` element is emitted. This version emits one. See `PORTING.md`.
+/// Emits a `<title>` element from `title`, followed by the charset, viewport, description and
+/// robots tags.
 #[must_use]
 pub fn common(
     page_title: &str,
@@ -137,10 +188,9 @@ pub fn common(
         meta_name("description", description),
         meta_name("robots", robots),
     ];
-    // An empty list is the same as no list: `content=""` says nothing and Winged-Swift
-    // omits the tag. The guard lives here rather than in `SeoBuilder` so both entry points
-    // agree — it used to be in the builder only, and calling `common` directly with an
-    // empty slice emitted the empty tag.
+    // An empty list is the same as no list: `content=""` says nothing, so the tag
+    // is omitted. The guard lives here rather than in `SeoBuilder` so both entry points
+    // agree.
     if let Some(keywords) = keywords.filter(|list| !list.is_empty()) {
         tags.push(meta_name("keywords", keywords.join(", ")));
     }
@@ -151,16 +201,16 @@ pub fn common(
     tags
 }
 
-/// The default viewport Winged-Swift uses.
+/// The default viewport.
 pub const DEFAULT_VIEWPORT: &str = "width=device-width, initial-scale=1.0";
-/// The default robots directive Winged-Swift uses.
+/// The default robots directive.
 pub const DEFAULT_ROBOTS: &str = "index, follow";
-/// The default Twitter card type Winged-Swift uses.
+/// The default Twitter card type.
 pub const DEFAULT_TWITTER_CARD: &str = "summary_large_image";
 
 /// A fluent builder for a page's whole metadata block.
 ///
-/// Implements `MOLT_SPEC.md` §6 on top of the functions above.
+/// Implements `docs/history/MOLT_SPEC.md` §6 on top of the functions above.
 ///
 /// # Examples
 /// ```
@@ -269,8 +319,7 @@ impl SeoBuilder {
 
     /// Builds the tags: the common block, then Open Graph, then Twitter Cards.
     ///
-    /// That order matches Winged-Swift's `SEO.complete`, and the golden fixture depends on
-    /// it.
+    /// The order is fixed, and the golden fixture depends on it.
     #[must_use]
     pub fn build(&self) -> Vec<Element> {
         let keywords: Vec<&str> = self.keywords.iter().map(String::as_str).collect();
@@ -308,6 +357,46 @@ impl SeoBuilder {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_ld_cannot_be_broken_out_of_by_a_value() {
+        for hostile in [
+            "</script><script>alert(1)</script>",
+            "</SCRIPT >",
+            "<!--<script>",
+            "-->",
+            "<img src=x onerror=alert(1)>",
+        ] {
+            let json = format!(r#"{{"name":"{hostile}"}}"#);
+            let html = json_ld(&json).render();
+            let inner = html
+                .strip_prefix(r#"<script type="application/ld+json">"#)
+                .and_then(|rest| rest.strip_suffix("</script>"))
+                .expect("one script element");
+            for forbidden in ['<', '>', '&'] {
+                assert!(!inner.contains(forbidden), "{hostile:?} -> {html}");
+            }
+        }
+    }
+
+    #[test]
+    fn json_ld_keeps_the_document_and_only_rewrites_what_is_dangerous() {
+        let plain = r#"{"@context":"https://schema.org","name":"Tyres","n":[1,2.5,true,null]}"#;
+        assert_eq!(
+            json_ld(plain).render(),
+            format!(r#"<script type="application/ld+json">{plain}</script>"#)
+        );
+        // `&`, `<`, `>` and the two JS line terminators become JSON escapes; the rest is as given.
+        let json = format!(r#"{{"t":"a & b <c> {} {}"}}"#, '\u{2028}', '\u{2029}');
+        assert_eq!(
+            json_ld(&json).render(),
+            r#"<script type="application/ld+json">{"t":"a \u0026 b \u003cc\u003e \u2028 \u2029"}</script>"#
+        );
+        assert_eq!(
+            script_json("a\"b", "{}").render(),
+            r#"<script type="a&quot;b">{}</script>"#
+        );
+    }
+
     use super::*;
     use crate::core::Render;
 
@@ -315,7 +404,28 @@ mod tests {
         tags.iter().map(Render::render).collect()
     }
 
-    /// Ports `SEOTests.testOpenGraphMetaTags`.
+    /// The names were inserted unescaped, so a name carrying a quote closed the attribute.
+    #[test]
+    fn a_hostile_meta_name_cannot_break_out_of_its_attribute() {
+        let hostile = "a\"><script>alert(1)</script><x y=\"";
+        // Inside the quotes `<` is inert (the S4 raw-text-parent case is handled by the
+        // writer); what must hold is that no `"` from the input closes a value early.
+        for (tag, quotes) in [
+            (meta_name(hostile, "v"), 4),
+            (meta_property(hostile, "v"), 4),
+            (meta_charset(hostile), 2),
+            (meta_http_equiv(hostile, "v"), 4),
+        ] {
+            let html = tag.render();
+            assert_eq!(html.matches('"').count(), quotes, "{html}");
+            assert!(html.contains("&quot;"), "{html}");
+        }
+        assert_eq!(
+            meta_property("og:title", "T").render(),
+            r#"<meta property="og:title" content="T">"#
+        );
+    }
+
     #[test]
     fn open_graph_emits_the_five_core_properties() {
         let tags = open_graph("T", "D", "/i.png", "https://e.com", "website", None);
@@ -332,7 +442,6 @@ mod tests {
         }
     }
 
-    /// Ports `SEOTests.testOpenGraphIncludesTheSiteName`.
     #[test]
     fn og_site_name_is_only_emitted_when_supplied() {
         assert_eq!(open_graph("T", "D", "i", "u", "website", None).len(), 5);
@@ -342,7 +451,6 @@ mod tests {
         );
     }
 
-    /// Ports `SEOTests.testOpenGraphArticle`.
     #[test]
     fn an_article_adds_the_article_extensions_and_sets_the_type() {
         let tags = open_graph_article("T", "D", "i", "u", Some("Ana"), Some("2026-01-01"), None);
@@ -353,7 +461,6 @@ mod tests {
         assert!(!html.contains("article:modified_time"));
     }
 
-    /// Ports `SEOTests.testTwitterCardMetaTags`.
     #[test]
     fn twitter_card_defaults_to_a_large_image_summary() {
         let tags = twitter_card("T", "D", "i", DEFAULT_TWITTER_CARD, None, None);
@@ -361,13 +468,12 @@ mod tests {
         assert_eq!(tags.len(), 4);
     }
 
-    /// Ports `SEOTests.testCommonSEOTags`, with the fixed `<title>`.
     #[test]
-    fn common_emits_a_title_unlike_the_swift_original() {
+    fn common_emits_a_title() {
         let tags = common("Page", "D", None, None, DEFAULT_VIEWPORT, DEFAULT_ROBOTS);
         assert!(
             rendered(&tags).contains("<title>Page</title>"),
-            "SEO.common accepts a title and drops it in Winged-Swift; the port emits it"
+            "common must emit the title it is given"
         );
     }
 
@@ -376,15 +482,15 @@ mod tests {
         let tags = common(
             "P",
             "D",
-            Some(&["swift", "motorcycle"]),
+            Some(&["rust", "motorcycle"]),
             None,
             DEFAULT_VIEWPORT,
             DEFAULT_ROBOTS,
         );
-        assert!(rendered(&tags).contains(r#"content="swift, motorcycle""#));
+        assert!(rendered(&tags).contains(r#"content="rust, motorcycle""#));
     }
 
-    /// Ports `SEOTests.testCompleteSEOTags`. The order is what the golden fixture encodes.
+    /// The order is what the golden fixture encodes.
     #[test]
     fn the_builder_emits_common_then_open_graph_then_twitter() {
         let html = rendered(&SeoBuilder::new("T", "D").image("i").url("u").build());
@@ -403,7 +509,6 @@ mod tests {
         assert!(html.contains("&quot;"));
     }
 
-    /// Ports `SEOTests.testArticleCarriesItsTimestamps`.
     #[test]
     fn an_article_carries_its_timestamps() {
         let markup = rendered(&open_graph_article(
@@ -427,10 +532,7 @@ mod tests {
         );
     }
 
-    /// Ports `SEOTests.testCommonOmitsEmptyKeywords`.
-    ///
-    /// Swift passes an empty array and expects no tag. Rust distinguishes "no keywords" as
-    /// `None`, and an empty slice has to behave the same way — an empty `content=""` would
+    /// "No keywords" is `None`, and an empty slice has to behave the same way — an empty `content=""` would
     /// be worse than nothing.
     #[test]
     fn empty_keywords_emit_no_tag() {
@@ -447,7 +549,6 @@ mod tests {
         }
     }
 
-    /// Ports `SEOTests.testMetaWithProperty`.
     #[test]
     fn meta_property_renders_a_property_attribute() {
         assert_eq!(
@@ -456,7 +557,6 @@ mod tests {
         );
     }
 
-    /// Ports `SEOTests.testMetaWithCharset`.
     #[test]
     fn meta_charset_renders_a_charset_attribute() {
         assert_eq!(meta_charset("UTF-8").render(), r#"<meta charset="UTF-8">"#);

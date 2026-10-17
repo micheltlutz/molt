@@ -1,12 +1,7 @@
-//! Constructors for every HTML element Winged-Swift supports.
+//! Constructors for every HTML element Molt supports.
 //!
-//! Winged-Swift has one Swift file per tag — 93 of them — because Swift needs a class per
-//! tag to hang a typed initializer on. Rust does not: all 93 reduce to a handful of shapes,
-//! so they are generated from one table here. The public surface is the same; the source is
-//! roughly 200 lines instead of 93 files.
-//!
-//! One tag is renamed back to its HTML spelling: Winged-Swift calls it `VarTag` because
-//! `var` is a Swift keyword, which Rust's `var` is not. `<main>` keeps a suffix — see
+//! All 93 reduce to a handful of shapes, so they are generated from one table here
+//! (`define_elements!`) rather than written one by one. `<main>` keeps a suffix — see
 //! [`main_tag`] for why.
 
 use crate::core::Element;
@@ -25,7 +20,7 @@ macro_rules! define_elements {
             /// ```
             #[must_use]
             pub fn $name() -> Element {
-                Element::new($tag)
+                Element::from_static($tag)
             }
         )*
 
@@ -70,7 +65,7 @@ define_elements! {
     sup => "sup",
     /// A machine-readable date or time: `<time>`.
     time => "time",
-    /// A variable name: `<var>`. Winged-Swift calls this `VarTag`.
+    /// A variable name: `<var>`.
     var => "var",
     /// A line-break opportunity: `<wbr>`.
     wbr => "wbr",
@@ -143,8 +138,7 @@ define_elements! {
     ///
     /// Named `main_tag` rather than `main` because a binary crate's own `fn main` shadows a
     /// glob-imported `main()`, so `main().child(…)` fails to compile in exactly the place
-    /// people write it first. Winged-Swift calls it `MainTag` for the analogous reason —
-    /// `main` is a Swift keyword.
+    /// people write it first.
     main_tag => "main",
     /// Navigation links: `<nav>`.
     nav => "nav",
@@ -255,8 +249,7 @@ define_elements! {
 
 // MARK: - Typed constructors
 //
-// The shapes that carry required or defaulted arguments in Winged-Swift and do not fit the
-// table above. Rust has no default arguments, so a defaulted parameter becomes either an
+// The shapes that carry required or defaulted arguments and do not fit the table above. Rust has no default arguments, so a defaulted parameter becomes either an
 // `Option` or a separate constructor — never a silently different default.
 
 /// A hyperlink with its `href`: `<a href="…">`.
@@ -274,9 +267,8 @@ pub fn link_to(href: impl AsRef<str>) -> Element {
 /// An image with its `src` and `alt`: `<img src="…" alt="…">`.
 ///
 /// `alt` is required rather than optional. An image without an alternative text is the
-/// single most common accessibility defect in generated HTML, and Winged-Swift's own
-/// `ROADMAP.md` asks for a lint that catches it. Requiring it here is cheaper than linting
-/// for it later. Pass `""` deliberately for a decorative image.
+/// single most common accessibility defect in generated HTML. Requiring it here is cheaper
+/// than linting for it later (though [`crate::accessibility::audit`] does lint for it). Pass `""` deliberately for a decorative image.
 #[must_use]
 pub fn image(src: impl AsRef<str>, alt: impl AsRef<str>) -> Element {
     img().attr("src", src).attr("alt", alt)
@@ -294,7 +286,7 @@ pub fn stylesheet(href: impl AsRef<str>) -> Element {
     link().attr("href", href).attr("rel", "stylesheet")
 }
 
-/// A `<button type="…">`. Winged-Swift defaults the type to `"button"`.
+/// A `<button type="…">`.
 #[must_use]
 pub fn button_typed(button_type: impl AsRef<str>) -> Element {
     button().attr("type", button_type)
@@ -316,9 +308,8 @@ pub fn label_for(for_id: impl AsRef<str>) -> Element {
 
 /// An `<iframe>` that cannot be built without a `title`.
 ///
-/// Winged-Swift's `Iframe` makes `title:` a required initializer parameter for the same
-/// reason: a frame with no title is unusable with a screen reader. `loading="lazy"` is
-/// applied, matching the Swift default.
+/// A frame with no title is unusable with a screen reader, so `title` is a required
+/// parameter. `loading="lazy"` is applied.
 #[must_use]
 pub fn iframe_titled(src: impl AsRef<str>, title_text: impl AsRef<str>) -> Element {
     iframe()
@@ -341,9 +332,8 @@ mod tests {
         );
     }
 
-    /// `Scripts/generate-tag-catalog.sh` in Winged-Swift uses an awk pattern that rejects
-    /// digits, so `H1`–`H6` are silently missing from its checked-in catalog. Guard against
-    /// the same gap here.
+    /// A catalog pattern that rejects digits would silently drop `h1`–`h6`. Guard against that
+    /// gap.
     #[test]
     fn the_catalog_includes_the_headings() {
         for heading in ["h1", "h2", "h3", "h4", "h5", "h6"] {
@@ -394,12 +384,9 @@ mod tests {
         assert!(rendered.contains(r#"loading="lazy""#));
     }
 
-    // Ports `TagCatalogTests`. Winged-Swift reaches these shapes through typed initialisers
-    // (`Video(src:controls:muted:)`, `Progress(value:max:)`, `Col(span:)`); the Rust port
-    // has the generic builder instead, so each test asserts the same rendered markup rather
-    // than the initialiser that produced it.
+    // Media, progress and column shapes go through the generic builder, so each test asserts
+    // the rendered markup rather than a typed initialiser.
 
-    /// Ports `TagCatalogTests.testTableStructure`.
     #[test]
     fn a_table_renders_every_section_in_order() {
         let table = table()
@@ -421,7 +408,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testVoidElementsRenderWithoutClosingTag`.
     #[test]
     fn void_elements_render_without_a_closing_tag() {
         assert_eq!(col().render(), "<col>");
@@ -448,7 +434,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testVoidElementsHonourXHTMLMode`.
     #[test]
     fn void_elements_honour_xhtml_mode() {
         let options = RenderOptions::compact().with_xhtml_self_closing(true);
@@ -457,7 +442,6 @@ mod tests {
         assert_eq!(wbr().render_with(&options), "<wbr />");
     }
 
-    /// Ports `TagCatalogTests.testPictureWithSources`.
     #[test]
     fn a_picture_wraps_its_sources_and_fallback_image() {
         let picture = picture()
@@ -477,7 +461,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testVideoBooleanAttributes`.
     #[test]
     fn video_boolean_attributes_render_bare() {
         let rendered = video()
@@ -494,7 +477,6 @@ mod tests {
         assert!(!rendered.contains("autoplay"));
     }
 
-    /// Ports `TagCatalogTests.testAudioWithoutControls`.
     #[test]
     fn audio_without_controls_has_no_boolean_attribute() {
         assert_eq!(
@@ -503,7 +485,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testIframeRequiresTitleAndDefaultsToLazyLoading`.
     #[test]
     fn an_iframe_carries_its_title_and_lazy_loading() {
         assert_eq!(
@@ -512,7 +493,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testDetailsAndSummary`.
     #[test]
     fn details_renders_open_with_a_summary() {
         let details = details()
@@ -526,7 +506,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testDetailsClosedByDefault`.
     #[test]
     fn details_is_closed_unless_open_is_set() {
         assert_eq!(
@@ -535,20 +514,18 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testDefinitionList`.
     #[test]
     fn a_definition_list_pairs_terms_with_descriptions() {
         let list = dl()
-            .child(dt().text("WingedSwift"))
-            .child(dd().text("An HTML DSL for Swift"));
+            .child(dt().text("Molt"))
+            .child(dd().text("An HTML library for Rust"));
 
         assert_eq!(
             list.render(),
-            "<dl><dt>WingedSwift</dt><dd>An HTML DSL for Swift</dd></dl>"
+            "<dl><dt>Molt</dt><dd>An HTML library for Rust</dd></dl>"
         );
     }
 
-    /// Ports `TagCatalogTests.testTextSemanticTags`.
     #[test]
     fn the_text_semantic_tags_render_their_own_names() {
         assert_eq!(
@@ -588,11 +565,8 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testStyleDoesNotEscapeCSS`.
-    ///
-    /// Winged-Swift's `Style` never escapes its content. The Rust port has no such special
-    /// case — `text()` escapes everything — so CSS goes in through `raw_text`, which is the
-    /// documented escape hatch and greppable on purpose. Escaping here would turn a child
+    /// `text()` escapes everything, `<style>` included, so CSS goes in through `raw_text`,
+    /// which is the documented escape hatch and greppable on purpose. Escaping here would turn a child
     /// selector into `a &gt; b` and break the sheet.
     #[test]
     fn a_stylesheet_is_not_escaped() {
@@ -605,10 +579,7 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.optionalMediaParametersAreOmittedWhenNil`.
-    ///
-    /// There is nothing to omit in Rust: an attribute exists when you call `attr` for it.
-    /// What survives the port is the rendered shape each of those Swift calls produced.
+    /// There is nothing to omit: an attribute exists when you call `attr` for it.
     #[test]
     fn media_elements_render_only_the_attributes_they_are_given() {
         assert_eq!(
@@ -650,7 +621,6 @@ mod tests {
         assert_eq!(q().text("quoted").render(), "<q>quoted</q>");
     }
 
-    /// Ports `TagCatalogTests.metaSupportsEveryForm`.
     #[test]
     fn meta_renders_whichever_attributes_it_is_given() {
         assert_eq!(
@@ -666,7 +636,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testFlowContainersAcceptContent`.
     #[test]
     fn flow_containers_accept_text_as_well_as_children() {
         assert_eq!(aside().text("Note").render(), "<aside>Note</aside>");
@@ -680,7 +649,6 @@ mod tests {
         assert_eq!(fieldset().text("Set").render(), "<fieldset>Set</fieldset>");
     }
 
-    /// Ports `TagCatalogTests.testFlowContainerContentIsEscaped`.
     #[test]
     fn flow_container_content_is_escaped() {
         assert_eq!(
@@ -689,7 +657,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testFieldsetWithLegend`.
     #[test]
     fn a_fieldset_carries_a_legend_and_its_fields() {
         let fieldset = fieldset()
@@ -702,7 +669,6 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testSelectWithOptgroup`.
     #[test]
     fn a_select_groups_its_options() {
         let select = select().attr("name", "city").child(
@@ -720,12 +686,11 @@ mod tests {
         );
     }
 
-    /// Ports `TagCatalogTests.testDatalistProgressMeterAndOutput`.
     #[test]
     fn the_form_display_elements_render() {
         assert_eq!(
-            datalist().child(option().attr("value", "swift")).render(),
-            r#"<datalist><option value="swift"></option></datalist>"#
+            datalist().child(option().attr("value", "rust")).render(),
+            r#"<datalist><option value="rust"></option></datalist>"#
         );
         assert_eq!(
             progress().attr("value", "0.7").attr("max", "1.0").render(),
@@ -746,10 +711,6 @@ mod tests {
         assert_eq!(output().text("42").render(), "<output>42</output>");
     }
 
-    // Ports the element half of `HTML14FeaturesTests`; the `RawHTML` and fragment half
-    // lives in `crate::core::node`.
-
-    /// Ports `HTML14FeaturesTests.testBooleanAttribute`.
     #[test]
     fn boolean_attributes_carry_no_value() {
         let rendered = input_named("checkbox", "agree")
@@ -765,7 +726,6 @@ mod tests {
         assert!(!rendered.contains("required="));
     }
 
-    /// Ports `HTML14FeaturesTests.testHTML5SelfClosingDefault`.
     #[test]
     fn void_elements_do_not_self_close_by_default() {
         let rendered = image("a.png", "A").render();
@@ -774,7 +734,6 @@ mod tests {
         assert!(!rendered.contains("/>"));
     }
 
-    /// Ports `HTML14FeaturesTests.testXHTMLSelfClosingOption`.
     #[test]
     fn xhtml_mode_self_closes_void_elements() {
         let options = RenderOptions::compact().with_xhtml_self_closing(true);
@@ -785,7 +744,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testIAndAWithChildren`.
     #[test]
     fn anchors_and_headings_take_element_children() {
         assert_eq!(
@@ -802,7 +760,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testButtonSubmitType`.
     #[test]
     fn a_submit_button_carries_its_type() {
         assert_eq!(
@@ -811,7 +768,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testLabelWithoutFor`.
     #[test]
     fn a_label_without_a_target_has_no_for_attribute() {
         let rendered = label().text("Accept cookies").render();
@@ -820,7 +776,6 @@ mod tests {
         assert!(!rendered.contains("for="));
     }
 
-    /// Ports `HTML14FeaturesTests.testInputWithoutName`.
     #[test]
     fn an_input_without_a_name_has_no_name_attribute() {
         let rendered = input()
@@ -832,7 +787,6 @@ mod tests {
         assert!(!rendered.contains("name="));
     }
 
-    /// Ports `HTML14FeaturesTests.testSectionWithContent`.
     #[test]
     fn a_section_renders_its_class_and_text() {
         assert_eq!(
@@ -841,7 +795,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testInlineSemanticTags`.
     #[test]
     fn the_inline_semantic_tags_render() {
         assert_eq!(strong().text("bold").render(), "<strong>bold</strong>");
@@ -851,9 +804,6 @@ mod tests {
         assert_eq!(hr().render(), "<hr>");
     }
 
-    // Ports `CodeTests` and `HTML5TagsTests`.
-
-    /// Ports `CodeTests.testPreTag`.
     #[test]
     fn a_pre_block_keeps_its_line_breaks() {
         let block =
@@ -865,7 +815,6 @@ mod tests {
         );
     }
 
-    /// Ports `CodeTests.testCodeTag`.
     #[test]
     fn a_code_block_keeps_its_line_breaks() {
         let block = code().text("let x = 10\nprint(x)");
@@ -873,7 +822,6 @@ mod tests {
         assert_eq!(block.render(), "<code>let x = 10\nprint(x)</code>");
     }
 
-    /// Ports `CodeTests.testEmbedTag`.
     #[test]
     fn an_embed_is_a_void_element() {
         assert_eq!(
@@ -885,7 +833,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testArticleTag`.
     #[test]
     fn an_article_wraps_its_children() {
         assert_eq!(
@@ -894,7 +841,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testAsideTag`.
     #[test]
     fn an_aside_wraps_its_children() {
         assert_eq!(
@@ -903,7 +849,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testFigureAndFigcaption`.
     #[test]
     fn a_figure_pairs_an_image_with_its_caption() {
         let block = figure()
@@ -919,7 +864,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testTimeTag`.
     #[test]
     fn a_time_element_carries_its_datetime() {
         assert_eq!(
@@ -931,7 +875,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testMarkTag`.
     #[test]
     fn a_mark_element_renders_its_text() {
         assert_eq!(
@@ -940,7 +883,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML5TagsTests.testHeadingTags`.
     #[test]
     fn every_heading_level_renders_its_own_tag() {
         let headings = [
@@ -958,10 +900,6 @@ mod tests {
         }
     }
 
-    // Ports `FormsTests`. Its Swift `@Suite` is declared as `FormTests` while the file is
-    // `FormsTests.swift`; the file name is what the cross-reference follows.
-
-    /// Ports `FormsTests.testFormCreation`.
     #[test]
     fn a_form_renders_its_fieldsets_and_submit() {
         let form = form()
@@ -990,7 +928,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testSelectAndOptions`.
     #[test]
     fn a_select_renders_each_option() {
         let select = select()
@@ -1011,7 +948,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testLabel`.
     #[test]
     fn a_label_points_at_its_field() {
         assert_eq!(
@@ -1020,7 +956,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testInput`.
     #[test]
     fn an_input_renders_its_type_name_and_value() {
         assert_eq!(
@@ -1031,7 +966,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testTextarea`.
     #[test]
     fn a_textarea_renders_its_content_between_the_tags() {
         assert_eq!(
@@ -1043,7 +977,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testFieldset`.
     #[test]
     fn a_fieldset_groups_a_label_and_its_field() {
         let block = fieldset()
@@ -1059,7 +992,6 @@ mod tests {
         );
     }
 
-    /// Ports `FormsTests.testSection`.
     #[test]
     fn a_section_wraps_its_children() {
         assert_eq!(

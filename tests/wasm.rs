@@ -19,7 +19,7 @@ fn an_element_renders_the_same_through_both_apis() {
     let through_wasm = element("div")
         .add_class("card")
         .set_id("hero")
-        .child(&element("h1").text("Hi"))
+        .child(element("h1").text("Hi"))
         .render();
     let through_rust = div()
         .add_class("card")
@@ -50,14 +50,14 @@ fn raw_text_is_not_escaped_across_the_boundary() {
 #[wasm_bindgen_test]
 fn pretty_printing_works_from_javascript() {
     let rendered = element("div")
-        .child(&element("p").text("deep"))
+        .child(element("p").text("deep"))
         .render_pretty();
     assert_eq!(rendered, "<div>\n  <p>deep</p>\n</div>");
 }
 
 #[wasm_bindgen_test]
 fn a_document_owns_the_doctype_and_defaults_to_pretty() {
-    let page = WDocument::new(Some("pt-BR".into())).add_body(&element("h1").text("Hi"));
+    let page = WDocument::new(Some("pt-BR".into())).add_body(element("h1").text("Hi"));
     let rendered = page.render();
 
     assert!(rendered.starts_with("<!DOCTYPE html>\n<html lang=\"pt-BR\">"));
@@ -73,8 +73,8 @@ fn a_document_owns_the_doctype_and_defaults_to_pretty() {
 #[wasm_bindgen_test]
 fn a_document_matches_the_rust_equivalent_byte_for_byte() {
     let through_wasm = WDocument::new(Some("pt-BR".into()))
-        .add_head(&element("title").text("RideKeeper"))
-        .add_body(&element("h1").text("Track every service"))
+        .add_head(element("title").text("RideKeeper"))
+        .add_body(element("h1").text("Track every service"))
         .render();
 
     let through_rust = Document::new(Some("pt-BR"))
@@ -104,7 +104,7 @@ fn boolean_and_prefixed_attributes_survive_the_boundary() {
 fn void_elements_drop_children_from_javascript_too() {
     let rendered = element("img")
         .attr("src", "/a.png")
-        .child(&element("span").text("x"))
+        .child(element("span").text("x"))
         .render();
     assert_eq!(rendered, r#"<img src="/a.png">"#);
 }
@@ -125,6 +125,45 @@ fn the_seo_builder_is_reachable_from_javascript() {
 
     assert!(rendered.contains(r#"<meta property="og:title" content="RideKeeper">"#));
     assert!(rendered.contains(r#"<meta name="twitter:site" content="@micheltlutz">"#));
+}
+
+#[wasm_bindgen_test]
+fn a_seo_block_goes_into_the_head_of_a_document() {
+    let through_wasm = WDocument::new(Some("en".into()))
+        .add_seo(WSeo::new("T", "D"))
+        .add_body(element("h1").text("Hi"))
+        .render_compact();
+    assert!(through_wasm.contains(r#"<meta property="og:title" content="T">"#));
+    assert!(through_wasm.contains("<head>"));
+}
+
+#[wasm_bindgen_test]
+fn the_extra_element_methods_match_the_rust_builder() {
+    let through_wasm = element("div")
+        .add_classes(vec!["a".into(), "b".into()])
+        .raw_child("<hr>")
+        .child(element("span").self_closing(true))
+        .render();
+    let through_rust = div()
+        .add_classes(["a", "b"])
+        .child(Node::raw("<hr>"))
+        .child(span().self_closing(true))
+        .render();
+    assert_eq!(through_wasm, through_rust);
+}
+
+#[wasm_bindgen_test]
+fn render_options_reach_javascript() {
+    let tree = || {
+        element("div")
+            .child(element("br"))
+            .child(element("p").text("x"))
+    };
+    assert_eq!(
+        tree().render_with_options(true, "\t", true),
+        "<div>\n\t<br />\n\t<p>x</p>\n</div>"
+    );
+    assert_eq!(tree().render_bytes(), tree().render().into_bytes());
 }
 
 #[wasm_bindgen_test]

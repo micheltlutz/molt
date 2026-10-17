@@ -1,18 +1,123 @@
 //! HTML and XML escaping.
 //!
-//! Winged-Swift has three distinct escapers and the golden fixtures depend on the
-//! differences between them. `MOLT_SPEC.md` §3.3 shows only one; following the
-//! spec here would break parity.
+//! There are three distinct HTML/XML escapers and the golden fixtures depend on the differences
+//! between them. (The original spec, `docs/history/MOLT_SPEC.md` §3.3, shows only one;
+//! following it would change the output.)
 //!
 //! | function | escapes | notes |
 //! | --- | --- | --- |
 //! | [`escape_text`] | `&` `<` `>` `"` `'` | `&` first; `'` becomes `&#x27;` |
 //! | [`escape_attribute`] | `&` `"` `'` | **not** `<` or `>` |
-//! | [`escape_xml`] | `&` `<` `>` `"` `'` | `'` becomes `&apos;`, the XML spelling |
+//! | [`escape_xml`] | `&` `<` `>` `"` `'` | `'` becomes `&apos;`, the XML spelling; XML-illegal characters dropped |
+//! | [`escape_json_script`] | `<` `>` `&` U+2028 U+2029 | JSON `\uXXXX` escapes, for JSON inside `<script>`; not HTML escaping |
 //!
 //! Escaping is applied **once, when content enters the tree** — never at render time.
-//! That mirrors Winged-Swift, where `HTMLTag.init` stores already-escaped content, and it
-//! is why [`crate::core::Node::Raw`] exists as the documented escape hatch.
+//! That is why [`crate::core::Node::Raw`] exists as the documented escape hatch.
+
+use std::borrow::Cow;
+
+/// Each `*_entity` function below maps one byte to its entity, or `None` if the byte is
+/// written as it is. They are passed as generic parameters, never as `fn` pointers, so the
+/// compiler inlines the match into the scanning loop.
+///
+/// Every escaped character is ASCII, and no byte of a multi-byte UTF-8 sequence is, so a
+/// scan over bytes finds exactly the characters a `char` loop would, and slicing the input
+/// at a matched byte never splits a character.
+fn text_entity(byte: u8) -> Option<&'static str> {
+    match byte {
+        b'&' => Some("&amp;"),
+        b'<' => Some("&lt;"),
+        b'>' => Some("&gt;"),
+        b'"' => Some("&quot;"),
+        b'\'' => Some("&#x27;"),
+        _ => None,
+    }
+}
+
+fn text_entity_with_slashes(byte: u8) -> Option<&'static str> {
+    if byte == b'/' {
+        Some("&#x2F;")
+    } else {
+        text_entity(byte)
+    }
+}
+
+/// `<` and `>` are not here on purpose: see [`escape_attribute`].
+fn attribute_entity(byte: u8) -> Option<&'static str> {
+    match byte {
+        b'&' => Some("&amp;"),
+        b'"' => Some("&quot;"),
+        b'\'' => Some("&#x27;"),
+        _ => None,
+    }
+}
+
+/// The only difference from [`text_entity`] is the apostrophe, which XML spells `&apos;`.
+fn xml_entity(byte: u8) -> Option<&'static str> {
+    if byte == b'\'' {
+        Some("&apos;")
+    } else {
+        text_entity(byte)
+    }
+}
+
+/// Appends `input` to `out`, replacing each byte `entity` names.
+///
+/// Copies the stretches between escapes with one `push_str` each instead of pushing a
+/// `char` at a time, which is what makes mostly-clean text cheap.
+fn write_runs(out: &mut String, input: &str, entity: impl Fn(u8) -> Option<&'static str>) {
+    let mut start = 0;
+    for (index, byte) in input.bytes().enumerate() {
+        if let Some(replacement) = entity(byte) {
+            if index > start {
+                out.push_str(&input[start..index]);
+            }
+            out.push_str(replacement);
+            start = index + 1;
+        }
+    }
+    out.push_str(&input[start..]);
+}
+
+/// A [`std::fmt::Write`] that escapes what it receives as element text and appends it to a
+/// buffer.
+///
+/// Lets `html!` format a `Display` value straight into its escaped form instead of going
+/// through `to_string()` and escaping a second copy. Escaping is local to a character, so
+/// escaping each piece a `Display` impl writes gives the same result as escaping the whole.
+pub(crate) struct TextWriter<'a>(pub(crate) &'a mut String);
+
+impl std::fmt::Write for TextWriter<'_> {
+    fn write_str(&mut self, piece: &str) -> std::fmt::Result {
+        write_escaped_text(self.0, piece, false);
+        Ok(())
+    }
+}
+
+/// As [`TextWriter`], with attribute-value escaping.
+pub(crate) struct AttributeWriter<'a>(pub(crate) &'a mut String);
+
+impl std::fmt::Write for AttributeWriter<'_> {
+    fn write_str(&mut self, piece: &str) -> std::fmt::Result {
+        write_escaped_attribute(self.0, piece);
+        Ok(())
+    }
+}
+
+/// Escapes `input` only if some byte needs it, and otherwise hands it back untouched.
+///
+/// Returning [`Cow`] means the common case — text with nothing to escape — costs no
+/// allocation and no copy.
+fn escape_with(input: &str, entity: impl Fn(u8) -> Option<&'static str> + Copy) -> Cow<'_, str> {
+    let Some(first) = input.bytes().position(|byte| entity(byte).is_some()) else {
+        return Cow::Borrowed(input);
+    };
+    // Room for a few entities up front, so a short dirty string does not grow once.
+    let mut out = String::with_capacity(input.len() + input.len() / 4 + 16);
+    out.push_str(&input[..first]);
+    write_runs(&mut out, &input[first..], entity);
+    Cow::Owned(out)
+}
 
 /// Escapes text for use as HTML element content.
 ///
@@ -29,10 +134,8 @@
 /// );
 /// ```
 #[must_use]
-pub fn escape_text(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_text(&mut out, input, false);
-    out
+pub fn escape_text(input: &str) -> Cow<'_, str> {
+    escape_with(input, text_entity)
 }
 
 /// Escapes text for HTML content, optionally escaping `/` as well.
@@ -43,17 +146,20 @@ pub fn escape_text(input: &str) -> String {
 /// assert_eq!(escape_text_with_slashes("a/b"), "a&#x2F;b");
 /// ```
 #[must_use]
-pub fn escape_text_with_slashes(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_text(&mut out, input, true);
-    out
+pub fn escape_text_with_slashes(input: &str) -> Cow<'_, str> {
+    escape_with(input, text_entity_with_slashes)
 }
 
 /// Escapes a value for use inside a double-quoted HTML attribute.
 ///
 /// Deliberately narrower than [`escape_text`]: `<` and `>` are left alone, because they
-/// cannot terminate a quoted attribute value. Winged-Swift's `HTMLEscape.escapeAttribute`
-/// does the same, and `marketing-pretty.html` contains attribute values that prove it.
+/// cannot terminate a quoted attribute value, and `marketing-pretty.html` contains attribute
+/// values that prove it.
+///
+/// That holds wherever the parser reads attributes. Under a raw-text ancestor (`noscript`,
+/// `iframe`, `xmp`, `script`, `style`, …) it does not, so the renderer escapes `<` and `>`
+/// itself there — this function cannot, because it never sees the ancestors. See
+/// `SECURITY.md`.
 ///
 /// # Examples
 /// ```
@@ -61,10 +167,8 @@ pub fn escape_text_with_slashes(input: &str) -> String {
 /// assert_eq!(escape_attribute(r#"a "b" & <c>"#), "a &quot;b&quot; &amp; <c>");
 /// ```
 #[must_use]
-pub fn escape_attribute(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_attribute(&mut out, input);
-    out
+pub fn escape_attribute(input: &str) -> Cow<'_, str> {
+    escape_with(input, attribute_entity)
 }
 
 /// Escapes text for XML content — used by the sitemap and RSS generators.
@@ -72,25 +176,89 @@ pub fn escape_attribute(input: &str) -> String {
 /// Differs from [`escape_text`] in one character: `'` becomes `&apos;`, which is an XML
 /// entity, rather than `&#x27;`.
 ///
+/// It also **drops** the characters XML 1.0 cannot represent at all, even escaped: the
+/// control characters U+0000–U+0008, U+000B, U+000C and U+000E–U+001F, and the
+/// non-characters U+FFFE and U+FFFF. One of them in a title makes the whole document
+/// ill-formed, so a feed reader or crawler rejects every entry, not just that one. Tab,
+/// newline and carriage return are legal and kept.
+///
 /// # Examples
 /// ```
 /// use molt::core::escape::escape_xml;
 /// assert_eq!(escape_xml("Tom & Jerry's <show>"), "Tom &amp; Jerry&apos;s &lt;show&gt;");
+/// assert_eq!(escape_xml("a\u{0}b\u{8}c\u{FFFE}d\te"), "abcd\te");
 /// ```
 #[must_use]
-pub fn escape_xml(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
+pub fn escape_xml(input: &str) -> Cow<'_, str> {
+    if !input.chars().any(needs_xml_change) {
+        return Cow::Borrowed(input);
+    }
+    let mut out = String::with_capacity(input.len() + input.len() / 4 + 16);
     for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            _ => out.push(c),
+        if is_xml_illegal(c) {
+            continue;
+        }
+        match u8::try_from(c).ok().and_then(xml_entity) {
+            Some(entity) => out.push_str(entity),
+            None => out.push(c),
         }
     }
-    out
+    Cow::Owned(out)
+}
+
+/// Whether XML 1.0 has no way to write `c`, escaped or not.
+fn is_xml_illegal(c: char) -> bool {
+    matches!(c, '\u{0}'..='\u{8}' | '\u{B}' | '\u{C}' | '\u{E}'..='\u{1F}' | '\u{FFFE}' | '\u{FFFF}')
+}
+
+fn needs_xml_change(c: char) -> bool {
+    is_xml_illegal(c) || u8::try_from(c).ok().and_then(xml_entity).is_some()
+}
+
+/// Makes a JSON document safe to place inside a `<script>` element.
+///
+/// Inside `<script>` the HTML parser looks for `</script` and `<!--` and knows nothing about
+/// JSON, so a string value holding `</script><script>alert(1)</script>` ends the element and
+/// starts another. `<`, `>` and `&` are therefore written as the JSON escapes `\u003c`,
+/// `\u003e` and `\u0026`, which any JSON parser reads back as the same characters, and
+/// U+2028/U+2029 (line terminators that were not legal inside a JavaScript string) as
+/// `\u2028`/`\u2029`. Valid JSON only has those characters inside string values, so the
+/// meaning of the document does not change.
+///
+/// This does **not** validate the JSON, and it is not [`escape_text`]: HTML-escaping would
+/// write `&lt;`, which JSON does not decode.
+///
+/// # Examples
+/// ```
+/// use molt::core::escape::escape_json_script;
+/// assert_eq!(
+///     escape_json_script(r#"{"a":"</script><b>&"}"#),
+///     r#"{"a":"\u003c/script\u003e\u003cb\u003e\u0026"}"#
+/// );
+/// ```
+#[must_use]
+pub fn escape_json_script(json: &str) -> Cow<'_, str> {
+    fn entity(c: char) -> Option<&'static str> {
+        match c {
+            '<' => Some("\\u003c"),
+            '>' => Some("\\u003e"),
+            '&' => Some("\\u0026"),
+            '\u{2028}' => Some("\\u2028"),
+            '\u{2029}' => Some("\\u2029"),
+            _ => None,
+        }
+    }
+    if !json.chars().any(|c| entity(c).is_some()) {
+        return Cow::Borrowed(json);
+    }
+    let mut out = String::with_capacity(json.len() + json.len() / 8 + 16);
+    for c in json.chars() {
+        match entity(c) {
+            Some(escaped) => out.push_str(escaped),
+            None => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// Appends escaped HTML text to an existing buffer.
@@ -99,44 +267,94 @@ pub fn escape_xml(input: &str) -> String {
 /// would defeat that.
 pub(crate) fn write_escaped_text(out: &mut String, input: &str, escape_slashes: bool) {
     out.reserve(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#x27;"),
-            '/' if escape_slashes => out.push_str("&#x2F;"),
-            _ => out.push(c),
-        }
-    }
+    write_runs(
+        out,
+        input,
+        if escape_slashes {
+            text_entity_with_slashes
+        } else {
+            text_entity
+        },
+    );
 }
 
 /// Appends an escaped attribute value to an existing buffer.
 pub(crate) fn write_escaped_attribute(out: &mut String, input: &str) {
     out.reserve(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#x27;"),
-            _ => out.push(c),
-        }
-    }
+    write_runs(out, input, attribute_entity);
 }
 
 #[cfg(test)]
 mod tests {
+    /// The boundaries of XML 1.0's `Char` production, one on each side.
+    #[test]
+    fn xml_drops_exactly_the_characters_xml_1_0_cannot_hold() {
+        for illegal in [
+            '\u{0}', '\u{8}', '\u{B}', '\u{C}', '\u{E}', '\u{1F}', '\u{FFFE}', '\u{FFFF}',
+        ] {
+            assert_eq!(
+                escape_xml(&format!("a{illegal}b")),
+                "ab",
+                "U+{:04X}",
+                illegal as u32
+            );
+        }
+        for legal in [
+            '\t',
+            '\n',
+            '\r',
+            ' ',
+            '\u{7F}',
+            '\u{80}',
+            '\u{FFFD}',
+            '\u{10000}',
+            'é',
+        ] {
+            assert_eq!(
+                escape_xml(&format!("a{legal}b")),
+                format!("a{legal}b"),
+                "U+{:04X}",
+                legal as u32
+            );
+        }
+        assert!(matches!(escape_xml("plain"), std::borrow::Cow::Borrowed(_)));
+        assert_eq!(escape_xml("<\u{0}&"), "&lt;&amp;");
+    }
+
+    /// Text with nothing to escape comes back borrowed: no allocation, no copy.
+    #[test]
+    fn clean_input_is_returned_without_allocating() {
+        use std::borrow::Cow;
+        for clean in ["", "plain text", "ação — 日本語 ✓", "2026/09/16"] {
+            assert!(matches!(escape_text(clean), Cow::Borrowed(_)), "{clean:?}");
+            assert!(
+                matches!(escape_attribute(clean), Cow::Borrowed(_)),
+                "{clean:?}"
+            );
+            assert!(matches!(escape_xml(clean), Cow::Borrowed(_)), "{clean:?}");
+        }
+        assert!(matches!(escape_text("a & b"), Cow::Owned(_)));
+        // `/` is only special when asked for, and `<` is not special to an attribute.
+        assert!(matches!(escape_text_with_slashes("a/b"), Cow::Owned(_)));
+        assert!(matches!(escape_attribute("a < b"), Cow::Borrowed(_)));
+    }
+
+    /// The byte scan must agree with the `char` loop for every special, next to multi-byte text.
+    #[test]
+    fn byte_scanning_finds_specials_beside_multibyte_characters() {
+        assert_eq!(escape_text("é<é"), "é&lt;é");
+        assert_eq!(escape_attribute("日\"本"), "日&quot;本");
+        assert_eq!(escape_xml("✓'✓"), "✓&apos;✓");
+    }
+
     use super::*;
 
-    /// No single Swift counterpart: this covers in one assertion what `testEscapeAmpersand`
-    /// and `testEscapeQuotes` check separately, plus the angle brackets.
+    /// The five HTML characters in one assertion: ampersand, quotes and angle brackets.
     #[test]
     fn escapes_the_five_html_characters() {
         assert_eq!(escape_text("<>&\"'"), "&lt;&gt;&amp;&quot;&#x27;");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeBasicHTML`.
     #[test]
     fn escapes_a_script_payload() {
         assert_eq!(
@@ -151,8 +369,6 @@ mod tests {
         assert_eq!(escape_text("a & b < c"), "a &amp; b &lt; c");
     }
 
-    /// Ports `HTMLEscapeTests.testSlashesAreKeptByDefault` and
-    /// `HTMLEscapeTests.testSlashesCanBeEscapedExplicitly`.
     #[test]
     fn slashes_are_only_escaped_on_request() {
         assert_eq!(escape_text("2026/09/16"), "2026/09/16");
@@ -162,8 +378,7 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLEscapeTests.testAttributeEscape`. Attribute context leaves `<` and `>`
-    /// alone — they cannot terminate a quoted value.
+    /// Attribute context leaves `<` and `>` alone — they cannot terminate a quoted value.
     #[test]
     fn attribute_escaping_leaves_angle_brackets_alone() {
         assert_eq!(
@@ -179,8 +394,8 @@ mod tests {
     }
 
     /// Escaping is applied exactly once, by the caller, at construction. Applying it
-    /// twice double-escapes — the same behaviour Winged-Swift has, and the reason the
-    /// builder never re-escapes an existing attribute value.
+    /// twice double-escapes, which is the reason the builder never re-escapes an existing
+    /// attribute value.
     #[test]
     fn escaping_is_not_idempotent_by_design() {
         assert_eq!(escape_text(&escape_text("a & b")), "a &amp;amp; b");
@@ -208,13 +423,11 @@ mod tests {
         assert_eq!(escape_xml(""), "");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeAmpersand`.
     #[test]
     fn an_ampersand_becomes_an_entity() {
         assert_eq!(escape_text("Tom & Jerry"), "Tom &amp; Jerry");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeQuotes`.
     #[test]
     fn double_quotes_become_entities() {
         assert_eq!(

@@ -1,6 +1,6 @@
 [package]
 name = "molt-framework"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Michel Anderson Lutz Teixeira <michel@micheltlutz.me>"]
@@ -12,14 +12,26 @@ license = "MIT"
 readme = "README.md"
 keywords = ["html", "dsl", "wasm", "static-site", "templating"]
 categories = ["web-programming", "template-engine", "wasm"]
+# Development tooling stays out of the published crate. `rust-toolchain.toml` matters most: it
+# makes rustup install a wasm target and extra components for anyone who builds inside the
+# unpacked tarball, which breaks an offline packager. `AGENTS.md` and `CLAUDE.md` point at
+# `.claude/`, which is not shipped either.
 exclude = [
+    "/.claude",
+    "/AGENTS.md",
+    "/CLAUDE.md",
+    "/clippy.toml",
+    "/codecov.yml",
+    "/deny.toml",
+    "/rust-toolchain.toml",
+    "/rustfmt.toml",
     "/.github",
     "/scripts",
     "/examples/web",
     "/examples/node",
     "/fuzz",
     "/docs/plans",
-    "MOLT_SPEC.md",
+    "/docs/history",
     "molt-logo.jpg",
     "*.code-workspace",
 ]
@@ -28,16 +40,19 @@ exclude = [
 # `molt-framework` while the library keeps the short name: `use molt::prelude::*`.
 [lib]
 name = "molt"
+# `cdylib` is what wasm-pack links; it is also built on a native `cargo build`, which is
+# harmless but not free. Library users only get the `rlib`.
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["ssg"]
 # Static site generation. Pulls in std::fs; compiled out on wasm32 regardless.
 ssg = []
-# WebAssembly bindings. Gated on the feature, never on target_arch — see PORTING.md.
+# WebAssembly bindings. Gated on the feature, never on target_arch — see docs/history/PORTING.md.
 wasm = ["dep:wasm-bindgen"]
-# Parallel bulk generation. Sound only because the node tree is Send + Sync.
-parallel = ["dep:rayon"]
+# Parallel bulk generation (implies `ssg`: it only parallelises `generate_multiple`).
+# Sound only because the node tree is Send + Sync.
+parallel = ["ssg", "dep:rayon"]
 
 [dependencies]
 wasm-bindgen = { version = "0.2", optional = true }
@@ -50,6 +65,10 @@ wasm-bindgen-test = "0.3"
 # targeting wasi32"). Keeping it off the wasm target is what lets `wasm-pack test` build.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.7"
+# Counts allocations in `tests/allocations.rs`. The crate is `unsafe_code = "forbid"`, which
+# also covers its tests, so an allocator written here would not compile; this one is MIT,
+# has no dependencies, and is not part of the shipped library.
+stats_alloc = "0.1"
 
 [[bench]]
 name = "render"
@@ -74,8 +93,15 @@ lto = true
 codegen-units = 1
 panic = "abort"
 # Measured 2026-10-17: nodejs target, 22 KB gzip, under the 120 KB budget in
-# scripts/build-wasm.sh. Revert this line if a later build crosses that budget.
+# scripts/build-wasm.sh. The flag is kept for safety, not size: it turns an arithmetic
+# overflow into a trap instead of a silent wrap, and costs a few hundred bytes.
 overflow-checks = true
+
+# `cargo bench` inherits `release`, whose `opt-level = "z"` optimises for the WASM size
+# budget. Benchmarking size-optimised code measures a build nobody runs on a server, so the
+# bench profile goes back to speed.
+[profile.bench]
+opt-level = 3
 
 [lints.rust]
 missing_docs = "deny"

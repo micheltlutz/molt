@@ -1,18 +1,17 @@
 //! Accessibility helpers and a debug-time audit.
 //!
-//! Winged-Swift has no accessibility module: its whole a11y surface is `ariaAttribute`,
-//! `ariaAttributes` and `setRole` in `AttributeHelpers.swift`, plus two structural
-//! affordances — `Iframe` requires a `title:`, and `Img` takes an `alt:`.
-//!
-//! This module adds the linter its `ROADMAP.md` has asked for since 1.5 and never shipped.
+//! Beyond the attribute helpers (`aria_attr`, `set_role`) and the two constructors that make a
+//! mistake hard (`iframe_titled` requires a title, `image` takes an `alt`), this module is a
+//! linter: [`audit`] finds the accessibility problems that are visible in the tree.
 
 use crate::core::{Element, Node};
 
 /// A landmark or widget role, for [`Element::set_role`](crate::Element::set_role).
 ///
-/// Winged-Swift accepts any string. This enum catches the typos while
+/// `set_role` accepts any string. This enum catches the typos while
 /// [`Role::Custom`] keeps the door open for roles it does not know.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Role {
     /// `role="banner"` — the page header.
     Banner,
@@ -66,6 +65,7 @@ impl Role {
 
 /// Something in the tree that will be hard or impossible to use with assistive technology.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct A11yIssue {
     /// The tag the problem was found on.
     pub tag: String,
@@ -75,7 +75,7 @@ pub struct A11yIssue {
 
 /// Finds accessibility problems in a subtree.
 ///
-/// The rules are the ones Winged-Swift's `ROADMAP.md` lists under "Quality":
+/// The rules:
 ///
 /// - `<img>` without an `alt` attribute
 /// - `<button>` with neither text nor an `aria-label`
@@ -104,20 +104,19 @@ pub fn audit(node: &Node) -> Vec<A11yIssue> {
     issues
 }
 
-fn walk(node: &Node, issues: &mut Vec<A11yIssue>) {
-    match node {
-        Node::Element(element) => {
-            check(element, issues);
-            for child in element.children() {
-                walk(child, issues);
+/// Pre-order, with an explicit stack: the renderer is iterative so that a 100,000-level tree
+/// is safe to render, and an audit that recursed would abort the process on the same tree.
+fn walk(root: &Node, issues: &mut Vec<A11yIssue>) {
+    let mut pending = vec![root];
+    while let Some(node) = pending.pop() {
+        match node {
+            Node::Element(element) => {
+                check(element, issues);
+                pending.extend(element.children().iter().rev());
             }
+            Node::Fragment(children) => pending.extend(children.iter().rev()),
+            Node::Text(_) | Node::Raw(_) | Node::Comment(_) => {}
         }
-        Node::Fragment(children) => {
-            for child in children {
-                walk(child, issues);
-            }
-        }
-        Node::Text(_) | Node::Raw(_) | Node::Comment(_) => {}
     }
 }
 

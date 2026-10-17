@@ -1,8 +1,7 @@
 # Thresholds stay at the project's defaults: red here means write a test.
 #
 # An arbitrary percentage gate teaches people to write tests that raise a number. The
-# defaults plus a short, individually justified ignore list is a stronger signal — this is
-# the approach Winged-Swift takes, and it is worth copying.
+# defaults plus a short, individually justified ignore list is a stronger signal.
 
 ignore:
   # Exercised by `wasm-pack test --node`, which produces no native coverage data. Every

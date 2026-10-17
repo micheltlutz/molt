@@ -9,7 +9,7 @@
 mod native {
     use molt::feed::{RssGenerator, RssItem};
     use molt::prelude::*;
-    use molt::sitemap::{SitemapGenerator, SitemapUrl};
+    use molt::sitemap::{ChangeFreq, SitemapGenerator, SitemapUrl};
     use molt::ssg::StaticSiteGenerator;
     use molt::{Document, Layout};
 
@@ -21,7 +21,7 @@ mod native {
     }
 
     impl Layout for Shell {
-        fn render(&self, content: Node) -> Node {
+        fn wrap(&self, content: Node) -> Node {
             body()
                 .child(
                     header().child(
@@ -42,7 +42,7 @@ mod native {
             head()
                 .child(meta().attr("charset", "UTF-8"))
                 .child(title().text(title_text)),
-            match shell.render(content) {
+            match shell.wrap(content) {
                 Node::Element(element) => element,
                 other => body().child(other),
             },
@@ -77,10 +77,10 @@ mod native {
         site.write_file(
             &SitemapGenerator::generate(&[
                 SitemapUrl::new(format!("{SITE}/"))
-                    .changefreq("weekly")
+                    .changefreq(ChangeFreq::Weekly)
                     .priority(1.0),
                 SitemapUrl::new(format!("{SITE}/blog/"))
-                    .changefreq("daily")
+                    .changefreq(ChangeFreq::Daily)
                     .priority(0.8),
             ]),
             "sitemap.xml",
