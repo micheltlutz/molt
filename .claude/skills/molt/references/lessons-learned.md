@@ -453,3 +453,30 @@ first batch of `gh api` calls hit URLs like `.../commits/v7@`. When a command "w
 returns nonsense, check the shell semantics before the data.
 
 - **Guard.** `scripts/check-knowledge-base.sh`
+
+### L31. A prose guide that compiles still has to compile on every target
+
+(#70, #73)
+
+`MIGRATION.md` and `GETTING_STARTED.md` are included in `lib.rs` as doc tests, so a snippet
+cannot rot, and that caught a wrong claim of mine on the first run (an attribute value keeps a
+literal `<script>`; only the quote is escaped). But the same include broke `develop`:
+`wasm-pack test` runs the doc tests for `wasm32`, where `molt::ssg` does not exist even with
+the feature on, and two guides use it. I had run `--all-features` and `--no-default-features`
+and not that path. **Rule:** a `cfg` on a doc-test module must name every dimension the code
+under test depends on (here feature *and* target), and the command CI runs for a target is the
+command to run locally. `verify.sh` now runs `wasm-pack test --node` when it is installed.
+
+- **Guard.** `scripts/verify.sh`, `GETTING_STARTED.md`, `MIGRATION.md`
+
+### L32. Backticks inside a double-quoted shell argument are executed
+
+(#73)
+
+`gh pr create --body "… the `develop` branch …"` ran `develop` as a command ("command not
+found") and published a body with the word missing. Markdown is full of backticks. Write the
+body to a file with a quoted heredoc (`<<'EOF'`) and pass `--body-file`, then read the result
+back (`gh pr view --json body`) before moving on. The same applies to commit messages built
+with `-m "…"`.
+
+- **Guard.** `scripts/check-knowledge-base.sh`

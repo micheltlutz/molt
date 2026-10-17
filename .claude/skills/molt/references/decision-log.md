@@ -87,6 +87,17 @@ lose.
   **no larger initial stack** (P9, #38): each analysed or measured with no win, recorded on its
   issue.
 
+## Standing policy: Molt may exceed Winged-Swift
+
+(Owner's decision, after batch D.) Winged-Swift is the reference for **what the markup should
+be** and the golden fixtures are the parity gate for valid input. It is not the reference for
+what is safe or correct. Where it is unsafe or wrong, Molt fixes it in the port. A divergence
+carries three obligations: a row in `PORTING.md`, a test asserting the rendered string (with a
+comment saying how it differs, if a ported Swift test encoded the old behaviour), and an entry
+in `docs/upstream-findings.md` so it can be reported upstream. Never copy a Swift bug to keep
+parity; never diverge silently. *Examples:* `isPermaLink`, `data:` in frames, `srcdoc`,
+contextual `<` `>` escaping.
+
 ## Batch D — security hardening
 
 - **The URL policy takes the element's tag** (S7). `is_blocked_in(tag, key, value)`, with
