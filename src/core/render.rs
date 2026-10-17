@@ -131,6 +131,27 @@ pub trait Render {
     }
 }
 
+impl<T: Render + ?Sized> Render for &T {
+    fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
+        (**self).write_into(out, options, depth);
+    }
+}
+
+impl<T: Render + ?Sized> Render for Box<T> {
+    fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
+        (**self).write_into(out, options, depth);
+    }
+}
+
+/// `None` writes nothing.
+impl<T: Render> Render for Option<T> {
+    fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
+        if let Some(inner) = self {
+            inner.write_into(out, options, depth);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
