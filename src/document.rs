@@ -154,7 +154,9 @@ impl Document {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn render_to(&self, mut sink: impl Write, options: &RenderOptions) -> io::Result<()> {
-        if !streams_by_section(&self.body) {
+        // A depth limit counts `<html>` and `<body>` as open levels, which the section-by-
+        // section path does not see, so it takes the whole-tree path to keep the bytes equal.
+        if options.max_depth.is_some() || !streams_by_section(&self.body) {
             return sink.write_all(self.render_with(options).as_bytes());
         }
         sink.write_all(self.html_open().as_bytes())?;
@@ -245,6 +247,38 @@ fn write_open_tag(element: &Element, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    /// `render_to` streams head and body separately, which cannot see `<html>` and `<body>` as
+    /// open levels; with a depth limit it must still write the bytes `render_with` does.
+    #[test]
+    fn a_depth_limit_gives_the_same_bytes_streamed_and_whole() {
+        use crate::elements::{div, p, title};
+        let page = Document::new(Some("en"))
+            .head_children([title().text("T")])
+            .body_children([
+                div().child(div().child(p().text("deep"))),
+                div().text("flat"),
+            ]);
+        for depth in 0..6 {
+            for base in [RenderOptions::pretty(), RenderOptions::compact()] {
+                let options = base.with_max_depth(depth);
+                let mut streamed = Vec::new();
+                page.render_to(&mut streamed, &options)
+                    .expect("a Vec never fails");
+                assert_eq!(
+                    String::from_utf8(streamed).expect("utf-8"),
+                    page.render_with(&options),
+                    "depth {depth}"
+                );
+            }
+        }
+        // html is level 1, body level 2: a limit of 2 keeps both and drops their children.
+        let rendered = page.render_with(&RenderOptions::compact().with_max_depth(2));
+        assert_eq!(
+            rendered,
+            "<!DOCTYPE html>\n<html lang=\"en\"><head></head><body></body></html>"
+        );
+    }
+
     use super::*;
     use crate::core::Node;
     use crate::elements::{body, h1, h2, head, img, meta, p, section, title};

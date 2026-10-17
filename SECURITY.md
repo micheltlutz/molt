@@ -61,8 +61,13 @@ still has the recursive shape.
 **What deep trees still cost is output size.** Pretty mode writes one indent string per
 level on every line, so output grows with the square of the depth: a 100,000-level tree
 pretty-prints to tens of gigabytes. If depth comes from untrusted input, bound it, or
-render compact, or set an empty indent with
-`RenderOptions::pretty().with_indent("")`.
+render compact, set an empty indent with
+`RenderOptions::pretty().with_indent("")`, or bound it with
+`RenderOptions::with_max_depth(512)`, which drops elements nested deeper than that (browsers
+flatten beyond roughly 512 anyway). The indent is also restricted: `with_indent` keeps only
+spaces and tabs, at most 16, because it is written at the start of every line and a string
+with markup in it (`renderWithIndent(untrusted)` from JavaScript) would put that markup on
+every line.
 
 `Document::render`, `audit`, `Clone` and `PartialEq` are iterative as well, so a document, an
 accessibility audit, a copy or a comparison of a 100,000-level tree is safe. **`Debug` is
