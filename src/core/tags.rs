@@ -15,6 +15,28 @@ pub const VOID_TAGS: [&str; 13] = [
 /// Elements whose text content is significant, so pretty printing must not indent inside them.
 pub const WHITESPACE_SENSITIVE_TAGS: [&str; 3] = ["pre", "code", "textarea"];
 
+/// Elements whose content the HTML parser reads as raw text rather than as markup.
+///
+/// Inside one of these, the first `</tag>` ends the element no matter where it appears —
+/// including inside a quoted attribute value of a descendant. `noscript` is on the list
+/// because browsers parse it as raw text whenever scripting is enabled, which is the case
+/// that matters (a tracking `<img>` in `<noscript>` is common).
+const RAW_TEXT_TAGS: [&str; 8] = [
+    "iframe",
+    "noembed",
+    "noframes",
+    "noscript",
+    "plaintext",
+    "script",
+    "style",
+    "xmp",
+];
+
+/// Whether the parser reads the content of `tag` as raw text.
+pub(crate) fn is_raw_text(tag: &str) -> bool {
+    RAW_TEXT_TAGS.contains(&tag)
+}
+
 /// Whether `tag` is safe to write between `<` and `>`.
 ///
 /// Attribute names were already checked at write time; a tag name is written just as

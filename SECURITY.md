@@ -29,6 +29,11 @@ These are vulnerabilities:
   quoting. An attribute name containing a space, quote, `=`, `<`, `>`, `/` or a control
   character is omitted rather than written.
 - A class, id, style or `data-*` value that can inject an additional attribute.
+- An attribute value that ends a raw-text ancestor (`noscript`, `iframe`, `xmp`, `noembed`,
+  `noframes`, `script`, `style`, `plaintext`) early. `escape_attribute` leaves `<` and `>`
+  alone, matching Winged-Swift, but the renderer writes them as `&lt;` and `&gt;` for every
+  attribute under one of those ancestors. This is the one place where output differs from
+  Winged-Swift for the same tree; the fixtures are unaffected.
 - `Node::comment` content that can terminate the comment early.
 - A tag name that survives into the output with a space, quote, `<`, `>` or `/`. A tag
   that is not a letter followed by letters, digits, `-`, `_`, `.` or `:` is **not
