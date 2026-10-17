@@ -82,7 +82,7 @@ fn the_hot_paths_stay_within_their_allocation_budgets() {
     check(
         "escape_text dirty",
         allocations(|| molt::core::escape::escape_text("a<b")).0,
-        2,
+        1,
     );
 
     // Cloning, which has to allocate every owned string once.

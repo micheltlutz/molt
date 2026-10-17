@@ -16,23 +16,82 @@
 
 use std::borrow::Cow;
 
+/// Each `*_entity` function below maps one byte to its entity, or `None` if the byte is
+/// written as it is. They are passed as generic parameters, never as `fn` pointers, so the
+/// compiler inlines the match into the scanning loop.
+///
+/// Every escaped character is ASCII, and no byte of a multi-byte UTF-8 sequence is, so a
+/// scan over bytes finds exactly the characters a `char` loop would, and slicing the input
+/// at a matched byte never splits a character.
+fn text_entity(byte: u8) -> Option<&'static str> {
+    match byte {
+        b'&' => Some("&amp;"),
+        b'<' => Some("&lt;"),
+        b'>' => Some("&gt;"),
+        b'"' => Some("&quot;"),
+        b'\'' => Some("&#x27;"),
+        _ => None,
+    }
+}
+
+fn text_entity_with_slashes(byte: u8) -> Option<&'static str> {
+    if byte == b'/' {
+        Some("&#x2F;")
+    } else {
+        text_entity(byte)
+    }
+}
+
+/// `<` and `>` are not here on purpose: see [`escape_attribute`].
+fn attribute_entity(byte: u8) -> Option<&'static str> {
+    match byte {
+        b'&' => Some("&amp;"),
+        b'"' => Some("&quot;"),
+        b'\'' => Some("&#x27;"),
+        _ => None,
+    }
+}
+
+/// The only difference from [`text_entity`] is the apostrophe, which XML spells `&apos;`.
+fn xml_entity(byte: u8) -> Option<&'static str> {
+    if byte == b'\'' {
+        Some("&apos;")
+    } else {
+        text_entity(byte)
+    }
+}
+
+/// Appends `input` to `out`, replacing each byte `entity` names.
+///
+/// Copies the stretches between escapes with one `push_str` each instead of pushing a
+/// `char` at a time, which is what makes mostly-clean text cheap.
+fn write_runs(out: &mut String, input: &str, entity: impl Fn(u8) -> Option<&'static str>) {
+    let mut start = 0;
+    for (index, byte) in input.bytes().enumerate() {
+        if let Some(replacement) = entity(byte) {
+            if index > start {
+                out.push_str(&input[start..index]);
+            }
+            out.push_str(replacement);
+            start = index + 1;
+        }
+    }
+    out.push_str(&input[start..]);
+}
+
 /// Escapes `input` only if some byte needs it, and otherwise hands it back untouched.
 ///
-/// Every escaped character is ASCII, and no byte of a multi-byte UTF-8 sequence is, so
-/// scanning bytes finds exactly the characters a `char` loop would. Returning [`Cow`]
-/// means the common case — text with nothing to escape — costs no allocation and no copy.
-fn escape_with(
-    input: &str,
-    needs_escape: impl Fn(u8) -> bool,
-    write: impl FnOnce(&mut String, &str),
-) -> Cow<'_, str> {
-    if input.bytes().any(needs_escape) {
-        let mut out = String::with_capacity(input.len() + input.len() / 8);
-        write(&mut out, input);
-        Cow::Owned(out)
-    } else {
-        Cow::Borrowed(input)
-    }
+/// Returning [`Cow`] means the common case — text with nothing to escape — costs no
+/// allocation and no copy.
+fn escape_with(input: &str, entity: impl Fn(u8) -> Option<&'static str> + Copy) -> Cow<'_, str> {
+    let Some(first) = input.bytes().position(|byte| entity(byte).is_some()) else {
+        return Cow::Borrowed(input);
+    };
+    // Room for a few entities up front, so a short dirty string does not grow once.
+    let mut out = String::with_capacity(input.len() + input.len() / 4 + 16);
+    out.push_str(&input[..first]);
+    write_runs(&mut out, &input[first..], entity);
+    Cow::Owned(out)
 }
 
 /// Escapes text for use as HTML element content.
@@ -51,11 +110,7 @@ fn escape_with(
 /// ```
 #[must_use]
 pub fn escape_text(input: &str) -> Cow<'_, str> {
-    escape_with(
-        input,
-        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''),
-        |out, input| write_escaped_text(out, input, false),
-    )
+    escape_with(input, text_entity)
 }
 
 /// Escapes text for HTML content, optionally escaping `/` as well.
@@ -67,11 +122,7 @@ pub fn escape_text(input: &str) -> Cow<'_, str> {
 /// ```
 #[must_use]
 pub fn escape_text_with_slashes(input: &str) -> Cow<'_, str> {
-    escape_with(
-        input,
-        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'' | b'/'),
-        |out, input| write_escaped_text(out, input, true),
-    )
+    escape_with(input, text_entity_with_slashes)
 }
 
 /// Escapes a value for use inside a double-quoted HTML attribute.
@@ -92,11 +143,7 @@ pub fn escape_text_with_slashes(input: &str) -> Cow<'_, str> {
 /// ```
 #[must_use]
 pub fn escape_attribute(input: &str) -> Cow<'_, str> {
-    escape_with(
-        input,
-        |b| matches!(b, b'&' | b'"' | b'\''),
-        write_escaped_attribute,
-    )
+    escape_with(input, attribute_entity)
 }
 
 /// Escapes text for XML content — used by the sitemap and RSS generators.
@@ -111,22 +158,7 @@ pub fn escape_attribute(input: &str) -> Cow<'_, str> {
 /// ```
 #[must_use]
 pub fn escape_xml(input: &str) -> Cow<'_, str> {
-    escape_with(
-        input,
-        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''),
-        |out, input| {
-            for c in input.chars() {
-                match c {
-                    '&' => out.push_str("&amp;"),
-                    '<' => out.push_str("&lt;"),
-                    '>' => out.push_str("&gt;"),
-                    '"' => out.push_str("&quot;"),
-                    '\'' => out.push_str("&apos;"),
-                    _ => out.push(c),
-                }
-            }
-        },
-    )
+    escape_with(input, xml_entity)
 }
 
 /// Appends escaped HTML text to an existing buffer.
@@ -135,30 +167,21 @@ pub fn escape_xml(input: &str) -> Cow<'_, str> {
 /// would defeat that.
 pub(crate) fn write_escaped_text(out: &mut String, input: &str, escape_slashes: bool) {
     out.reserve(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#x27;"),
-            '/' if escape_slashes => out.push_str("&#x2F;"),
-            _ => out.push(c),
-        }
-    }
+    write_runs(
+        out,
+        input,
+        if escape_slashes {
+            text_entity_with_slashes
+        } else {
+            text_entity
+        },
+    );
 }
 
 /// Appends an escaped attribute value to an existing buffer.
 pub(crate) fn write_escaped_attribute(out: &mut String, input: &str) {
     out.reserve(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#x27;"),
-            _ => out.push(c),
-        }
-    }
+    write_runs(out, input, attribute_entity);
 }
 
 #[cfg(test)]
