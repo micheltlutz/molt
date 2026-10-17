@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+# The verify job has no token permission. Publish is the only job that can mint one.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@wasm-pack
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: taiki-e/install-action@cargo-deny
+
+      - name: Verify
+        run: ./scripts/verify.sh
+
+  release:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    # Trusted Publishing: register this environment on crates.io, then retire
+    # CARGO_REGISTRY_TOKEN. The auth action below replaces the stored token.
+    environment: release
+    permissions:
+      contents: write
+      # crates.io trusted publishing and `npm publish --provenance` both mint an OIDC token.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: taiki-e/install-action@wasm-pack
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve the version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          CRATE=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          NPM=$(node -p "require('./npm/package.json').version")
+
+          if [ "$CRATE" != "$VERSION" ]; then
+            echo "::error::Cargo.toml says $CRATE but the tag says $VERSION"
+            exit 1
+          fi
+          if [ "$NPM" != "$VERSION" ]; then
+            echo "::error::npm/package.json says $NPM but the tag says $VERSION"
+            exit 1
+          fi
+
+      # Slices the matching CHANGELOG section. The sed range this replaces terminated on the
+      # *next* `## [` heading, so when the section was the last one in the file — which is
+      # exactly the shape of a first release — the range ran to EOF and `sed '$d'` ate a
+      # real line of the notes. awk stops at the next heading or at EOF, either way whole.
+      - name: Extract the changelog section
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          {
+            echo "body<<CHANGELOG_EOF"
+            awk -v version="$VERSION" '
+              index($0, "## [" version "]") == 1 { inside = 1; next }
+              inside && /^## \[/ { exit }
+              inside { print }
+            ' CHANGELOG.md
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build the WebAssembly package
+        run: ./scripts/build-wasm.sh
+
+      - name: Verify the NPM package
+        run: ./scripts/verify-npm.sh
+
+      # Both publish steps are idempotent, and that is load-bearing rather than tidy. A
+      # release that fails *after* crates.io has accepted the crate cannot be re-run
+      # otherwise: the second `cargo publish` errors on a version that is already there,
+      # the job dies, and npm and the GitHub Release never get their turn. Publishing is
+      # the one thing in this pipeline that cannot be undone, so the steps after it have
+      # to remain reachable.
+      #
+      # Trusted Publishing mints a short-lived token for this workflow. Register the
+      # `release` environment on crates.io and retire CARGO_REGISTRY_TOKEN; this job
+      # does not read that secret.
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish to crates.io
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if curl -sfo /dev/null -A "molt release workflow" \
+               "https://crates.io/api/v1/crates/molt/$VERSION"; then
+            echo "::notice::molt $VERSION is already on crates.io — skipping"
+          else
+            cargo publish --locked --no-verify
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Publish to npm
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "molt@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::molt $VERSION is already on npm — skipping"
+          else
+            npm publish --provenance --access public
+          fi
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          body: |
+            ${{ steps.changelog.outputs.body }}
+
+            ## Install
+
+            ```toml
+            [dependencies]
+            molt = "${{ steps.version.outputs.version }}"
+            ```
+
+            ```bash
+            npm install molt@${{ steps.version.outputs.version }}
+            ```

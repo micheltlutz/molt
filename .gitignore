@@ -1,0 +1,39 @@
+# Rust
+/target/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/
+**/*.rs.bk
+*.pdb
+
+# wasm-pack
+/pkg/
+/pkg-web/
+/pkg-node/
+/pkg-bundler/
+/wasm-pack.log
+
+# Node
+node_modules/
+npm/*.tgz
+
+# Coverage
+*.profraw
+*.profdata
+lcov.info
+
+# Generated docs — published to Pages, never committed
+/doc/
+
+# macOS
+.DS_Store
+dist/
+
+# wasm-pack output — built by scripts/build-wasm.sh, never committed.
+# npm/package.json, npm/README.md, npm/LICENSE, npm/smoke.* and npm/tsconfig.json are ours
+# and are tracked; the three build directories are not.
+/npm/web/
+/npm/node/
+/npm/bundler/
+/npm/*.tgz
+/examples/node/dist/

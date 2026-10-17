@@ -1,0 +1,4 @@
+# `unwrap` and `expect` are denied on the library (see Cargo.toml). Tests are the
+# place a missing fixture or a temp directory is allowed to abort the process.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

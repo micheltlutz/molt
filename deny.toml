@@ -1,0 +1,23 @@
+# Supply-chain check for this crate. Runtime dependencies are optional
+# (`wasm-bindgen`, `rayon`); everything else is a dev-dependency of the test suite.
+# `cargo vet` is intentionally not part of this gate: two optional crates, and the
+# audit cost is larger than the risk left after this check.
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"]
+confidence-threshold = 0.8
+# The list is the policy, not a mirror of today's graph. A dual-licensed crate
+# satisfies it via MIT and never "encounters" Apache-2.0.
+unused-allowed-license = "allow"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,36 @@
+[package]
+name = "molt-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+molt = { path = ".." }
+
+[[bin]]
+name = "escape_text"
+path = "fuzz_targets/escape_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "escape_attribute"
+path = "fuzz_targets/escape_attribute.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "url_policy"
+path = "fuzz_targets/url_policy.rs"
+test = false
+doc = false
+bench = false
+
+# Own workspace so `cargo test` in the crate does not build the fuzz targets.
+[workspace]

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/micheltlutz/molt/discussions
+    about: Ask in Discussions — issues are for bugs and feature requests.
+  - name: Security vulnerability
+    url: https://github.com/micheltlutz/molt/security/advisories/new
+    about: Report privately. Please do not open a public issue.

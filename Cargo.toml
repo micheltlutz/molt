@@ -1,0 +1,76 @@
+[package]
+name = "molt"
+version = "1.0.1"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Michel Anderson Lutz Teixeira <michel@micheltlutz.me>"]
+description = "Fast, type-safe HTML DSL and static site generation engine in Rust and WebAssembly"
+documentation = "https://docs.rs/molt"
+repository = "https://github.com/micheltlutz/molt"
+homepage = "https://github.com/micheltlutz/molt"
+license = "MIT"
+readme = "README.md"
+keywords = ["html", "dsl", "wasm", "static-site", "templating"]
+categories = ["web-programming", "template-engine", "wasm"]
+exclude = ["/.github", "/scripts", "/examples/web", "/npm", "MOLT_SPEC.md", "molt-logo.jpg"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["ssg"]
+# Static site generation. Pulls in std::fs; compiled out on wasm32 regardless.
+ssg = []
+# WebAssembly bindings. Gated on the feature, never on target_arch — see PORTING.md.
+wasm = ["dep:wasm-bindgen"]
+# Parallel bulk generation. Sound only because the node tree is Send + Sync.
+parallel = ["dep:rayon"]
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+rayon = { version = "1.10", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+# criterion pulls rayon, which refuses to compile for wasm32 ("Rayon cannot be used when
+# targeting wasi32"). Keeping it off the wasm target is what lets `wasm-pack test` build.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = "0.7"
+
+[[bench]]
+name = "render"
+harness = false
+
+# Both examples write to disk, so they need the `ssg` feature. Without this,
+# `cargo test --no-default-features` tries to build them and fails on the missing module.
+[[example]]
+name = "static_site"
+required-features = ["ssg"]
+
+[[example]]
+name = "marketing_page"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+# Measured 2026-10-17: nodejs target, 22 KB gzip, under the 120 KB budget in
+# scripts/build-wasm.sh. Revert this line if a later build crosses that budget.
+overflow-checks = true
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+unwrap_used = "deny"
+expect_used = "deny"

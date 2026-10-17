@@ -1,0 +1,68 @@
+name: Bug report
+description: Markup that comes out wrong, or an API that misbehaves.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The fastest possible bug report is a failing test. If you can write one, paste it
+        below and skip most of this form.
+
+  - type: textarea
+    id: builder-code
+    attributes:
+      label: The code that builds the markup
+      description: A minimal snippet — builder chain or `html!` macro.
+      render: rust
+      placeholder: |
+        use molt::prelude::*;
+        let markup = div().add_class("card").text("hello");
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Markup you expected
+      render: html
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Markup you got
+      render: html
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: molt version
+      placeholder: "1.0.0, or a git SHA"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - Native (x86_64 / aarch64)
+        - wasm32-unknown-unknown, in a browser
+        - wasm32-unknown-unknown, in Node
+    validations:
+      required: true
+
+  - type: input
+    id: features
+    attributes:
+      label: Features enabled
+      placeholder: "default, or e.g. wasm,parallel"
+
+  - type: input
+    id: rustc
+    attributes:
+      label: rustc version
+      placeholder: "output of rustc --version"

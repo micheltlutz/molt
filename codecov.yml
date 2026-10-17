@@ -1,0 +1,11 @@
+# Thresholds stay at the project's defaults: red here means write a test.
+#
+# An arbitrary percentage gate teaches people to write tests that raise a number. The
+# defaults plus a short, individually justified ignore list is a stronger signal — this is
+# the approach Winged-Swift takes, and it is worth copying.
+
+ignore:
+  # Exercised by `wasm-pack test --node` and by the Node smoke test in `npm/`, neither of
+  # which produces native coverage data. Every function here is a one-line delegation to a
+  # covered method on Element, Document or SeoBuilder.
+  - "src/wasm.rs"

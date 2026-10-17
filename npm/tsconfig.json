@@ -1,0 +1,19 @@
+{
+  "//": [
+    "wasm-bindgen generates typings that reference Symbol.dispose (explicit resource",
+    "management) and the WebAssembly namespace, so consumers need ESNext.Disposable and",
+    "DOM in `lib`. Both requirements are documented in the package README; this check is",
+    "what surfaced them."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM"],
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "include": ["smoke.ts", "bundler/*.d.ts"]
+}
