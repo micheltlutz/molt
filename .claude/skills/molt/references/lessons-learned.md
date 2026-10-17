@@ -480,3 +480,25 @@ back (`gh pr view --json body`) before moving on. The same applies to commit mes
 with `-m "…"`.
 
 - **Guard.** `scripts/check-knowledge-base.sh`
+
+### L33. Re-verify a claim about someone else's code at the moment you publish it
+
+(#80, `docs/history/upstream-findings.md`)
+
+Nine findings about the original library were written down while porting, and eight were
+right. The ninth ("its writes are not atomic") was copied from an earlier note and was
+**wrong**: reading the source once more, right before filing, showed `atomically: true` and a
+temporary file plus a move. The temporary-file collision I had paired with it was a bug in
+the Rust port itself (`with_extension` replaces the extension). Filing it would have put a
+false accusation in another project's tracker, and a false claim had also been sitting in
+`docs/history/PORTING.md`. **Rule:** a statement about code you do not own is checked against
+that code on the day it is published, with the file and line in the report; and a claim that
+is withdrawn is withdrawn in the record too, with the reason.
+
+A second rule from the same task: read the target's own policy before choosing the channel.
+That project's `SECURITY.md` asked for private disclosure, so the six injection-class findings
+went in as **draft security advisories** (visible to maintainers only, publishable later) and
+only the three robustness findings as public issues. A public disclosure cannot be undone; a
+draft can be published in one click.
+
+- **Guard.** `docs/history/upstream-findings.md`
