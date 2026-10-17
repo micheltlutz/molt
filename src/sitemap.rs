@@ -1,6 +1,5 @@
 //! XML sitemap generation.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/seo/SitemapGenerator.swift`.
 
 use std::fmt::Write as _;
 
@@ -249,11 +248,10 @@ fn valid_priority(priority: f64) -> Option<f64> {
     priority.is_finite().then(|| priority.clamp(0.0, 1.0))
 }
 
-/// Formats a priority the way Swift's `Double` interpolation does.
+/// Formats a priority with at least one decimal place.
 ///
-/// Swift renders `1.0` as `"1.0"`; Rust's `{}` renders it as `"1"`. The golden fixture was
-/// produced by Swift, so a whole number keeps one decimal place here. Fractional values
-/// already agree between the two languages, both using the shortest round-tripping form.
+/// Rust's `{}` renders `1.0` as `"1"`, but the golden fixture has `"1.0"`, so a whole number
+/// keeps one decimal place here. Fractional values use the shortest round-tripping form.
 fn format_priority(priority: f64) -> String {
     if priority.fract() == 0.0 && priority.is_finite() {
         format!("{priority:.1}")
@@ -266,7 +264,6 @@ fn format_priority(priority: f64) -> String {
 mod tests {
     use super::*;
 
-    /// Ports `SitemapGeneratorTests.testGenerateProducesValidURLSet`.
     #[test]
     fn a_sitemap_has_an_xml_declaration_and_a_urlset() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://example.com/")]);
@@ -274,15 +271,13 @@ mod tests {
         assert!(xml.ends_with("</urlset>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testGenerateEscapesAmpersandsInURLs`.
     #[test]
     fn a_loc_containing_an_ampersand_is_escaped() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/a?x=1&y=2")]);
         assert!(xml.contains("<loc>https://e.com/a?x=1&amp;y=2</loc>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testPriorityIsRenderedWithOneDecimal`. This is the subtle one: Swift
-    /// prints `1.0`, Rust's default `{}` prints `1`.
+    /// This is the subtle one: `1.0` must print as `1.0`, and Rust's default `{}` prints `1`.
     #[test]
     fn whole_priorities_keep_one_decimal_place() {
         assert_eq!(format_priority(1.0), "1.0");
@@ -358,7 +353,6 @@ mod tests {
         assert_eq!(MAX_BYTES, 52_428_800);
     }
 
-    /// Ports `SitemapGeneratorTests.testOptionalFieldsAreOmitted`.
     #[test]
     fn optional_fields_are_omitted_entirely() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/")]);
@@ -367,7 +361,6 @@ mod tests {
         assert!(!xml.contains("<priority>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testEmptyURLListStillProducesAWellFormedDocument`.
     #[test]
     fn an_empty_sitemap_is_still_well_formed() {
         let xml = SitemapGenerator::generate(&[]);
@@ -375,7 +368,6 @@ mod tests {
         assert!(xml.ends_with("</urlset>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testGeneratesASitemapIndex`.
     #[test]
     fn an_index_lists_each_sitemap() {
         let xml = SitemapGenerator::generate_index(&[
@@ -391,8 +383,7 @@ mod tests {
         assert_eq!(xml.matches("<sitemap>").count(), 2);
         assert_eq!(xml.matches("<lastmod>").count(), 1);
 
-        // The Swift case checks that a query string in an index entry is escaped too, not
-        // just in `<urlset>`.
+        // A query string in an index entry is escaped too, not just in `<urlset>`.
         let escaped = SitemapGenerator::generate_index(&[(
             "https://e.com/sitemap-pages.xml?v=2&full=1".into(),
             None,
@@ -400,7 +391,6 @@ mod tests {
         assert!(escaped.contains("v=2&amp;full=1"));
     }
 
-    /// Ports `SitemapGeneratorTests.testSitemapIndexOmitsAMissingLastmod`.
     #[test]
     fn an_index_entry_without_a_lastmod_emits_no_element() {
         let xml = SitemapGenerator::generate_index(&[("https://e.com/sitemap.xml".into(), None)]);

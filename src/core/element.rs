@@ -1,8 +1,7 @@
 //! The [`Element`] type and its fluent builder API.
 //!
-//! Ports the state half of `core/HTMLTag.swift`, all of `core/CSSHelpers.swift` and all of
-//! `core/AttributeHelpers.swift`. Those three files are the *complete* chainable surface
-//! of Winged-Swift — there is nothing else.
+//! The chainable surface is this file and nothing else: the attribute, class, style, role,
+//! `data-*` and `aria-*` helpers, text and children.
 
 use std::borrow::Cow;
 
@@ -372,7 +371,6 @@ impl Element {
 
     /// Appends `key="value"`, escaping the value. Does not deduplicate.
     ///
-    /// Ports `setAttribute(key:value:)`.
     #[must_use]
     pub fn attr(self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
         self.add_attribute(Attribute::new(key, value))
@@ -441,9 +439,9 @@ impl Element {
 
     /// Appends several `data-*` attributes.
     ///
-    /// Takes an ordered iterator rather than a map. Winged-Swift's `dataAttributes(_:)`
-    /// takes a Swift `Dictionary`, so its rendered attribute order is nondeterministic
-    /// between runs; this signature makes the output stable. See `docs/history/PORTING.md`.
+    /// Takes an ordered iterator rather than a map: a hash map would render its
+    /// attributes in a different order from one run to the next, and this makes the output
+    /// stable.
     #[must_use]
     pub fn data_attrs<K: AsRef<str>, V: AsRef<str>>(
         mut self,
@@ -476,7 +474,7 @@ impl Element {
     // MARK: - Replacing helpers
     //
     // `set_id`, `set_style` and `set_role` remove any existing value before appending.
-    // Every other helper appends without deduplication — that asymmetry is Winged-Swift's.
+    // Every other helper appends without deduplication — that asymmetry is deliberate.
 
     /// Sets `id`, replacing any existing one.
     #[must_use]
@@ -507,8 +505,7 @@ impl Element {
     /// Appends a class name to `class`, space-joined.
     ///
     /// Only the new value is escaped — the existing attribute is already escaped, and
-    /// re-escaping it would double-encode. `Tests/WingedSwiftTests/CSSHelpersTests.swift`
-    /// has a regression test for exactly that.
+    /// re-escaping it would double-encode, and a test pins exactly that.
     #[must_use]
     pub fn add_class(mut self, class_name: impl AsRef<str>) -> Self {
         let raw = class_name.as_ref();
@@ -604,7 +601,7 @@ mod tests {
         nav, ol, p, script, span, stylesheet, table, td, th, title, tr, ul,
     };
 
-    /// Ports `ThreeZeroTests.trustedURLsRenderAsGiven` on the element builder.
+    /// `trusted_url` on the element builder.
     #[test]
     fn trusted_url_replaces_a_blocked_value() {
         assert_eq!(
@@ -630,7 +627,6 @@ mod tests {
         assert!(!div().is_self_closing());
     }
 
-    /// Ports `CSSHelpersTests.testAddMultipleClasses`.
     #[test]
     fn add_class_appends_to_one_attribute() {
         assert_eq!(
@@ -639,7 +635,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testAddClassDoesNotDoubleEscapeExistingValues`.
     #[test]
     fn chaining_add_class_does_not_double_escape() {
         let rendered = div().add_class("a&b").add_class("c").render();
@@ -647,7 +642,6 @@ mod tests {
         assert!(!rendered.contains("&amp;amp;"));
     }
 
-    /// Ports `CSSHelpersTests.testAddClassEscapesQuotesInsteadOfBreakingOutOfTheAttribute`.
     #[test]
     fn a_quote_in_a_class_name_cannot_break_out() {
         let rendered = div().add_class(r#"a" onload="alert(1)"#).render();
@@ -655,7 +649,6 @@ mod tests {
         assert!(rendered.contains("&quot;"));
     }
 
-    /// Ports `CSSHelpersTests.testAddClassesArray`.
     #[test]
     fn add_classes_appends_all_of_them_in_order() {
         assert_eq!(
@@ -664,14 +657,12 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetIdReplacesExisting`.
     #[test]
     fn set_id_replaces_rather_than_appending() {
         let rendered = div().set_id("first").set_id("second").render();
         assert_eq!(rendered, r#"<div id="second"></div>"#);
     }
 
-    /// Ports `CSSHelpersTests.testSetStyle` and `AttributeHelpersTests.testSetRole`.
     #[test]
     fn set_style_and_set_role_also_replace() {
         let rendered = div()
@@ -682,8 +673,6 @@ mod tests {
         assert_eq!(rendered, r#"<div style="color:blue" role="main"></div>"#);
     }
 
-    /// Ports `AttributeHelpersTests.testDataAttribute` and
-    /// `AttributeHelpersTests.testAriaAttribute`.
     #[test]
     fn data_and_aria_attributes_get_their_prefixes() {
         let rendered = span()
@@ -693,7 +682,7 @@ mod tests {
         assert_eq!(rendered, r#"<span data-id="7" aria-label="Close"></span>"#);
     }
 
-    /// The improvement over Swift: ordered input means stable output.
+    /// Ordered input means stable output.
     #[test]
     fn bulk_attribute_order_is_stable() {
         let build = || {
@@ -707,8 +696,8 @@ mod tests {
         }
     }
 
-    /// No Swift counterpart: `HTMLTag` has no deduplication either, but nothing in its
-    /// suite pins it. Kept as a Rust-side guarantee.
+    /// Plain attributes are appended and never deduplicated; only `set_id`, `set_style` and
+    /// `set_role` replace.
     #[test]
     fn plain_attributes_are_appended_without_deduplication() {
         assert_eq!(
@@ -717,11 +706,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLEscapeTests.testHTMLTagEscapesContentByDefault` and
-    /// `HTMLEscapeTests.testHTMLTagCanDisableEscape`. Swift turns escaping off with an
-    /// `escapeContent:`
-    /// flag on the initialiser; Rust has a separate method instead, so the escape hatch is
-    /// greppable rather than hidden behind a default argument.
+    /// Escaping is the default, and turning it off is a separate method, so the escape hatch
+    /// is greppable rather than hidden behind a default argument.
     #[test]
     fn text_is_escaped_and_raw_text_is_not() {
         assert_eq!(p().text("<b>").render(), "<p>&lt;b&gt;</p>");
@@ -742,10 +728,6 @@ mod tests {
         assert_eq!(list.render(), "<div><p>a</p><p>b</p></div>");
     }
 
-    // Ports `HTMLTagTests`. Swift builds these through a result builder — `html { ... }` —
-    // which wraps everything in `<html>`; the Rust equivalent is an explicit `html_tag()`.
-
-    /// Ports `HTMLTagTests.testHTMLTagCreation`.
     #[test]
     fn a_tag_renders_its_attributes_then_its_content() {
         let tag = Element::new("p")
@@ -755,11 +737,8 @@ mod tests {
         assert_eq!(tag.render(), r#"<p class="text">Hello, World!</p>"#);
     }
 
-    /// Ports `HTMLTagTests.testHTMLTagWithMultipleAttributes`.
-    ///
-    /// Swift's `Img(src:alt:attributes:)` emits the extra attributes *before* `src` and
-    /// `alt`. The Rust `image(src, alt)` constructor puts them first instead, so matching
-    /// this byte for byte means going through the generic builder.
+    /// Extra attributes can come before the typed ones. The `image(src, alt)` constructor puts
+    /// `src` and `alt` first, so this order needs the generic builder.
     #[test]
     fn extra_attributes_can_precede_the_typed_ones() {
         let tag = img()
@@ -774,7 +753,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLBuilder`.
     #[test]
     fn nested_children_render_in_order() {
         let document = html_tag().child(
@@ -792,7 +770,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLBuilderWithAttributes`.
     #[test]
     fn a_container_renders_its_class_before_its_children() {
         let document = html_tag().child(
@@ -808,7 +785,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLTable`.
     #[test]
     fn a_table_renders_its_rows_and_cells() {
         let document = html_tag().child(
@@ -838,7 +814,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLList`.
     #[test]
     fn an_unordered_list_renders_its_items() {
         let document = html_tag().child(
@@ -857,7 +832,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLOrderedList`.
     #[test]
     fn an_ordered_list_renders_its_items() {
         let document = html_tag().child(
@@ -876,11 +850,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLDescriptionList`.
-    ///
-    /// Swift reaches for the untyped `HTMLTag("dt", content:)` here; `Element::new` is the
-    /// same escape hatch in Rust, and the point of the test is that it renders like any
-    /// generated constructor.
+    /// Built with `Element::new` rather than `dl()`/`dt()`/`dd()`: the point of the test is that
+    /// the untyped escape hatch renders like any generated constructor.
     #[test]
     fn a_description_list_renders_terms_and_descriptions() {
         let document = html_tag().child(
@@ -902,7 +873,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLStructuralTags`.
     #[test]
     fn the_structural_tags_nest_into_a_page() {
         let document = html_tag()
@@ -942,11 +912,8 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLScript`.
-    ///
     /// `raw_text`, not `text`: escaping the body would turn `'Hello World'` into
-    /// `&#39;Hello World&#39;` and the browser would run that literally. Swift's `Script`
-    /// has the same carve-out built into the type.
+    /// `&#39;Hello World&#39;` and the browser would run that literally.
     #[test]
     fn a_script_body_is_not_escaped() {
         let document = html_tag().child(
@@ -961,7 +928,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testMetaWithName`.
     #[test]
     fn meta_renders_both_the_named_and_the_charset_form() {
         let document = html_tag()
@@ -981,7 +947,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLTitle`.
     #[test]
     fn a_title_renders_its_text() {
         let document = html_tag().child(title().text("Title my site"));
@@ -992,7 +957,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLSpan`.
     #[test]
     fn a_span_renders_its_attributes_and_content() {
         let tag = span().attr("class", "text").text("Hello, World!");
@@ -1000,11 +964,8 @@ mod tests {
         assert_eq!(tag.render(), r#"<span class="text">Hello, World!</span>"#);
     }
 
-    /// Ports `HTMLTagTests.testHTMLButton`.
-    ///
-    /// Swift's `Button` defaults to `type="button"` and appends it after the caller's
-    /// attributes. `button_typed` in Rust puts the type first, so the order here comes from
-    /// the generic builder.
+    /// `button_typed` puts the type first, so a type after the class comes from the generic
+    /// builder.
     #[test]
     fn a_button_carries_its_type_after_its_class() {
         let document = html_tag().child(button().add_class("button-class").attr("type", "button"));
@@ -1015,7 +976,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLTagTests.testHTMLButtonChildren`.
     #[test]
     fn a_button_renders_its_children() {
         let document = html_tag().child(
@@ -1034,13 +994,8 @@ mod tests {
         );
     }
 
-    // Ports the rest of `CSSHelpersTests` and `AttributeHelpersTests`.
-
-    /// Ports `CSSHelpersTests.testChainingPreservesTheConcreteType`.
-    ///
-    /// Swift needs the test because its helpers are declared on a protocol and could erase
-    /// the tag type. Rust's take `self` and return `Self`, so the type survives by
-    /// construction — what is worth pinning is the attribute order the chain produces.
+    /// The helpers take `self` and return `Self`, so the type survives by construction — what
+    /// is worth pinning is the attribute order the chain produces.
     #[test]
     fn chaining_helpers_keeps_the_element_usable() {
         let card: Element = div().add_class("card").set_id("hero").set_role("region");
@@ -1051,7 +1006,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetStyleEscapesQuotes`.
     #[test]
     fn set_style_escapes_quotes() {
         let rendered = div()
@@ -1064,7 +1018,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testAddSingleClass`.
     #[test]
     fn a_single_class_renders_on_its_own() {
         assert_eq!(
@@ -1073,7 +1026,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetId`.
     #[test]
     fn set_id_renders_an_id_attribute() {
         assert_eq!(
@@ -1082,7 +1034,6 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testChainedHelpers`.
     #[test]
     fn the_helpers_chain_in_the_order_they_are_called() {
         let rendered = div()
@@ -1098,11 +1049,8 @@ mod tests {
         );
     }
 
-    /// Ports `AttributeHelpersTests.testMultipleDataAttributes`.
-    ///
-    /// Swift passes a `Dictionary`, whose order is unspecified, so its test can only check
-    /// that both survive. `data_attrs` takes an ordered iterator precisely so the output is
-    /// deterministic, which is what this pins instead.
+    /// `data_attrs` takes an ordered iterator precisely so the output is deterministic, which
+    /// is what this pins.
     #[test]
     fn several_data_attributes_keep_the_order_they_are_given() {
         let rendered = div()
@@ -1112,7 +1060,6 @@ mod tests {
         assert_eq!(rendered, r#"<div data-id="123" data-type="product"></div>"#);
     }
 
-    /// Ports `AttributeHelpersTests.testMultipleAriaAttributes`.
     #[test]
     fn several_aria_attributes_keep_the_order_they_are_given() {
         let rendered = nav()
@@ -1125,10 +1072,8 @@ mod tests {
         );
     }
 
-    /// Ports `AttributeHelpersTests.testSetAttribute`.
-    ///
-    /// Swift's `setAttribute` appends like every other helper — the name says *set* but it
-    /// does not replace. `attr` is the same operation under an honest name.
+    /// `attr` appends like every other helper — it does not replace an existing key; use
+    /// `set_id`, `set_style` or `set_role` for that.
     #[test]
     fn attr_appends_arbitrary_attributes() {
         let rendered = input_named("text", "email")

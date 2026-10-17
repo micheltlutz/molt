@@ -1,16 +1,14 @@
 //! Accessibility helpers and a debug-time audit.
 //!
-//! Winged-Swift has no accessibility module: its whole a11y surface is `ariaAttribute`,
-//! `ariaAttributes` and `setRole` in `AttributeHelpers.swift`, plus two structural
-//! affordances — `Iframe` requires a `title:`, and `Img` takes an `alt:`.
-//!
-//! This module adds the linter its `ROADMAP.md` has asked for since 1.5 and never shipped.
+//! Beyond the attribute helpers (`aria_attr`, `set_role`) and the two constructors that make a
+//! mistake hard (`iframe_titled` requires a title, `image` takes an `alt`), this module is a
+//! linter: [`audit`] finds the accessibility problems that are visible in the tree.
 
 use crate::core::{Element, Node};
 
 /// A landmark or widget role, for [`Element::set_role`](crate::Element::set_role).
 ///
-/// Winged-Swift accepts any string. This enum catches the typos while
+/// `set_role` accepts any string. This enum catches the typos while
 /// [`Role::Custom`] keeps the door open for roles it does not know.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -77,7 +75,7 @@ pub struct A11yIssue {
 
 /// Finds accessibility problems in a subtree.
 ///
-/// The rules are the ones Winged-Swift's `ROADMAP.md` lists under "Quality":
+/// The rules:
 ///
 /// - `<img>` without an `alt` attribute
 /// - `<button>` with neither text nor an `aria-label`

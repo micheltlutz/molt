@@ -1,8 +1,8 @@
 //! HTML and XML escaping.
 //!
-//! Winged-Swift has three distinct escapers and the golden fixtures depend on the
-//! differences between them. `docs/history/MOLT_SPEC.md` §3.3 shows only one; following the
-//! spec here would break parity.
+//! There are three distinct HTML/XML escapers and the golden fixtures depend on the differences
+//! between them. (The original spec, `docs/history/MOLT_SPEC.md` §3.3, shows only one;
+//! following it would change the output.)
 //!
 //! | function | escapes | notes |
 //! | --- | --- | --- |
@@ -12,8 +12,7 @@
 //! | [`escape_json_script`] | `<` `>` `&` U+2028 U+2029 | JSON `\uXXXX` escapes, for JSON inside `<script>`; not HTML escaping |
 //!
 //! Escaping is applied **once, when content enters the tree** — never at render time.
-//! That mirrors Winged-Swift, where `HTMLTag.init` stores already-escaped content, and it
-//! is why [`crate::core::Node::Raw`] exists as the documented escape hatch.
+//! That is why [`crate::core::Node::Raw`] exists as the documented escape hatch.
 
 use std::borrow::Cow;
 
@@ -154,13 +153,13 @@ pub fn escape_text_with_slashes(input: &str) -> Cow<'_, str> {
 /// Escapes a value for use inside a double-quoted HTML attribute.
 ///
 /// Deliberately narrower than [`escape_text`]: `<` and `>` are left alone, because they
-/// cannot terminate a quoted attribute value. Winged-Swift's `HTMLEscape.escapeAttribute`
-/// does the same, and `marketing-pretty.html` contains attribute values that prove it.
+/// cannot terminate a quoted attribute value, and `marketing-pretty.html` contains attribute
+/// values that prove it.
 ///
 /// That holds wherever the parser reads attributes. Under a raw-text ancestor (`noscript`,
 /// `iframe`, `xmp`, `script`, `style`, …) it does not, so the renderer escapes `<` and `>`
-/// itself there — this function cannot, because it never sees the ancestors. Divergence
-/// from Winged-Swift, on purpose; see `SECURITY.md`.
+/// itself there — this function cannot, because it never sees the ancestors. See
+/// `SECURITY.md`.
 ///
 /// # Examples
 /// ```
@@ -350,14 +349,12 @@ mod tests {
 
     use super::*;
 
-    /// No single Swift counterpart: this covers in one assertion what `testEscapeAmpersand`
-    /// and `testEscapeQuotes` check separately, plus the angle brackets.
+    /// The five HTML characters in one assertion: ampersand, quotes and angle brackets.
     #[test]
     fn escapes_the_five_html_characters() {
         assert_eq!(escape_text("<>&\"'"), "&lt;&gt;&amp;&quot;&#x27;");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeBasicHTML`.
     #[test]
     fn escapes_a_script_payload() {
         assert_eq!(
@@ -372,8 +369,6 @@ mod tests {
         assert_eq!(escape_text("a & b < c"), "a &amp; b &lt; c");
     }
 
-    /// Ports `HTMLEscapeTests.testSlashesAreKeptByDefault` and
-    /// `HTMLEscapeTests.testSlashesCanBeEscapedExplicitly`.
     #[test]
     fn slashes_are_only_escaped_on_request() {
         assert_eq!(escape_text("2026/09/16"), "2026/09/16");
@@ -383,8 +378,7 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLEscapeTests.testAttributeEscape`. Attribute context leaves `<` and `>`
-    /// alone — they cannot terminate a quoted value.
+    /// Attribute context leaves `<` and `>` alone — they cannot terminate a quoted value.
     #[test]
     fn attribute_escaping_leaves_angle_brackets_alone() {
         assert_eq!(
@@ -400,8 +394,8 @@ mod tests {
     }
 
     /// Escaping is applied exactly once, by the caller, at construction. Applying it
-    /// twice double-escapes — the same behaviour Winged-Swift has, and the reason the
-    /// builder never re-escapes an existing attribute value.
+    /// twice double-escapes, which is the reason the builder never re-escapes an existing
+    /// attribute value.
     #[test]
     fn escaping_is_not_idempotent_by_design() {
         assert_eq!(escape_text(&escape_text("a & b")), "a &amp;amp; b");
@@ -429,13 +423,11 @@ mod tests {
         assert_eq!(escape_xml(""), "");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeAmpersand`.
     #[test]
     fn an_ampersand_becomes_an_entity() {
         assert_eq!(escape_text("Tom & Jerry"), "Tom &amp; Jerry");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeQuotes`.
     #[test]
     fn double_quotes_become_entities() {
         assert_eq!(

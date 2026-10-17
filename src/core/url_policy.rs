@@ -394,7 +394,6 @@ mod tests {
         out
     }
 
-    /// Ports `ThreeZeroTests.scriptURLsAreNeutralised`.
     #[test]
     fn script_urls_are_neutralised() {
         for url in [
@@ -415,15 +414,14 @@ mod tests {
         }
     }
 
-    /// Ports `ThreeZeroTests.otherURLsAndAttributesAreUntouched`.
     #[test]
     fn other_urls_and_attributes_are_untouched() {
         assert_eq!(
             tag(
                 "a",
-                &Attribute::new("href", "https://swift.org/javascript:")
+                &Attribute::new("href", "https://example.org/javascript:")
             ),
-            r#"<a href="https://swift.org/javascript:"></a>"#
+            r#"<a href="https://example.org/javascript:"></a>"#
         );
         assert_eq!(
             tag("img", &Attribute::new("src", "data:image/png;base64,AAA")),
@@ -447,7 +445,6 @@ mod tests {
         );
     }
 
-    /// Ports `ThreeZeroTests.trustedURLsRenderAsGiven`.
     #[test]
     fn trusted_urls_render_as_given() {
         assert_eq!(
@@ -460,7 +457,6 @@ mod tests {
         );
     }
 
-    /// Ports `ThreeZeroTests.characterReferencesCannotSpellAScriptURL`.
     #[test]
     fn character_references_cannot_spell_a_script_url() {
         for url in [
@@ -485,7 +481,6 @@ mod tests {
         }
     }
 
-    /// Ports `ThreeZeroTests.characterReferencesInSafeURLsAreKept`.
     #[test]
     fn character_references_in_safe_urls_are_kept() {
         assert_eq!(

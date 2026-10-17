@@ -1,12 +1,8 @@
 //! The two tag sets the renderer branches on.
-//!
-//! Ports `HTMLTag.selfClosingTags` and `HTMLTag.whitespaceSensitiveTags` from
-//! `Winged-Swift/Sources/WingedSwift/core/HTMLTag.swift`.
 
 /// Elements that have no closing tag. Content and children on one of these are dropped.
 ///
-/// Exactly the 13 entries in Winged-Swift's `HTMLTag.selfClosingTags`. Kept sorted so
-/// [`is_void`] can binary-search it.
+/// The 13 void elements of HTML. Kept sorted so [`is_void`] can binary-search it.
 ///
 /// A slice, not an array, so the length is not part of the type: adding a tag is not a
 /// semver break.
@@ -100,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_void_set_matches_winged_swift() {
+    fn the_void_set_is_the_html_void_elements() {
         for tag in [
             "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
             "track", "wbr",

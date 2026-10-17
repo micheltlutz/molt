@@ -1,12 +1,9 @@
 //! The node tree.
 //!
-//! Ports `core/HTMLTag.swift` (state), `core/Fragment.swift` and `core/RawHTML.swift`.
-//!
-//! Winged-Swift models fragments and raw markup as **subclasses** of `HTMLTag` that
-//! override `write(into:)`. Rust models the same thing as a closed enum with a `match` in
-//! the writer. That is strictly better here: the tree becomes `Send + Sync` for free,
-//! which Winged-Swift's own `ROADMAP.md` lists as an unresolved 3.0 problem ("tag trees
-//! are not `Sendable`"), and which is what makes the `parallel` feature sound.
+//! Elements, text, raw markup, comments and fragments are the variants of one **closed enum**,
+//! with a single `match` in the writer. A closed enum rather than trait objects means the
+//! tree is `Send + Sync`, `Clone`, `PartialEq` and `Hash` without ceremony, and that is what
+//! makes the `parallel` feature sound.
 
 use crate::core::attribute::Attribute;
 use crate::core::element::Element;
@@ -34,7 +31,7 @@ pub enum Node {
     /// Unlike [`Node::Fragment`], this is an opaque string, so pretty printing can only
     /// indent the whole blob. Reach for a fragment when you want the children indented.
     Raw(Markup),
-    /// An HTML comment. **New in the Rust port** — Winged-Swift has no comment node.
+    /// An HTML comment.
     ///
     /// The content has `--` neutralised so the comment cannot be closed early.
     Comment(Markup),
@@ -603,8 +600,8 @@ fn push_compact_element<'a>(
     out.push_str(element.tag());
     write_attributes(element.attributes(), out, in_raw_text, element.tag());
 
-    // A void element takes no content and no children — both are silently dropped, which
-    // is what Winged-Swift does. `Element::self_closing` opts a non-void tag into the same
+    // A void element takes no content and no children — both are silently dropped; that is
+    // the contract. `Element::self_closing` opts a non-void tag into the same
     // shape, so a caller can emit `<input />` without building a `Node::Raw` that would
     // skip the URL policy in `Attribute::write_into`.
     if is_void(element.tag()) || element.is_self_closing() {
@@ -832,9 +829,7 @@ mod tests {
         assert_eq!(Node::text("a & b").render(), "a &amp; b");
     }
 
-    /// No direct Swift counterpart: Winged-Swift turns escaping off per tag with
-    /// `escapeContent:`, which `Element::raw_text` ports. This is the node-level version,
-    /// which has no equivalent because Swift models raw markup as an `HTMLTag` subclass.
+    /// The node-level escape hatch; `Element::raw_text` is the element-level one.
     #[test]
     fn raw_nodes_are_never_escaped() {
         assert_eq!(Node::raw("<b>bold</b>").render(), "<b>bold</b>");
@@ -884,7 +879,7 @@ mod tests {
 
     /// Inside `<noscript>` the parser reads raw text, so `</noscript>` in a descendant's
     /// attribute value ends the element. Elsewhere `<` in a quoted value is inert, and the
-    /// Swift fixtures depend on it staying unescaped.
+    /// golden fixtures depend on it staying unescaped.
     #[test]
     fn angle_brackets_in_attributes_are_escaped_only_under_raw_text_parents() {
         let hostile = "</noscript><img src=x onerror=alert(1)>";
@@ -904,7 +899,7 @@ mod tests {
         assert_eq!(
             div().child(img().attr("alt", hostile)).render(),
             format!(r#"<div><img alt="{hostile}"></div>"#),
-            "ordinary parents keep byte parity with Winged-Swift"
+            "ordinary parents leave `<` and `>` in an attribute value alone"
         );
     }
 
@@ -952,7 +947,6 @@ mod tests {
         }
     }
 
-    /// Ports `FragmentTests.testEmptyFragmentDoesNotLeaveBlankLines`.
     #[test]
     fn an_empty_fragment_leaves_no_blank_line() {
         let tree = div()
@@ -965,7 +959,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testFragmentRendersChildrenWithoutWrapper`.
     #[test]
     fn a_fragment_renders_its_children_without_a_wrapper() {
         let tree = Node::fragment([p().text("a").into(), p().text("b").into()]);
@@ -973,7 +966,6 @@ mod tests {
         assert_eq!(tree.render_pretty(), "<p>a</p>\n<p>b</p>");
     }
 
-    /// Ports the void-element cases in `TagCatalogTests`.
     #[test]
     fn void_elements_take_no_children() {
         let tree = img().attr("src", "/a.png").child(span().text("dropped"));
@@ -989,8 +981,7 @@ mod tests {
         );
     }
 
-    /// Ports `WhitespaceTests.testPreWithCodeChildIsNotIndented` and
-    /// `WhitespaceTests.testPrettyMatchesCompactForWhitespaceSensitiveTags`. Indenting inside `<pre>` would change what the browser shows.
+    /// Indenting inside `<pre>` would change what the browser shows.
     #[test]
     fn whitespace_sensitive_tags_are_not_indented_inside() {
         let tree = div().child(pre().child(code().text("let page = html { }")));
@@ -1000,7 +991,7 @@ mod tests {
         );
     }
 
-    /// No Swift counterpart: its `PrettyPrintTests` never mixes content with children.
+    /// Content and children can be mixed; the content comes first, on its own line.
     #[test]
     fn content_goes_on_its_own_line_before_children() {
         let tree = div().text("lead").child(p().text("body"));
@@ -1018,10 +1009,6 @@ mod tests {
         assert_eq!(tree.render(), "<div><p>a</p></div>");
     }
 
-    // Ports the `RawHTML` and fragment half of `HTML14FeaturesTests`; the element half
-    // lives in `crate::elements`.
-
-    /// Ports `HTML14FeaturesTests.testRawHTMLRendersWithoutWrapper`.
     #[test]
     fn raw_markup_renders_with_no_wrapper_around_it() {
         let raw = Node::raw(r#"<span class="x">hi</span>"#);
@@ -1030,7 +1017,6 @@ mod tests {
         assert!(!raw.render().contains("<div"));
     }
 
-    /// Ports `HTML14FeaturesTests.testRawHTMLAsChildHasNoWrapper`.
     #[test]
     fn raw_markup_as_a_child_adds_no_wrapper() {
         let markup = div()
@@ -1043,7 +1029,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testFragmentHelper`.
     #[test]
     fn a_fragment_renders_its_children_with_no_wrapper() {
         let fragment = Node::fragment([
@@ -1057,7 +1042,6 @@ mod tests {
         );
     }
 
-    /// Ports `HTML14FeaturesTests.testFragmentBuilderBuildArray`.
     #[test]
     fn a_fragment_takes_a_mapped_sequence() {
         let fragment = Node::fragment(
@@ -1073,18 +1057,15 @@ mod tests {
         );
     }
 
-    // Ports `FragmentTests`. This is the suite that pins the empty-fragment behaviour the
-    // pretty writer exists to preserve, so it is also the independent check on the
-    // iterative rewrite.
+    // These pin the empty-fragment behaviour the pretty writer exists to preserve, so they are
+    // also the independent check on the iterative rewrite.
 
-    /// Ports `FragmentTests.testEmptyFragmentRendersNothing`.
     #[test]
     fn an_empty_fragment_renders_nothing_in_either_mode() {
         assert_eq!(Node::fragment([]).render(), "");
         assert_eq!(Node::fragment([]).render_pretty(), "");
     }
 
-    /// Ports `FragmentTests.testFragmentKeepsPrettyIndentation`.
     #[test]
     fn a_fragments_children_are_indented_as_the_parents_own() {
         let list = ul().child(Node::fragment([
@@ -1098,7 +1079,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testFragmentBuilderSupportsMapAndFilter`.
     #[test]
     fn a_fragment_takes_a_filtered_and_mapped_sequence() {
         let names = ["Ana", "Bruno", "Carla"];
@@ -1112,7 +1092,6 @@ mod tests {
         assert_eq!(group.render(), "<li>Bruno</li><li>Carla</li>");
     }
 
-    /// Ports `FragmentTests.testFalseConditionDoesNotEmitStrayHTMLNode`.
     #[test]
     fn a_false_condition_emits_no_stray_node() {
         let show_banner = false;
@@ -1127,7 +1106,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testTrueConditionEmitsTheBranch`.
     #[test]
     fn a_true_condition_emits_its_branch() {
         let show_banner = true;
@@ -1136,7 +1114,6 @@ mod tests {
         assert_eq!(page.render(), "<html><div>banner</div></html>");
     }
 
-    /// Ports `FragmentTests.testLoopInsideHTMLBuilder`.
     #[test]
     fn a_loop_emits_one_node_per_iteration() {
         let page = html_tag().child(html! {
@@ -1149,7 +1126,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testRawHTMLIsIndentedInsideAPrettyTree`.
     #[test]
     fn raw_markup_is_indented_as_one_blob() {
         let container = div().child(Node::raw("<custom-element></custom-element>"));
@@ -1160,7 +1136,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testFragmentBuilderTakesBothBranchesOfAnIf`.
     #[test]
     fn a_condition_can_pick_either_branch() {
         fn badge(is_beta: bool) -> Node {
@@ -1171,8 +1146,6 @@ mod tests {
         assert_eq!(badge(false).render(), "<span>stable</span>");
     }
 
-    /// Ports `FragmentTests.testNestedFragmentsFlattenInPrettyOutput`.
-    ///
     /// Two levels of nesting with an empty fragment between them: the rollback has to
     /// survive being nested inside another rollback.
     #[test]
@@ -1189,7 +1162,6 @@ mod tests {
         );
     }
 
-    /// Ports `FragmentTests.testRawHTMLStillEmitsMarkupVerbatim`.
     #[test]
     fn raw_markup_is_emitted_verbatim() {
         let raw = Node::raw(r#"<custom-element data-x="1"></custom-element>"#);
@@ -1200,7 +1172,6 @@ mod tests {
         );
     }
 
-    /// Ports `PrettyPrintTests.testPrettyPrintSimpleTag`.
     #[test]
     fn a_tag_with_only_content_stays_on_one_line_when_pretty() {
         assert_eq!(
@@ -1209,7 +1180,6 @@ mod tests {
         );
     }
 
-    /// Ports `PrettyPrintTests.testPrettyPrintWithChildren`.
     #[test]
     fn children_each_get_their_own_line_when_pretty() {
         let tree = div()
@@ -1222,7 +1192,6 @@ mod tests {
         );
     }
 
-    /// Ports `PrettyPrintTests.testCompactRenderStillWorks`.
     #[test]
     fn compact_keeps_everything_on_one_line() {
         assert_eq!(
@@ -1231,7 +1200,6 @@ mod tests {
         );
     }
 
-    /// Ports `PrettyPrintTests.testSelfClosingTagPrettyPrint`.
     #[test]
     fn a_void_element_does_not_self_close_when_pretty() {
         let rendered = img()
@@ -1244,7 +1212,6 @@ mod tests {
         assert!(rendered.ends_with('>'));
     }
 
-    /// Ports `WhitespaceTests.testTextareaKeepsItsContentIntact`.
     #[test]
     fn a_textarea_keeps_its_newlines() {
         let field = textarea().attr("name", "bio").text("line 1\nline 2");
@@ -1255,14 +1222,13 @@ mod tests {
         );
     }
 
-    /// Ports `WhitespaceTests.testNestedInsideAPrettyDocumentKeepsOuterIndentation`.
     #[test]
     fn a_pre_block_is_indented_from_the_outside_but_not_within() {
-        let container = div().child(pre().child(code().text("swift build")));
+        let container = div().child(pre().child(code().text("cargo build")));
 
         assert_eq!(
             container.render_pretty(),
-            "<div>\n  <pre><code>swift build</code></pre>\n</div>"
+            "<div>\n  <pre><code>cargo build</code></pre>\n</div>"
         );
     }
 }

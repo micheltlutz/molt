@@ -1,8 +1,6 @@
 //! A cheap render-performance guard that is safe to gate CI on.
 //!
-//! Ports the instinct behind
-//! `Winged-Swift/Tests/WingedSwiftTests/RenderPerformanceTests.swift`, which asserts on
-//! **output size** rather than elapsed time. A size assertion is deterministic across
+//! It asserts on **output size** rather than elapsed time. A size assertion is deterministic across
 //! machines and CI runners; a timing assertion is not, which is why the criterion suite in
 //! `benches/render.rs` is not part of `cargo test`.
 //!
@@ -16,8 +14,7 @@ fn wide_tree(count: usize) -> Element {
     ul().children_from((0..count).map(|i| li().add_class("item").text(format!("Item {i}"))))
 }
 
-/// Ports `RenderPerformanceTests.outputSizeIsWhatWeExpect`, which is the whole of Swift's
-/// performance suite that can be asserted deterministically.
+/// Output size is the part of performance that can be asserted deterministically.
 #[test]
 fn compact_output_size_is_stable() {
     let rendered = wide_tree(1_000).render();
