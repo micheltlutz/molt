@@ -13,6 +13,101 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::core::{Node, Render, RenderOptions};
 use crate::document::Document;
 
+/// Why a static site operation failed.
+///
+/// A real error type rather than `io::Error::other(String)`, so a caller can tell an
+/// unsafe path from a full disk and can read which page of a bulk build failed. It
+/// converts into [`io::Error`] (`?` works in a function returning `io::Result`), keeping
+/// `InvalidInput` for the two refusals.
+///
+/// # Examples
+/// ```
+/// use molt::ssg::{SsgError, StaticSiteGenerator};
+///
+/// let site = StaticSiteGenerator::new("dist");
+/// let error = site.write_file("x", "../escape.html").expect_err("refused");
+/// assert!(matches!(error, SsgError::InvalidPath { .. }));
+/// ```
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SsgError {
+    /// A page or asset path that cannot be written under the output directory: a `..`, a
+    /// root or drive prefix, no file name, or a symbolic link on the way.
+    InvalidPath {
+        /// The path as given.
+        path: String,
+        /// What is wrong with it.
+        reason: &'static str,
+    },
+    /// `clean` refused to delete the output directory.
+    UnsafeCleanTarget {
+        /// The directory as given.
+        path: PathBuf,
+        /// Why it is too dangerous to remove.
+        reason: &'static str,
+    },
+    /// The filesystem failed.
+    Io {
+        /// The file or directory the operation was working on.
+        path: PathBuf,
+        /// The underlying error.
+        source: io::Error,
+    },
+    /// Several pages of a bulk build failed. Every failure is here, not just the first.
+    Pages(Vec<(String, SsgError)>),
+}
+
+impl std::fmt::Display for SsgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidPath { path, reason } => write!(f, "path {path:?} {reason}"),
+            Self::UnsafeCleanTarget { path, reason } => {
+                write!(f, "refusing to clean {}: {reason}", path.display())
+            }
+            Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
+            Self::Pages(failures) => {
+                write!(f, "{} page(s) failed to generate:", failures.len())?;
+                for (path, error) in failures {
+                    write!(f, "\n  {path}: {error}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for SsgError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl From<SsgError> for io::Error {
+    fn from(error: SsgError) -> Self {
+        match error {
+            SsgError::InvalidPath { .. } | SsgError::UnsafeCleanTarget { .. } => {
+                Self::new(io::ErrorKind::InvalidInput, error)
+            }
+            SsgError::Io { source, .. } => source,
+            SsgError::Pages(_) => Self::other(error),
+        }
+    }
+}
+
+/// Result alias for this module's operations.
+type Result<T> = std::result::Result<T, SsgError>;
+
+/// Attaches the path an I/O operation was working on.
+fn io_error(path: &Path) -> impl FnOnce(io::Error) -> SsgError + '_ {
+    move |source| SsgError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
+}
+
 /// Writes rendered pages and assets into an output directory.
 ///
 /// # Examples
@@ -23,7 +118,7 @@ use crate::document::Document;
 /// let site = StaticSiteGenerator::new("dist");
 /// site.clean(true)?;
 /// site.generate(&Document::new(Some("pt-BR")), "index.html", &RenderOptions::pretty())?;
-/// # Ok::<(), std::io::Error>(())
+/// # Ok::<(), molt::ssg::SsgError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct StaticSiteGenerator {
@@ -51,12 +146,7 @@ impl StaticSiteGenerator {
     ///
     /// # Errors
     /// Returns an error if the path escapes the output directory, or if the write fails.
-    pub fn generate(
-        &self,
-        document: &Document,
-        path: &str,
-        options: &RenderOptions,
-    ) -> io::Result<()> {
+    pub fn generate(&self, document: &Document, path: &str, options: &RenderOptions) -> Result<()> {
         self.write_atomic(path, |file| {
             let mut buffered = io::BufWriter::new(file);
             document.render_to(&mut buffered, options)?;
@@ -78,9 +168,9 @@ impl StaticSiteGenerator {
         &self,
         documents: &[(Document, String)],
         options: &RenderOptions,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         #[cfg(feature = "parallel")]
-        let results: Vec<(String, io::Result<()>)> = {
+        let results: Vec<(String, Result<()>)> = {
             use rayon::prelude::*;
             documents
                 .par_iter()
@@ -89,7 +179,7 @@ impl StaticSiteGenerator {
         };
 
         #[cfg(not(feature = "parallel"))]
-        let results: Vec<(String, io::Result<()>)> = documents
+        let results: Vec<(String, Result<()>)> = documents
             .iter()
             .map(|(doc, path)| (path.clone(), self.generate(doc, path, options)))
             .collect();
@@ -107,7 +197,7 @@ impl StaticSiteGenerator {
         path: &str,
         options: &RenderOptions,
         doctype: bool,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let mut content = String::with_capacity(1024);
         if doctype {
             content.push_str("<!DOCTYPE html>\n");
@@ -120,21 +210,21 @@ impl StaticSiteGenerator {
     ///
     /// # Errors
     /// Returns an error if the destination is unsafe or the copy fails.
-    pub fn copy_asset(&self, from: impl AsRef<Path>, to: &str) -> io::Result<()> {
+    pub fn copy_asset(&self, from: impl AsRef<Path>, to: &str) -> Result<()> {
         let destination = self.resolve(to)?;
         if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(io_error(parent))?;
         }
         // Copy beside the destination and rename over it, so a failed copy leaves the old
         // file in place instead of the delete-then-copy gap this used to have.
         let temporary = temporary_path(&destination);
-        if let Err(error) = fs::copy(from, &temporary) {
+        if let Err(error) = fs::copy(from.as_ref(), &temporary) {
             let _ = fs::remove_file(&temporary);
-            return Err(error);
+            return Err(io_error(from.as_ref())(error));
         }
         if let Err(error) = fs::rename(&temporary, &destination) {
             let _ = fs::remove_file(&temporary);
-            return Err(error);
+            return Err(io_error(&destination)(error));
         }
         Ok(())
     }
@@ -146,14 +236,15 @@ impl StaticSiteGenerator {
     /// root, a top-level directory, the home directory, the working directory or one of its
     /// ancestors, or containing a `..` component. Winged-Swift's version has no such guard
     /// and will happily recurse through whatever it is pointed at.
-    pub fn clean(&self, create_directory: bool) -> io::Result<()> {
+    pub fn clean(&self, create_directory: bool) -> Result<()> {
         guard_destructive_path(&self.output_directory)?;
 
-        if self.output_directory.exists() {
-            fs::remove_dir_all(&self.output_directory)?;
+        let directory = &self.output_directory;
+        if directory.exists() {
+            fs::remove_dir_all(directory).map_err(io_error(directory))?;
         }
         if create_directory {
-            fs::create_dir_all(&self.output_directory)?;
+            fs::create_dir_all(directory).map_err(io_error(directory))?;
         }
         Ok(())
     }
@@ -165,7 +256,7 @@ impl StaticSiteGenerator {
     ///
     /// # Errors
     /// Returns an error if the path escapes the output directory or the write fails.
-    pub fn write_file(&self, content: &str, path: &str) -> io::Result<()> {
+    pub fn write_file(&self, content: &str, path: &str) -> Result<()> {
         self.write_atomic(path, |file| file.write_all(content.as_bytes()))
     }
 
@@ -177,10 +268,10 @@ impl StaticSiteGenerator {
         &self,
         path: &str,
         write_contents: impl FnOnce(&mut fs::File) -> io::Result<()>,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let destination = self.resolve(path)?;
         if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(io_error(parent))?;
         }
 
         let temporary = temporary_path(&destination);
@@ -189,14 +280,15 @@ impl StaticSiteGenerator {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&temporary)?;
+            .open(&temporary)
+            .map_err(io_error(&temporary))?;
         if let Err(error) = write_contents(&mut file) {
             let _ = fs::remove_file(&temporary);
-            return Err(error);
+            return Err(io_error(&destination)(error));
         }
         if let Err(error) = fs::rename(&temporary, &destination) {
             let _ = fs::remove_file(&temporary);
-            return Err(error);
+            return Err(io_error(&destination)(error));
         }
         Ok(())
     }
@@ -211,12 +303,12 @@ impl StaticSiteGenerator {
     ///
     /// The symlink check is not atomic with the write: someone who can create links inside
     /// the output directory *while it is being generated* can still race it.
-    fn resolve(&self, path: &str) -> io::Result<PathBuf> {
-        let reject = |reason: &str| {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("path {path:?} {reason}"),
-            ))
+    fn resolve(&self, path: &str) -> Result<PathBuf> {
+        let reject = |reason: &'static str| {
+            Err(SsgError::InvalidPath {
+                path: path.to_owned(),
+                reason,
+            })
         };
 
         let candidate = Path::new(path);
@@ -267,12 +359,12 @@ fn temporary_path(destination: &Path) -> PathBuf {
 /// the old check let `clean(".")` through), the home directory, and anything fewer than two
 /// levels below the root (`/usr`, `/home`). The guard only reads the filesystem; it never
 /// removes anything, so it can be tested directly.
-fn guard_destructive_path(path: &Path) -> io::Result<()> {
-    let reject = |reason: &str| {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("refusing to clean {}: {reason}", path.display()),
-        ))
+fn guard_destructive_path(path: &Path) -> Result<()> {
+    let reject = |reason: &'static str| {
+        Err(SsgError::UnsafeCleanTarget {
+            path: path.to_path_buf(),
+            reason,
+        })
     };
 
     if path.as_os_str().is_empty() {
@@ -285,7 +377,7 @@ fn guard_destructive_path(path: &Path) -> io::Result<()> {
         return reject("the output directory contains a `..` component");
     }
 
-    let absolute = absolute_path(path)?;
+    let absolute = absolute_path(path).map_err(io_error(path))?;
     let depth = absolute
         .components()
         .filter(|c| matches!(c, Component::Normal(_)))
@@ -325,21 +417,17 @@ fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     Ok(absolute)
 }
 
-/// Turns per-page results into one error naming every failure.
-fn collect_failures(results: Vec<(String, io::Result<()>)>) -> io::Result<()> {
-    let failures: Vec<String> = results
+/// Turns per-page results into one error carrying every failure.
+fn collect_failures(results: Vec<(String, Result<()>)>) -> Result<()> {
+    let failures: Vec<(String, SsgError)> = results
         .into_iter()
-        .filter_map(|(path, result)| result.err().map(|e| format!("{path}: {e}")))
+        .filter_map(|(path, result)| result.err().map(|error| (path, error)))
         .collect();
 
     if failures.is_empty() {
         Ok(())
     } else {
-        Err(io::Error::other(format!(
-            "{} page(s) failed to generate:\n  {}",
-            failures.len(),
-            failures.join("\n  ")
-        )))
+        Err(SsgError::Pages(failures))
     }
 }
 
@@ -647,6 +735,53 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("../one.html"), "{message}");
         assert!(message.contains("../two.html"), "{message}");
+
+        // The failures are data, not only text.
+        let SsgError::Pages(failures) = error else {
+            panic!("a bulk build reports Pages");
+        };
+        let paths: Vec<&str> = failures.iter().map(|(path, _)| path.as_str()).collect();
+        assert_eq!(paths, ["../one.html", "../two.html"]);
+        assert!(
+            failures
+                .iter()
+                .all(|(_, e)| matches!(e, SsgError::InvalidPath { .. }))
+        );
+    }
+
+    #[test]
+    fn each_failure_has_its_own_variant_and_converts_to_an_io_error() {
+        use std::error::Error;
+
+        let dir = TempDir::new("variants");
+        let site = StaticSiteGenerator::new(&dir.0);
+
+        let refused = site.write_file("x", "../out.html").expect_err("path");
+        assert!(matches!(refused, SsgError::InvalidPath { ref path, .. } if path == "../out.html"));
+        assert!(refused.source().is_none());
+        assert_eq!(io::Error::from(refused).kind(), io::ErrorKind::InvalidInput);
+
+        let unsafe_clean = StaticSiteGenerator::new(".")
+            .clean(false)
+            .expect_err("guard");
+        assert!(matches!(unsafe_clean, SsgError::UnsafeCleanTarget { .. }));
+        assert_eq!(
+            io::Error::from(unsafe_clean).kind(),
+            io::ErrorKind::InvalidInput
+        );
+
+        // A directory sits where the page should go, so the rename fails.
+        fs::create_dir_all(dir.0.join("page.html")).expect("created");
+        let failed = site
+            .write_file("x", "page.html")
+            .expect_err("rename onto a directory");
+        assert!(matches!(failed, SsgError::Io { .. }));
+        assert!(failed.source().is_some());
+        assert!(failed.to_string().contains("page.html"));
+        assert!(
+            only_files_named(&dir.0, &["page.html"]),
+            "no temp left behind"
+        );
     }
 
     /// Ports `StaticSiteGeneratorTests.generateWritesDoctypeAndMarkup`.

@@ -9,7 +9,7 @@
 mod native {
     use molt::feed::{RssGenerator, RssItem};
     use molt::prelude::*;
-    use molt::sitemap::{SitemapGenerator, SitemapUrl};
+    use molt::sitemap::{ChangeFreq, SitemapGenerator, SitemapUrl};
     use molt::ssg::StaticSiteGenerator;
     use molt::{Document, Layout};
 
@@ -77,10 +77,10 @@ mod native {
         site.write_file(
             &SitemapGenerator::generate(&[
                 SitemapUrl::new(format!("{SITE}/"))
-                    .changefreq("weekly")
+                    .changefreq(ChangeFreq::Weekly)
                     .priority(1.0),
                 SitemapUrl::new(format!("{SITE}/blog/"))
-                    .changefreq("daily")
+                    .changefreq(ChangeFreq::Daily)
                     .priority(0.8),
             ]),
             "sitemap.xml",
