@@ -9,12 +9,14 @@ use crate::elements::{meta, title};
 
 /// A `<meta name="…" content="…">`.
 ///
-/// The key is inserted unescaped, matching Winged-Swift, which builds its `Meta` keys with
-/// `escape: false` because they are literals the library controls. Values are escaped.
+/// Both `name` and `content` are attribute-escaped. Winged-Swift inserts the name
+/// unescaped because its callers pass literals, but these functions are `pub` and take
+/// `&str`, so a name built from user input (`og:` plus a field, say) would break out of
+/// the quotes. Every legitimate name (`description`, `og:title`) is unchanged by escaping.
 #[must_use]
 pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("name", name))
+        .add_attribute(Attribute::new("name", name))
         .attr("content", content)
 }
 
@@ -22,21 +24,21 @@ pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
 #[must_use]
 pub fn meta_property(property: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("property", property))
+        .add_attribute(Attribute::new("property", property))
         .attr("content", content)
 }
 
 /// A `<meta charset="…">`.
 #[must_use]
 pub fn meta_charset(charset: &str) -> Element {
-    meta().add_attribute(Attribute::raw("charset", charset))
+    meta().add_attribute(Attribute::new("charset", charset))
 }
 
 /// A `<meta http-equiv="…" content="…">`.
 #[must_use]
 pub fn meta_http_equiv(http_equiv: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::raw("http-equiv", http_equiv))
+        .add_attribute(Attribute::new("http-equiv", http_equiv))
         .attr("content", content)
 }
 
@@ -313,6 +315,28 @@ mod tests {
 
     fn rendered(tags: &[Element]) -> String {
         tags.iter().map(Render::render).collect()
+    }
+
+    /// The names were inserted unescaped, so a name carrying a quote closed the attribute.
+    #[test]
+    fn a_hostile_meta_name_cannot_break_out_of_its_attribute() {
+        let hostile = "a\"><script>alert(1)</script><x y=\"";
+        // Inside the quotes `<` is inert (the S4 raw-text-parent case is handled by the
+        // writer); what must hold is that no `"` from the input closes a value early.
+        for (tag, quotes) in [
+            (meta_name(hostile, "v"), 4),
+            (meta_property(hostile, "v"), 4),
+            (meta_charset(hostile), 2),
+            (meta_http_equiv(hostile, "v"), 4),
+        ] {
+            let html = tag.render();
+            assert_eq!(html.matches('"').count(), quotes, "{html}");
+            assert!(html.contains("&quot;"), "{html}");
+        }
+        assert_eq!(
+            meta_property("og:title", "T").render(),
+            r#"<meta property="og:title" content="T">"#
+        );
     }
 
     /// Ports `SEOTests.testOpenGraphMetaTags`.
