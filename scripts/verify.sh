@@ -28,15 +28,15 @@ run() {
 
 cd "$(dirname "$0")/.."
 
-step "1/7  Build"
+step "1/8  Build"
 run "cargo build --all-features" cargo build --all-features
 run "cargo build --no-default-features" cargo build --no-default-features
 run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
-step "2/7  Test"
+step "2/8  Test"
 run "cargo test --all-features" cargo test --locked --all-features
 
-step "3/7  Lint"
+step "3/8  Lint"
 run "cargo fmt --check" cargo fmt --all --check
 run "cargo clippy" cargo clippy --locked --all-targets --all-features -- -D warnings
 if command -v cargo-deny >/dev/null 2>&1; then
@@ -45,17 +45,17 @@ else
   fail "cargo-deny is not installed (cargo install cargo-deny, or the CI install-action)"
 fi
 
-step "4/7  Tag catalog freshness"
+step "4/8  Tag catalog freshness"
 if [ -x scripts/generate-tag-catalog.sh ]; then
   run "tag catalog is current" ./scripts/generate-tag-catalog.sh --check
 else
   fail "scripts/generate-tag-catalog.sh is missing or not executable"
 fi
 
-step "5/7  Golden fixtures"
+step "5/8  Golden fixtures"
 run "fixtures reproduce byte-for-byte" cargo test --test golden
 
-step "6/7  End-to-end smoke test"
+step "6/8  End-to-end smoke test"
 # A throwaway crate that depends on this checkout by path. This is what catches a library
 # that compiles in-tree but cannot actually be consumed — a broken feature gate, a type
 # that is not public, a doc example that only works with dev-dependencies in scope.
@@ -102,7 +102,7 @@ else
   sed 's/^/      /' /tmp/molt-smoke.log | tail -40
 fi
 
-step "7/7  Winged-Swift cross-references"
+step "7/8  Winged-Swift cross-references"
 
 # Skips itself when the sibling checkout is absent, which is why it can sit in the gate:
 # CI never has Winged-Swift, and a contributor who does gets told when a `Ports` comment
@@ -113,6 +113,15 @@ if PARITY=$(./scripts/check-swift-parity.sh 2>&1); then
 else
   fail "a Ports comment names a Swift test that does not exist"
   printf '%s\n' "$PARITY" | grep stale | sed 's/^/      /'
+fi
+
+step "8/8  Agent knowledge base"
+# Every lesson in .claude/skills/molt names the tests or files that guard it. A guard that
+# was renamed or deleted is a claim nothing checks any more.
+if [ -x scripts/check-knowledge-base.sh ]; then
+  run "knowledge-base guards resolve" ./scripts/check-knowledge-base.sh
+else
+  fail "scripts/check-knowledge-base.sh is missing or not executable"
 fi
 
 printf '\n'
