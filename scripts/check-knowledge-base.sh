@@ -29,6 +29,16 @@ for ref in $(grep -o '(references/[A-Za-z0-9_.-]*\.md)' "$KB/SKILL.md" | tr -d '
   [ -f "$KB/$ref" ] || fail "$KB/$ref (linked from SKILL.md)"
 done
 
+# 1b. Every relative link in any skill's SKILL.md resolves, so a moved file cannot leave a
+#     skill pointing at nothing. Absolute URLs and in-page anchors are skipped.
+for skill in .claude/skills/*/SKILL.md; do
+  dir=$(dirname "$skill")
+  for target in $(grep -o '](\([^)#]*\)' "$skill" | sed 's/^](//; s/)$//' | grep -v '^https\?://' | grep -v '^$' | sort -u); do
+    CHECKED=$((CHECKED + 1))
+    [ -e "$dir/$target" ] || fail "$dir/$target (linked from $skill)"
+  done
+done
+
 # 2. Every identifier or path named by a Guard line exists. A Guard runs from the line holding
 #    "**Guard.**" to the next blank line, since long ones wrap.
 guards=$(awk '

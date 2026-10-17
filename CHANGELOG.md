@@ -10,6 +10,127 @@ were released as `winged-rust`.
 
 ## [Unreleased]
 
+The 1.0.0 hardening release. Everything under **Breaking** needs a change in code that
+calls the API; [`MIGRATION.md`](MIGRATION.md) shows each one, before and after. Issue
+numbers are in [micheltlutz/molt](https://github.com/micheltlutz/molt/issues).
+
+### Breaking
+
+- **`Node` is `#[non_exhaustive]`**, and `Node::Text`, `Node::Raw` and `Node::Comment` hold a
+  `Markup`, a string with no public constructor. `Node::Text("<script>".into())` no longer
+  compiles; build nodes with `Node::text` (escapes), `Node::comment` (neutralises) and
+  `Node::raw` (the greppable hatch). A `match` on `Node` needs a `_` arm.
+  ([#13](https://github.com/micheltlutz/molt/issues/13),
+  [#14](https://github.com/micheltlutz/molt/issues/14))
+- **`#[non_exhaustive]`** on `Role`, `A11yIssue`, `RenderOptions`, `Document`, `SitemapUrl`,
+  `RssItem` and `RssGenerator`: build them with their constructors, not struct literals.
+- **`RenderOptions::indent` is private.** Read it with `indent()`; `with_indent` keeps only
+  spaces and tabs, at most 16. ([#28](https://github.com/micheltlutz/molt/issues/28))
+- **`Layout::render` and `Layout::render_many` are `wrap` and `wrap_many`**, because they
+  collided with `Render::render`. ([#18](https://github.com/micheltlutz/molt/issues/18))
+- **`escape_text`, `escape_text_with_slashes`, `escape_attribute` and `escape_xml` return
+  `Cow<str>`**, borrowed when nothing needed escaping.
+  ([#21](https://github.com/micheltlutz/molt/issues/21))
+- **`VOID_TAGS` and `WHITESPACE_SENSITIVE_TAGS` are `&[&str]`**, not arrays with a length.
+  ([#16](https://github.com/micheltlutz/molt/issues/16))
+- **`SitemapUrl::changefreq` takes a `ChangeFreq`** instead of text; `priority` is clamped to
+  `0.0..=1.0`. ([#20](https://github.com/micheltlutz/molt/issues/20))
+- **`StaticSiteGenerator` returns `SsgError`**, not `io::Error`. It converts into
+  `io::Error`, so `?` in a function returning `io::Result` still works.
+  ([#19](https://github.com/micheltlutz/molt/issues/19))
+- **WASM:** `child`, `addHead` and `addBody` take their element **by value**, which consumes
+  the JavaScript handle; using it afterwards throws `null pointer passed to rust`.
+  ([#23](https://github.com/micheltlutz/molt/issues/23))
+- The `parallel` feature implies `ssg`. ([#22](https://github.com/micheltlutz/molt/issues/22))
+
+### Security
+
+Output now differs from Winged-Swift 3.0.1 in the cases below, on purpose; each is listed
+in [`PORTING.md`](PORTING.md).
+
+- **Comments can no longer close early.** `Node::comment("x--->")` used to leave a `-->`
+  that ended the comment and let the rest through as markup. ([#2](https://github.com/micheltlutz/molt/issues/2))
+- **Tag names are validated.** `Element::new("img src=x onerror=alert(1)")` was written
+  verbatim, also from JavaScript through `new WElement(str)`. An element whose tag is not a
+  letter followed by letters, digits, `-`, `_`, `.` or `:` is not rendered.
+  ([#3](https://github.com/micheltlutz/molt/issues/3))
+- **`<` and `>` in attribute values are escaped under raw-text ancestors** (`noscript`,
+  `iframe`, `xmp`, `noembed`, `noframes`, `script`, `style`, `plaintext`), where
+  `</noscript>` inside an `alt` ended the parent. Elsewhere the byte-for-byte output is
+  unchanged. ([#5](https://github.com/micheltlutz/molt/issues/5))
+- **`meta_name`, `meta_property`, `meta_charset` and `meta_http_equiv` escape their
+  values.** ([#4](https://github.com/micheltlutz/molt/issues/4))
+- **`StaticSiteGenerator`:** refuses symlinks on the way, paths that name no file (`""`,
+  `.`, `a/`) and Windows drive prefixes; writes through unique temporary files (two pages
+  with the same stem used to share one); `copy_asset` no longer deletes before it copies;
+  `clean` refuses `.`, the working directory and its ancestors, `$HOME` and top-level
+  directories. ([#6](https://github.com/micheltlutz/molt/issues/6),
+  [#7](https://github.com/micheltlutz/molt/issues/7),
+  [#8](https://github.com/micheltlutz/molt/issues/8))
+- **URL policy:** also covers `ping`, `manifest`, `longdesc` and, per candidate, `srcset`;
+  `srcdoc` is written empty unless `trusted_url`; on `iframe`, `frame`, `embed` and `object`
+  a `data:` URL passes only if it is a raster image. `is_blocked_in(tag, …)` is the new
+  tag-aware form. ([#25](https://github.com/micheltlutz/molt/issues/25))
+- **XML:** `escape_xml` drops the characters XML 1.0 cannot hold; a sitemap `<loc>` or feed
+  `<link>` that is not an absolute `http(s)` URL is left out; `isPermaLink="true"` is written
+  only for an `http(s)` guid. ([#27](https://github.com/micheltlutz/molt/issues/27))
+- **`RenderOptions::with_max_depth`** drops elements nested deeper than a limit, which is what
+  bounds pretty output (quadratic in depth). ([#28](https://github.com/micheltlutz/molt/issues/28))
+- **CI and release:** every action pinned to a commit SHA, read-only default token,
+  `persist-credentials: false`, job timeouts, and a release that refuses a tag that is not
+  on `main` or has no green CI run. ([#29](https://github.com/micheltlutz/molt/issues/29))
+
+### Fixed
+
+- `Document::render`, `accessibility::audit`, `Node::is_empty`, `Clone`, `PartialEq` and
+  `Hash` recursed once per level and aborted the process on a deep tree that the renderer
+  handled. All are iterative now, tested at 100,000 levels.
+  ([#9](https://github.com/micheltlutz/molt/issues/9),
+  [#10](https://github.com/micheltlutz/molt/issues/10),
+  [#11](https://github.com/micheltlutz/molt/issues/11)) `Debug` is still recursive.
+- `SECURITY.md` and the WASM docs described a 256-level limit and a function name that did
+  not exist. ([#12](https://github.com/micheltlutz/molt/issues/12))
+
+### Added
+
+- `Markup`, `SsgError`, `ChangeFreq` and `ParseChangeFreqError`.
+- `seo::json_ld`, `seo::script_json` and `escape_json_script`: JSON that is safe inside a
+  `<script>`, where HTML escaping would corrupt it and no escaping would let `</script>`
+  through. WASM `jsonLd`. ([#26](https://github.com/micheltlutz/molt/issues/26))
+- `Element::from_static`, `RenderOptions::{indent, with_max_depth}`,
+  `core::tags::is_valid_tag_name`, `core::url_policy::{is_http_url, is_blocked_in}`,
+  `sitemap::{MAX_URLS, MAX_BYTES, SitemapGenerator::chunks}`.
+- Trait impls: `Display` for `Node`, `Element` and `Document` (`{:#}` pretty-prints);
+  `Hash`; `Default` for `Document`; `FromIterator` for `Node`; `Extend` for `Element`;
+  `From<Vec<Node>>`, `From<Option<T>>` and `From<char>` for `Node`; `Render` for `&T`,
+  `Box<T>` and `Option<T>`. ([#17](https://github.com/micheltlutz/molt/issues/17))
+- WASM: `WDocument.addSeo`, `WDocument.renderWithOptions`, and on `WElement` `addClasses`,
+  `rawChild`, `selfClosing`, `renderWithOptions` and `renderBytes`.
+  ([#24](https://github.com/micheltlutz/molt/issues/24))
+- `.claude/skills/molt`: a knowledge base for agents (security, Rust practice, performance,
+  design patterns, governance, a decision log) whose lessons name the tests that guard them;
+  `scripts/check-knowledge-base.sh` checks that those still exist.
+- `tests/allocations.rs` pins allocation counts and type sizes; the benchmarks run at
+  `opt-level = 3` and no longer time the `Drop`.
+
+### Changed
+
+- Tag names and attribute keys are `Cow<'static, str>` internally; `div()` makes no
+  allocation. `Element::new` and `Attribute::new` still take `impl Into<String>`.
+  ([#15](https://github.com/micheltlutz/molt/issues/15))
+- `html!` formats interpolated values straight into their escaped form: 40% faster to
+  build, with the same tree.
+- Escapers copy the clean stretches between special characters in one step: prose-like text
+  is about twice as fast, and text where every other character needs escaping about 2.8×
+  slower (still ~400 MB/s).
+- `Attribute::raw` is documented as one of the three escape hatches, with the reason.
+
+### Not changed, deliberately
+
+`panic = "abort"`, the three HTML/XML escapers, `escape_attribute` leaving `<` and `>` alone
+outside raw-text ancestors, and the golden fixtures. Four tests were added after the fact
+because they were claimed but missing ([#57](https://github.com/micheltlutz/molt/pull/57)).
+
 ## [0.1.0] - 2026-10-17
 
 ### Renamed

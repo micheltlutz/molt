@@ -1,8 +1,9 @@
 //! Fast, type-safe HTML generation for Rust and WebAssembly.
 //!
-//! A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 2.0.0: the same
+//! A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1: the same
 //! composite tree, the same escape-by-default guarantee, the same compact and pretty
-//! render modes — compiled to native code or to `wasm32-unknown-unknown`.
+//! render modes — compiled to native code or to `wasm32-unknown-unknown`. Where the Swift
+//! original is unsafe or wrong, Molt fixes it instead of copying it.
 //!
 //! # Getting started
 //!
@@ -23,11 +24,13 @@
 //! is rendered, so nothing is escaped twice and nothing is missed. [`Node::Raw`] is the
 //! documented way to inject markup you already trust.
 //!
-//! URL attributes are checked **when the tree is written**. `href`, `src`, `action`,
-//! `formaction`, `poster`, `cite`, `background`, `xlink:href` and `data` render as `#`
-//! when the value is a `javascript:`, `vbscript:` or `data:text/html` URL, including a
-//! value stored with [`Attribute::raw`](core::Attribute::raw). [`Element::trusted_url`]
-//! opts out for a URL you wrote yourself. See `SECURITY.md`.
+//! URL attributes (`href`, `src`, `action`, `srcset`, … — the list is in
+//! [`core::url_policy`]) are checked **when the tree is written**: a `javascript:` or
+//! `vbscript:` URL, or `data:text/html`, renders as `#`, and so does a `data:` document in
+//! an `iframe`, `frame`, `embed` or `object`. The check also covers a value stored with
+//! [`Attribute::raw`](core::Attribute::raw), and `srcdoc` is written empty.
+//! [`Element::trusted_url`] opts out for a URL you wrote yourself. Tag and attribute names
+//! are validated too. See `SECURITY.md`.
 //!
 //! ```
 //! use molt::prelude::*;
@@ -42,10 +45,11 @@
 //!
 //! # Limits
 //!
-//! Rendering has no depth limit: the writer walks an explicit stack instead of recursing.
-//! What deep trees do cost is output size in pretty mode, which is quadratic in depth
-//! because every line carries one indent string per level. See [`Render`] and
-//! `SECURITY.md`.
+//! Rendering has no depth limit by default: the writer walks an explicit stack instead of
+//! recursing, and so do `Clone`, `PartialEq`, `Hash` and `Drop`. What deep trees do cost is
+//! output size in pretty mode, which is quadratic in depth because every line carries one
+//! indent string per level. When depth comes from untrusted input, bound it with
+//! [`RenderOptions::with_max_depth`]. See [`Render`] and `SECURITY.md`.
 //!
 //! # Parity
 //!
@@ -76,3 +80,14 @@ pub mod wasm;
 pub use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 pub use crate::document::Document;
 pub use crate::layout::Layout;
+
+/// The prose guides are doc tests too, so a snippet in them cannot rot. Gated on `ssg`
+/// because both use `molt::ssg`; compiled only when running doc tests.
+#[cfg(all(doctest, feature = "ssg"))]
+mod guides {
+    #[doc = include_str!("../GETTING_STARTED.md")]
+    mod getting_started {}
+
+    #[doc = include_str!("../MIGRATION.md")]
+    mod migration {}
+}
