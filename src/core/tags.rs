@@ -7,13 +7,16 @@
 ///
 /// Exactly the 13 entries in Winged-Swift's `HTMLTag.selfClosingTags`. Kept sorted so
 /// [`is_void`] can binary-search it.
-pub const VOID_TAGS: [&str; 13] = [
+///
+/// A slice, not an array, so the length is not part of the type: adding a tag is not a
+/// semver break.
+pub const VOID_TAGS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
     "wbr",
 ];
 
 /// Elements whose text content is significant, so pretty printing must not indent inside them.
-pub const WHITESPACE_SENSITIVE_TAGS: [&str; 3] = ["pre", "code", "textarea"];
+pub const WHITESPACE_SENSITIVE_TAGS: &[&str] = &["pre", "code", "textarea"];
 
 /// Elements whose content the HTML parser reads as raw text rather than as markup.
 ///

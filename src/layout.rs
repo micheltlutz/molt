@@ -23,7 +23,7 @@ use crate::elements::div;
 /// struct Blog { site_title: String }
 ///
 /// impl Layout for Blog {
-///     fn render(&self, content: Node) -> Node {
+///     fn wrap(&self, content: Node) -> Node {
 ///         body()
 ///             .child(header().child(h1().text(&self.site_title)))
 ///             .child(main_tag().child(content))
@@ -32,19 +32,22 @@ use crate::elements::div;
 ///     }
 /// }
 ///
-/// let page = Blog { site_title: "RideKeeper".into() }.render(p().text("Hello").into());
+/// let page = Blog { site_title: "RideKeeper".into() }.wrap(p().text("Hello").into());
 /// assert!(page.render().contains("<h1>RideKeeper</h1>"));
 /// ```
 pub trait Layout {
     /// Wraps a single node in the layout.
-    fn render(&self, content: Node) -> Node;
+    ///
+    /// Named `wrap`, not `render`: a type that is both a `Layout` and a [`Render`](crate::core::Render)
+    /// would otherwise have two `render` methods and every call would be ambiguous.
+    fn wrap(&self, content: Node) -> Node;
 
     /// Wraps several nodes, grouping them in a `<div>` first.
     ///
     /// Matches the Swift extension, which also introduces a `Div`. Use
-    /// [`Node::fragment`] and [`Layout::render`] if you would rather not have the wrapper.
-    fn render_many(&self, contents: Vec<Node>) -> Node {
-        self.render(div().children_from(contents).into())
+    /// [`Node::fragment`] and [`Layout::wrap`] if you would rather not have the wrapper.
+    fn wrap_many(&self, contents: Vec<Node>) -> Node {
+        self.wrap(div().children_from(contents).into())
     }
 }
 
@@ -57,7 +60,7 @@ mod tests {
     struct Minimal;
 
     impl Layout for Minimal {
-        fn render(&self, content: Node) -> Node {
+        fn wrap(&self, content: Node) -> Node {
             body()
                 .child(h1().text("Site"))
                 .child(main_tag().child(content))
@@ -68,7 +71,7 @@ mod tests {
     /// Ports `LayoutTests.wrapsASingleTag`.
     #[test]
     fn a_layout_wraps_a_single_node() {
-        let page = Minimal.render(p().text("body").into());
+        let page = Minimal.wrap(p().text("body").into());
         assert_eq!(
             page.render(),
             "<body><h1>Site</h1><main><p>body</p></main></body>"
@@ -77,8 +80,8 @@ mod tests {
 
     /// Ports `LayoutTests.wrapsSeveralTagsInAContainer`.
     #[test]
-    fn render_many_groups_the_contents_in_a_div() {
-        let page = Minimal.render_many(vec![p().text("a").into(), p().text("b").into()]);
+    fn wrap_many_groups_the_contents_in_a_div() {
+        let page = Minimal.wrap_many(vec![p().text("a").into(), p().text("b").into()]);
         assert_eq!(
             page.render(),
             "<body><h1>Site</h1><main><div><p>a</p><p>b</p></div></main></body>"
@@ -87,8 +90,8 @@ mod tests {
 
     /// Ports `LayoutTests.anEmptyContentListStillProducesAPage`.
     #[test]
-    fn render_many_with_no_contents_still_produces_the_wrapper() {
-        let page = Minimal.render_many(vec![]);
+    fn wrap_many_with_no_contents_still_produces_the_wrapper() {
+        let page = Minimal.wrap_many(vec![]);
         assert!(page.render().contains("<div></div>"));
     }
 }

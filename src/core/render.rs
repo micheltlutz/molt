@@ -24,6 +24,7 @@
 /// # let _ = (compact, pretty, four_spaces);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RenderOptions {
     /// When true, children go on their own lines and are indented.
     pub pretty: bool,

@@ -21,7 +21,7 @@ mod native {
     }
 
     impl Layout for Shell {
-        fn render(&self, content: Node) -> Node {
+        fn wrap(&self, content: Node) -> Node {
             body()
                 .child(
                     header().child(
@@ -42,7 +42,7 @@ mod native {
             head()
                 .child(meta().attr("charset", "UTF-8"))
                 .child(title().text(title_text)),
-            match shell.render(content) {
+            match shell.wrap(content) {
                 Node::Element(element) => element,
                 other => body().child(other),
             },

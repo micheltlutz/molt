@@ -31,6 +31,7 @@ use crate::elements::{body, head, html_tag};
 /// assert!(page.render().starts_with("<!DOCTYPE html>\n<html lang=\"pt-BR\">"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Document {
     /// The document language, rendered as `<html lang="…">`. Omitted when `None`.
     pub lang: Option<String>,
