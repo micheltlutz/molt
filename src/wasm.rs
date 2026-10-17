@@ -12,6 +12,24 @@
 //! `tests/wasm.rs` build one document through both APIs and compare the bytes. If native and
 //! WASM ever diverge, that comparison catches it.
 
+//! # Handles are consumed
+//!
+//! Every builder method takes its receiver **and** any element argument by value, which in
+//! JavaScript means the handle you passed in is gone afterwards — calling a method on it
+//! throws `null pointer passed to rust`. Chain calls, or keep the returned handle:
+//!
+//! ```js
+//! const a = element("div");
+//! a.addClass("x");          // consumes `a`
+//! a.render();               // throws
+//! const b = element("div").addClass("x");   // right
+//! ```
+//!
+//! Taking arguments by value is what lets `child(el)` move the subtree instead of cloning
+//! it. Cloning made building a page quadratic in its depth, overflowed the wasm stack on a
+//! deep one, and left the original handle alive and independent, so a later change to it was
+//! silently not part of the page.
+
 use wasm_bindgen::prelude::*;
 
 use crate::core::{Element, Node, Render, RenderOptions};
@@ -113,10 +131,34 @@ impl WElement {
         Self(self.0.raw_text(content))
     }
 
-    /// Appends a child element.
+    /// Appends a child element. The child handle is consumed.
     #[must_use]
-    pub fn child(self, child: &WElement) -> Self {
-        Self(self.0.child(child.0.clone()))
+    pub fn child(self, child: WElement) -> Self {
+        Self(self.0.child(child.0))
+    }
+
+    /// Appends several class names.
+    #[wasm_bindgen(js_name = addClasses)]
+    #[must_use]
+    pub fn add_classes(self, classes: Vec<String>) -> Self {
+        Self(self.0.add_classes(classes))
+    }
+
+    /// Appends markup **without** escaping it, as a child.
+    ///
+    /// The element-level counterpart of `rawText`; like it, never pass user data.
+    #[wasm_bindgen(js_name = rawChild)]
+    #[must_use]
+    pub fn raw_child(self, markup: &str) -> Self {
+        Self(self.0.child(Node::raw(markup)))
+    }
+
+    /// Renders this element as `<tag … />` (or `<tag … >` in HTML mode) with no content,
+    /// even when the tag is not a void element.
+    #[wasm_bindgen(js_name = selfClosing)]
+    #[must_use]
+    pub fn self_closing(self, yes: bool) -> Self {
+        Self(self.0.self_closing(yes))
     }
 
     /// Appends an HTML comment as a child.
@@ -137,6 +179,30 @@ impl WElement {
     pub fn render_pretty(&self) -> String {
         self.0.render_pretty()
     }
+
+    /// Renders with explicit options: `pretty` turns indentation on, `indent` is the string
+    /// written per level, and `xhtml` closes void elements as `<br />`.
+    #[wasm_bindgen(js_name = renderWithOptions)]
+    #[must_use]
+    pub fn render_with_options(&self, pretty: bool, indent: &str, xhtml: bool) -> String {
+        self.0.render_with(&options(pretty, indent, xhtml))
+    }
+
+    /// Renders on a single line, as UTF-8 bytes, which spares Node a UTF-16 round trip.
+    #[wasm_bindgen(js_name = renderBytes)]
+    #[must_use]
+    pub fn render_bytes(&self) -> Vec<u8> {
+        self.0.render().into_bytes()
+    }
+}
+
+fn options(pretty: bool, indent: &str, xhtml: bool) -> RenderOptions {
+    let base = if pretty {
+        RenderOptions::pretty()
+    } else {
+        RenderOptions::compact()
+    };
+    base.with_indent(indent).with_xhtml_self_closing(xhtml)
 }
 
 /// A complete HTML document, usable from JavaScript.
@@ -156,18 +222,28 @@ impl WDocument {
         Self(Document::new(lang.as_deref()))
     }
 
-    /// Appends an element to the `<head>`.
+    /// Appends an element to the `<head>`. The element handle is consumed.
     #[wasm_bindgen(js_name = addHead)]
     #[must_use]
-    pub fn add_head(self, element: &WElement) -> Self {
-        Self(self.0.head_children([element.0.clone()]))
+    pub fn add_head(self, element: WElement) -> Self {
+        Self(self.0.head_children([element.0]))
     }
 
-    /// Appends an element to the `<body>`.
+    /// Appends an element to the `<body>`. The element handle is consumed.
     #[wasm_bindgen(js_name = addBody)]
     #[must_use]
-    pub fn add_body(self, element: &WElement) -> Self {
-        Self(self.0.body_children([element.0.clone()]))
+    pub fn add_body(self, element: WElement) -> Self {
+        Self(self.0.body_children([element.0]))
+    }
+
+    /// Appends a whole SEO metadata block to the `<head>`. The `WSeo` handle is consumed.
+    // By value on purpose: wasm-bindgen only invalidates the JS handle of an argument that
+    // is taken by value, and `build` happens to need just a borrow.
+    #[allow(clippy::needless_pass_by_value)]
+    #[wasm_bindgen(js_name = addSeo)]
+    #[must_use]
+    pub fn add_seo(self, seo: WSeo) -> Self {
+        Self(self.0.head_children(seo.0.build()))
     }
 
     /// Renders the document, pretty-printed and prefixed by the doctype.
@@ -189,6 +265,14 @@ impl WDocument {
     pub fn render_with_indent(&self, indent: &str) -> String {
         self.0
             .render_with(&RenderOptions::pretty().with_indent(indent))
+    }
+
+    /// Renders with explicit options, prefixed by the doctype. See
+    /// `WElement.renderWithOptions`.
+    #[wasm_bindgen(js_name = renderWithOptions)]
+    #[must_use]
+    pub fn render_with_options(&self, pretty: bool, indent: &str, xhtml: bool) -> String {
+        self.0.render_with(&options(pretty, indent, xhtml))
     }
 }
 

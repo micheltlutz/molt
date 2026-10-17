@@ -166,6 +166,10 @@ document.body.innerHTML = page.render();
 The bindings wrap the real tree rather than accumulating pre-rendered strings, so
 `renderPretty()` works and JavaScript drives exactly the renderer Rust does.
 
+**Handles are consumed.** Builder methods and element arguments move their value into Rust,
+so a handle you have already passed on (or chained from) is gone: using it throws
+`null pointer passed to rust`. Chain calls, or keep the handle each call returns.
+
 ## Parity with Winged-Swift
 
 The Swift project ships four golden fixtures. This crate reproduces all four **byte for
