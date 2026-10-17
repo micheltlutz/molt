@@ -1,10 +1,9 @@
-//! Byte-for-byte parity with Winged-Swift.
+//! Byte-for-byte golden-file tests.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //!
-//! The four files in `tests/fixtures/` are copied verbatim out of
-//! `Winged-Swift/Tests/WingedSwiftTests/Fixtures/`. They are the strongest correctness gate
-//! this crate has: if the Rust renderer reproduces them exactly, the port is proven rather
-//! than asserted.
+//! The four files in `tests/fixtures/` are the strongest correctness gate this crate has: if
+//! the renderer reproduces them exactly, its output is proven rather than asserted. Never
+//! edit one by hand.
 //!
 //! `marketing-pretty.html` alone exercises the doctype, `lang`, seventeen `<meta>` tags,
 //! nested navigation, a table with caption/thead/tbody, a boolean `open` attribute, a form
@@ -70,8 +69,7 @@ fn render_diff(name: &str, expected: &str, actual: &str) -> String {
     report
 }
 
-/// The marketing page from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`,
-/// rebuilt with the Rust builder API.
+/// The marketing page: a whole document that exercises most of the renderer.
 fn marketing_page() -> Document {
     Document::new(Some("pt-BR"))
         .head_children(marketing_head())
@@ -97,7 +95,7 @@ fn marketing_head() -> Vec<Element> {
             .attr("content", "index, follow"),
         meta()
             .attr("name", "keywords")
-            .attr("content", "swift, motorcycle"),
+            .attr("content", "rust, motorcycle"),
         meta().attr("name", "author").attr("content", "Michel Lutz"),
         meta()
             .attr("property", "og:title")
@@ -188,17 +186,15 @@ fn marketing_body() -> Vec<Element> {
                     .child(image("/img/app.png", "App screenshot"))
                     .child(figcaption().text("The garage screen")),
             ),
-        footer().child(p().text("© 2026 RideKeeper — built with Swift & WingedSwift")),
+        footer().child(p().text("© 2026 RideKeeper — built with Rust & Molt")),
     ]
 }
 
-/// Ports `GoldenFileTests.prettyDocumentMatchesFixture`.
 #[test]
 fn marketing_page_matches_the_pretty_fixture() {
     assert_matches_fixture("marketing-pretty.html", &marketing_page().render());
 }
 
-/// Ports `GoldenFileTests.compactDocumentMatchesFixture`.
 #[test]
 fn marketing_page_matches_the_compact_fixture() {
     assert_matches_fixture("marketing-compact.html", &marketing_page().render_compact());
@@ -223,8 +219,7 @@ fn the_two_render_modes_agree_on_content() {
     assert_eq!(squashed, compact);
 }
 
-/// The sitemap from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
-/// Ports `GoldenFileTests.feedsMatchFixtures`.
+/// The sitemap fixture.
 #[test]
 fn sitemap_matches_the_fixture() {
     use molt::sitemap::{ChangeFreq, SitemapGenerator, SitemapUrl};
@@ -242,9 +237,7 @@ fn sitemap_matches_the_fixture() {
     assert_matches_fixture("sitemap.xml", &xml);
 }
 
-/// The feed from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
-/// Ports `GoldenFileTests.feedsMatchFixtures`, which checks the RSS and sitemap fixtures
-/// together; they are one test each here.
+/// The RSS feed fixture.
 #[test]
 fn feed_matches_the_fixture() {
     use molt::feed::{RssGenerator, RssItem};
