@@ -395,8 +395,10 @@ impl Element {
     #[must_use]
     pub fn trusted_url(mut self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
         let attribute = Attribute::trusted_url(key, value);
-        let name = attribute.key().to_string();
-        self.attributes.retain(|existing| existing.key() != name);
+        // Compare against the borrowed key: copying it into a `String` just to call `retain`
+        // was an allocation per call.
+        self.attributes
+            .retain(|existing| existing.key() != attribute.key());
         self.attributes.push(attribute);
         self
     }
