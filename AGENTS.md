@@ -66,6 +66,8 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
 3. **Three escapers, not one.** `escape_text` (`& < > " '`), `escape_attribute`
    (`& " '` — *not* `<` `>`), `escape_xml` (`'` → `&apos;`). The fixtures depend on the
    differences. `MOLT_SPEC.md` §3.3 shows only one; it is wrong.
+   `escape_json_script` is a fourth, different thing: it makes JSON safe inside `<script>`
+   with `\uXXXX` escapes and is not HTML escaping. Do not use one in place of another.
 4. **Void elements take no children.** The writer emits `>` and returns. Adding a child to
    an `img()` is silently dropped, matching Swift.
 5. **`<pre>`, `<code>` and `<textarea>` are never indented inside.** Their whitespace is

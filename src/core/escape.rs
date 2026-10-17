@@ -8,7 +8,8 @@
 //! | --- | --- | --- |
 //! | [`escape_text`] | `&` `<` `>` `"` `'` | `&` first; `'` becomes `&#x27;` |
 //! | [`escape_attribute`] | `&` `"` `'` | **not** `<` or `>` |
-//! | [`escape_xml`] | `&` `<` `>` `"` `'` | `'` becomes `&apos;`, the XML spelling |
+//! | [`escape_xml`] | `&` `<` `>` `"` `'` | `'` becomes `&apos;`, the XML spelling; XML-illegal characters dropped |
+//! | [`escape_json_script`] | `<` `>` `&` U+2028 U+2029 | JSON `\uXXXX` escapes, for JSON inside `<script>`; not HTML escaping |
 //!
 //! Escaping is applied **once, when content enters the tree** — never at render time.
 //! That mirrors Winged-Swift, where `HTMLTag.init` stores already-escaped content, and it
@@ -213,6 +214,52 @@ fn is_xml_illegal(c: char) -> bool {
 
 fn needs_xml_change(c: char) -> bool {
     is_xml_illegal(c) || u8::try_from(c).ok().and_then(xml_entity).is_some()
+}
+
+/// Makes a JSON document safe to place inside a `<script>` element.
+///
+/// Inside `<script>` the HTML parser looks for `</script` and `<!--` and knows nothing about
+/// JSON, so a string value holding `</script><script>alert(1)</script>` ends the element and
+/// starts another. `<`, `>` and `&` are therefore written as the JSON escapes `\u003c`,
+/// `\u003e` and `\u0026`, which any JSON parser reads back as the same characters, and
+/// U+2028/U+2029 (line terminators that were not legal inside a JavaScript string) as
+/// `\u2028`/`\u2029`. Valid JSON only has those characters inside string values, so the
+/// meaning of the document does not change.
+///
+/// This does **not** validate the JSON, and it is not [`escape_text`]: HTML-escaping would
+/// write `&lt;`, which JSON does not decode.
+///
+/// # Examples
+/// ```
+/// use molt::core::escape::escape_json_script;
+/// assert_eq!(
+///     escape_json_script(r#"{"a":"</script><b>&"}"#),
+///     r#"{"a":"\u003c/script\u003e\u003cb\u003e\u0026"}"#
+/// );
+/// ```
+#[must_use]
+pub fn escape_json_script(json: &str) -> Cow<'_, str> {
+    fn entity(c: char) -> Option<&'static str> {
+        match c {
+            '<' => Some("\\u003c"),
+            '>' => Some("\\u003e"),
+            '&' => Some("\\u0026"),
+            '\u{2028}' => Some("\\u2028"),
+            '\u{2029}' => Some("\\u2029"),
+            _ => None,
+        }
+    }
+    if !json.chars().any(|c| entity(c).is_some()) {
+        return Cow::Borrowed(json);
+    }
+    let mut out = String::with_capacity(json.len() + json.len() / 8 + 16);
+    for c in json.chars() {
+        match entity(c) {
+            Some(escaped) => out.push_str(escaped),
+            None => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// Appends escaped HTML text to an existing buffer.

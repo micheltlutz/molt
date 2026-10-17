@@ -26,6 +26,7 @@ a new such place, add a row *and* a test.
 | output file path | `StaticSiteGenerator::*` | component whitelist, symlink refusal, atomic write | `src/ssg.rs` |
 | indent string | `RenderOptions::with_indent` | only spaces and tabs, at most 16; the field is private | `render.rs`, `wasm.rs` |
 | nesting depth | any tree | `RenderOptions::with_max_depth` drops deeper elements (opt-in) | `render.rs`, `node.rs` |
+| JSON in `<script>` | `seo::json_ld`, `seo::script_json` | `escape_json_script` (JSON `\uXXXX` escapes), not HTML escaping | `escape.rs`, `seo.rs` |
 | `raw_text`, `Node::raw`, `Attribute::raw` | caller | **not** escaped — the three declared hatches | — |
 
 ## A01 Broken Access Control → path traversal and destructive operations
@@ -57,10 +58,10 @@ Rules:
   (L3). When parity forbids the safe default everywhere, make it contextual and document it.
 - `raw_text`, `Node::raw`, `Attribute::raw` take trusted, hand-written markup only. A comment
   next to every use says why it is safe.
-- `<script>` and `<style>` bodies are **not** escaped by default (matches Winged-Swift). JSON
-  for `<script type="application/ld+json">` needs `</script>`, `<!--` and U+2028/2029
-  neutralised; there is no safe helper yet (#26). Until there is, do not put untrusted data
-  there.
+- `<script>` and `<style>` bodies are **not** escaped by default (matches Winged-Swift).
+  JSON data goes through `seo::json_ld` / `seo::script_json`, which use `escape_json_script`
+  (`<` `>` `&` U+2028 U+2029 as JSON `\u` escapes). HTML-escaping would be wrong there: JSON
+  does not decode `&lt;`. Untrusted text in script *code* has no safe form.
 - Event-handler attributes (`on*`) and `style` are accepted by `attr()`. Do not map untrusted
   *keys* into `attr()`.
 - A URL policy that ignores the element is wrong in both directions: `data:image/svg+xml` is

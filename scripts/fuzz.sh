@@ -17,7 +17,7 @@ fi
 
 seconds="${FUZZ_SECONDS:-30}"
 
-for target in escape_text escape_attribute url_policy; do
+for target in escape_text escape_attribute url_policy json_script; do
   echo "==> $target (${seconds}s)"
   cargo +nightly fuzz run "$target" -- -max_total_time="$seconds"
 done
