@@ -154,7 +154,7 @@ impl Document {
     fn html_open(&self) -> String {
         let mut open = String::from("<!DOCTYPE html>\n<html");
         if let Some(lang) = &self.lang {
-            Attribute::new("lang", lang).write_into(&mut open);
+            Attribute::new_static("lang", lang).write_into(&mut open);
         }
         open.push('>');
         open

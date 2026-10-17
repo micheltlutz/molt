@@ -2,6 +2,8 @@
 //!
 //! Ports `Winged-Swift/Sources/WingedSwift/core/Attribute.swift`.
 
+use std::borrow::Cow;
+
 use crate::core::escape::write_escaped_attribute;
 use crate::core::url_policy;
 
@@ -18,7 +20,10 @@ use crate::core::url_policy;
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute {
-    key: String,
+    // `Cow` so the keys this crate writes itself (`class`, `id`, `lang`, …) are borrowed
+    // literals rather than a fresh `String` per attribute. The public constructors still
+    // take `impl Into<String>`, because a caller's key is rarely `'static`.
+    key: Cow<'static, str>,
     value: String,
     is_boolean: bool,
     /// When true, a URL attribute is written as stored. The URL policy reads this flag.
@@ -28,15 +33,33 @@ pub struct Attribute {
 impl Attribute {
     /// Creates an attribute, escaping the value.
     pub fn new(key: impl Into<String>, value: impl AsRef<str>) -> Self {
+        Self::with_key(Cow::Owned(key.into()), value)
+    }
+
+    /// As [`Self::new`] for a key known at compile time, which costs no allocation.
+    pub(crate) fn new_static(key: &'static str, value: impl AsRef<str>) -> Self {
+        Self::with_key(Cow::Borrowed(key), value)
+    }
+
+    fn with_key(key: Cow<'static, str>, value: impl AsRef<str>) -> Self {
         let raw = value.as_ref();
         let mut escaped = String::with_capacity(raw.len());
         write_escaped_attribute(&mut escaped, raw);
         Self {
-            key: key.into(),
+            key,
             value: escaped,
             is_boolean: false,
             is_trusted_url: false,
         }
+    }
+
+    /// Appends ` word` to the stored value, escaping only the new part.
+    ///
+    /// What `add_class` needs: the stored value is already escaped, so rebuilding the
+    /// attribute through [`Self::raw`] copied the whole value and reallocated the key.
+    pub(crate) fn push_escaped_word(&mut self, word: &str) {
+        self.value.push(' ');
+        write_escaped_attribute(&mut self.value, word);
     }
 
     /// A URL attribute rendered as given, even when the value is a script URL.
@@ -65,7 +88,7 @@ impl Attribute {
     /// Never pass user data here.
     pub fn raw(key: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
-            key: key.into(),
+            key: Cow::Owned(key.into()),
             value: value.into(),
             is_boolean: false,
             is_trusted_url: false,
@@ -77,7 +100,7 @@ impl Attribute {
     /// `hidden`, `checked`, `required`, `open`, `controls`, `autoplay`, `muted`.
     pub fn boolean(key: impl Into<String>) -> Self {
         Self {
-            key: key.into(),
+            key: Cow::Owned(key.into()),
             value: String::new(),
             is_boolean: true,
             is_trusted_url: false,
