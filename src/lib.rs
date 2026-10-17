@@ -82,8 +82,10 @@ pub use crate::document::Document;
 pub use crate::layout::Layout;
 
 /// The prose guides are doc tests too, so a snippet in them cannot rot. Gated on `ssg`
-/// because both use `molt::ssg`; compiled only when running doc tests.
-#[cfg(all(doctest, feature = "ssg"))]
+/// because both use `molt::ssg`, and on not being `wasm32`, because there the module does not
+/// exist even with the feature on (`wasm-pack test` runs the doc tests for that target).
+/// Compiled only when running doc tests.
+#[cfg(all(doctest, feature = "ssg", not(target_arch = "wasm32")))]
 mod guides {
     #[doc = include_str!("../GETTING_STARTED.md")]
     mod getting_started {}
