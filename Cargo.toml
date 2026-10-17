@@ -53,6 +53,10 @@ wasm-bindgen-test = "0.3"
 # targeting wasi32"). Keeping it off the wasm target is what lets `wasm-pack test` build.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.7"
+# Counts allocations in `tests/allocations.rs`. The crate is `unsafe_code = "forbid"`, which
+# also covers its tests, so an allocator written here would not compile; this one is MIT,
+# has no dependencies, and is not part of the shipped library.
+stats_alloc = "0.1"
 
 [[bench]]
 name = "render"
@@ -77,8 +81,15 @@ lto = true
 codegen-units = 1
 panic = "abort"
 # Measured 2026-10-17: nodejs target, 22 KB gzip, under the 120 KB budget in
-# scripts/build-wasm.sh. Revert this line if a later build crosses that budget.
+# scripts/build-wasm.sh. The flag is kept for safety, not size: it turns an arithmetic
+# overflow into a trap instead of a silent wrap, and costs a few hundred bytes.
 overflow-checks = true
+
+# `cargo bench` inherits `release`, whose `opt-level = "z"` optimises for the WASM size
+# budget. Benchmarking size-optimised code measures a build nobody runs on a server, so the
+# bench profile goes back to speed.
+[profile.bench]
+opt-level = 3
 
 [lints.rust]
 missing_docs = "deny"
