@@ -237,6 +237,16 @@ figure. `stats_alloc` is a dev-dependency because `unsafe_code = "forbid"` also 
 so a counting allocator cannot be written in the repo. Without this test, the claim "removes
 ~5 allocations per element" in an issue could not be checked; it still has to be measured.
 
+- **One `#[test]` is not enough: take the minimum of several runs.** The harness has threads
+  of its own. libtest's main thread prints and receives events while the test runs and
+  allocates when it does, so `div()` was once measured at "2 allocations, budget 0" on a CI
+  runner, in a build whose only change was a README (it failed twice in about sixty macOS
+  runs). `allocations` now runs each measurement nine times and keeps the smallest figure:
+  deterministic code costs the same every time, and a stray thread can only add. Measured
+  with an allocating background thread (one allocation per millisecond, like the harness):
+  the single-run version failed 37 of 40 runs, the minimum-of-nine version 0 of 40. The helper
+  has a deterministic check (noise supplied by a counter, not by timing), called from inside
+  the one test.
 - **I broke this rule within the hour.** Adding a second `#[test]` to the file (a `size_of`
   ceiling) made two threads run at once and the figures jumped (`div().add_class` read 4
   instead of 2). Fold every new check into the single test, or use another file.
@@ -502,6 +512,21 @@ only the three robustness findings as public issues. A public disclosure cannot 
 draft can be published in one click.
 
 - **Guard.** `docs/history/upstream-findings.md`
+
+### L34. Calibrate the experiment before trusting its verdict
+
+(the allocation test, #82)
+
+To prove the flaky test fixed, I first injected background noise that allocated every 30 µs.
+The "fixed" test failed 30 of 30 runs, which seemed to refute the fix. It refuted the
+experiment: the tests run in a debug build, where one window is tens of microseconds, so every
+window of every repetition was hit, and no minimum could escape. The noise was far heavier than
+the thing it imitated. With noise at the harness's real rate the numbers were 37 of 40 before
+and 0 of 40 after. **Rule:** when an experiment contradicts your fix, ask whether the
+experiment resembles the failure (rate, duration, build profile) before concluding either way,
+and report both runs. Keep the reproduction out of the repository unless it is deterministic.
+
+- **Guard.** `tests/allocations.rs`
 
 ### L35. A second `trap ... EXIT` replaces the first
 

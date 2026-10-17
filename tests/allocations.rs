@@ -18,19 +18,69 @@ use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
-/// Heap allocations and reallocations made while `work` runs, and what it returned.
+/// How many times each measurement is taken. See [`allocations`].
+const ATTEMPTS: usize = 9;
+
+/// Heap allocations and reallocations that `work` makes, and what it returned.
 ///
 /// A `Vec` or `String` that grows by doubling costs a reallocation each time, which is as
 /// much a cost as a fresh allocation, so both count.
-fn allocations<T>(work: impl FnOnce() -> T) -> (usize, T) {
+///
+/// **This is the minimum over several runs, not one run.** The allocator counts every thread,
+/// and the test harness has its own: libtest's main thread prints and receives events while
+/// the test runs, and allocates when it does. One of those allocations landing inside a
+/// measurement made `div()` "allocate twice" on a CI runner, in a build whose only change was
+/// a README. The cost of deterministic code is the same on every run, and other threads can
+/// only *add* to it, so the smallest figure is the true one. It does mean `work` runs
+/// [`ATTEMPTS`] times, so it must be repeatable.
+fn allocations<T>(work: impl Fn() -> T) -> (usize, T) {
+    let (mut fewest, output) = measure(&work);
+    for _ in 1..ATTEMPTS {
+        fewest = fewest.min(measure(&work).0);
+    }
+    (fewest, output)
+}
+
+/// One measurement: allocations plus reallocations while `work` runs, and its result.
+fn measure<T>(work: &impl Fn() -> T) -> (usize, T) {
     let region = Region::new(GLOBAL);
-    let out = work();
+    let output = work();
     let change = region.change();
-    (change.allocations + change.reallocations, out)
+    (change.allocations + change.reallocations, output)
+}
+
+/// A closure whose first calls allocate extra, as if another thread had interfered, still
+/// measures as its true cost. Deterministic: the "noise" comes from a counter, not from timing.
+///
+/// Called from the one test below and **not** a `#[test]` itself: a second test would run on
+/// another thread at the same time and put its own allocations into every figure here.
+fn a_measurement_ignores_allocations_made_by_other_threads() {
+    let calls = std::cell::Cell::new(0_usize);
+    let noisy = || {
+        calls.set(calls.get() + 1);
+        // The first four calls drop an extra allocation inside the window, as a stray thread
+        // would; every call also makes the two allocations that are the work itself.
+        if calls.get() <= 4 {
+            std::hint::black_box(Vec::<u8>::with_capacity(8));
+            std::hint::black_box(Vec::<u8>::with_capacity(8));
+        }
+        (
+            std::hint::black_box(Vec::<u8>::with_capacity(8)),
+            std::hint::black_box(Vec::<u8>::with_capacity(8)),
+        )
+    };
+    let (measured, _) = allocations(noisy);
+    assert_eq!(
+        measured, 2,
+        "the least of {ATTEMPTS} runs is the work alone"
+    );
+    assert_eq!(calls.get(), ATTEMPTS);
 }
 
 #[test]
 fn the_hot_paths_stay_within_their_allocation_budgets() {
+    a_measurement_ignores_allocations_made_by_other_threads();
+
     let mut report = Vec::new();
     let mut check = |name: &str, measured: usize, budget: usize| {
         report.push(format!("{name}: {measured} (budget {budget})"));
