@@ -236,6 +236,9 @@ figure. `stats_alloc` is a dev-dependency because `unsafe_code = "forbid"` also 
 so a counting allocator cannot be written in the repo. Without this test, the claim "removes
 ~5 allocations per element" in an issue could not be checked; it still has to be measured.
 
+- **I broke this rule within the hour.** Adding a second `#[test]` to the file (a `size_of`
+  ceiling) made two threads run at once and the figures jumped (`div().add_class` read 4
+  instead of 2). Fold every new check into the single test, or use another file.
 - **Guard.** `the_hot_paths_stay_within_their_allocation_budgets`
 
 ### L22. Chase the finding the baseline hands you
@@ -250,6 +253,30 @@ valid because escaping is per character (escaping the pieces equals escaping the
 
 - **Guard.** `a_display_value_is_escaped_as_it_is_formatted`,
   `several_text_children_are_joined_into_one_content_string`
+
+### L23. A decision that was right in the issue can be wrong after a later fix
+
+Issue #35 proposed skipping the pretty writer's `DropIfEmpty` rollback for `Element` children,
+"because an element is never empty". That was true when written. Batch A's S2 fix then made an
+element with an invalid tag render **nothing**, so the rollback is now what prevents a blank
+line. Applying the issue as written would have reintroduced the bug. Before implementing an
+old issue, re-read it against what has changed since; the premises are the part that rot.
+Close it with the evidence, not with a half-applied change.
+
+- **Guard.** `an_unsafe_tag_name_renders_nothing`
+
+### L24. "Analysed, not applied" is a result
+
+Of the six remaining performance issues, one was a clear win (`html!`), one a small one
+(`trusted_url`, 4 → 3 allocations), and four were measured or reasoned and **not** applied:
+`Box<Element>` (+1 allocation per element child for ~72 B saved per text node), a larger
+initial stack (−3%, inside the noise, +5 KB per tiny render), caching attribute validity
+(moves the cost, does not remove it for build-once/render-once), and an O(depth) stack (no
+benchmark shows the cost). Each got a comment on its issue with the number, and a ceiling test
+where one was cheap (`size_of`). A guard that notices regression is the deliverable when the
+optimisation is not.
+
+- **Guard.** `the_hot_paths_stay_within_their_allocation_budgets`
 
 ### L16. Report the regression you caused
 

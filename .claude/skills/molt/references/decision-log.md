@@ -76,6 +76,16 @@ lose.
   intermediate copies. The tree it produces is unchanged. *Invariant to keep:* escaping each
   piece a `Display` writes equals escaping the whole, because escaping is per character.
 - **`[profile.bench] opt-level = 3`**, release stays `z` for WASM.
+- **`Node::Element(Box<Element>)` was not done** (P8, #37). *Measured:* `Node` and `Element` are
+  104 bytes, `Attribute` 56. *Why not:* a text node would shrink to ~32 bytes but every element
+  child costs one more allocation, and the enum's public shape changes. *Guard:* `size_of`
+  ceilings in `tests/allocations.rs`. *Changes if:* a benchmark shows memory pressure from
+  text-heavy trees.
+- **No `DropIfEmpty` skipping for `Element`** (P6, #35). *Why:* since S2 an element with an
+  invalid tag renders empty, and the rollback keeps pretty mode free of blank lines.
+- **No cached attribute-validity flags** (P5, #34), **no O(depth) work stack** (P7, #36),
+  **no larger initial stack** (P9, #38): each analysed or measured with no win, recorded on its
+  issue.
 
 ## Open decisions (not taken yet)
 

@@ -78,13 +78,17 @@ says it is only sugar — found by the baseline, fixed in PR #59 (below).
 7. **WASM budget is 120 KB gzip** (`scripts/build-wasm.sh`; measured 22 KB). Opt-level `z` stays
    for the release profile; do not flip it to speed up native benchmarks.
 
-## Candidates still open (issues #34–#38)
+## Candidates analysed and not applied (issues #34–#38; evidence is on each issue)
 
-Cache `name_ok`/`is_url` per attribute; `matches!` instead of binary search for void tags; skip
-the `DropIfEmpty` step for elements/comments in pretty mode; O(depth) work stack instead of
-O(width); `Box<Element>` in `Node` *only if* `size_of` confirms `Node` is ~104 bytes; reuse the
-per-child buffer in `Document::render_to` and pass a capacity hint. Each needs a before/after
-number in the PR; "should be faster" is not one.
+| candidate | verdict |
+| --- | --- |
+| `Box<Element>` in `Node` | `size_of` = 104 B confirmed, but +1 allocation per element child; not done, ceiling test added |
+| initial stack capacity 128 | allocations 6 → 5, time −3% (noise), +5 KB per tiny render; not done |
+| skip `DropIfEmpty` for `Element` | premise invalid since S2 (an element can now render empty) |
+| cache `name_ok` / `is_url` per attribute | moves the cost, no gain for build-once/render-once; not done |
+| O(depth) work stack | no benchmark shows the cost; not done |
+
+Reopen any of them only with a benchmark that shows the cost. "Should be faster" is not one.
 
 ## Writing a performance PR
 
