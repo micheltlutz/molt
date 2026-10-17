@@ -8,20 +8,19 @@ Context and rules for an agent changing this repository. Humans want
 This library builds an HTML **string**. There is no DOM, no runtime, no reactivity and no
 template language. You construct a tree of values and serialize it once.
 
-It is a port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1. When a
-design question comes up, the Swift source at
-`../WingedSwiftProjects/Winged-Swift/Sources/WingedSwift/` is the reference for **what the
-markup should be** — and its `.claude/skills/wingedswift/references/pitfalls.md` documents
-behaviours the source alone does not make obvious.
+Molt is the reference for its own behaviour. Byte-for-byte output is pinned by four golden
+fixtures in `tests/fixtures/`, and a change that alters the output for valid input fails
+`cargo test --test golden`: it is either wrong or deliberate. Where behaviour is unsafe or
+wrong, fix it; do not preserve a bug for the sake of an old output. Three things make such a
+change complete, and one that skips them is not: a test that asserts the rendered string;
+an entry in `CHANGELOG.md` (under *Security* or *Breaking*); and a row in `MIGRATION.md`'s
+*Output changes* table, so that someone upgrading can find it in their own output.
 
-**It is not the reference for what is safe or correct.** Molt is meant to be better than the
-original, so where the Swift behaviour is unsafe or wrong, fix it in the port instead of
-copying it. Three obligations come with a divergence, and a change that skips one is
-incomplete: list it in `PORTING.md` with the reason; give it a test that asserts the rendered
-string (and, if a Swift test encoded the old behaviour, say in that test's comment how it
-differs); record it in `docs/upstream-findings.md` so it can be reported upstream. Never copy
-a Swift bug to keep parity, and never diverge silently. Parity still holds for valid input:
-the four golden fixtures do not move.
+Molt began as a port of a Swift library, Winged-Swift, which is to be discontinued after Molt
+1.0.0. What that history explains, and where each deliberate difference came from, is kept in
+[`docs/history`](docs/history). The one link left in the code is the `Ports …` comments on
+tests and the script that checks them (step 7 of `verify.sh`); both skip themselves when the
+original checkout is absent, and both are slated for removal.
 
 ## Knowledge base
 
@@ -44,7 +43,7 @@ fails when one disappears. When you learn something the hard way, add a lesson a
 | `cargo test --test golden` | the byte-for-byte parity gate |
 | `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change |
 | `./scripts/generate-tag-catalog.sh` | after adding or renaming an element |
-| `./scripts/check-swift-parity.sh` | after touching a test that names a Winged-Swift case |
+| `./scripts/check-swift-parity.sh` | after touching a `Ports …` comment on a test; skips itself when the original checkout is absent |
 | `cargo clippy --all-targets --all-features -- -D warnings` | lint |
 | `cargo bench` | render performance |
 
@@ -63,7 +62,7 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
 | `src/sitemap.rs`, `src/feed.rs` | XML output |
 | `src/ssg.rs` | filesystem output, `feature = "ssg"`, off on wasm32 |
 | `src/wasm.rs` | `wasm-bindgen` surface, `feature = "wasm"` |
-| `tests/fixtures/` | copied verbatim from Winged-Swift — **never hand-edit** |
+| `tests/fixtures/` | the golden files, compared byte for byte — **never hand-edit** |
 
 ## Rules
 
@@ -74,29 +73,29 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
    purpose. If you reach for one, say why in a comment.
 3. **Three escapers, not one.** `escape_text` (`& < > " '`), `escape_attribute`
    (`& " '` — *not* `<` `>`), `escape_xml` (`'` → `&apos;`). The fixtures depend on the
-   differences. `MOLT_SPEC.md` §3.3 shows only one; it is wrong.
+   differences. (The original spec, `docs/history/MOLT_SPEC.md` §3.3, shows only one; it is wrong.)
    `escape_json_script` is a fourth, different thing: it makes JSON safe inside `<script>`
    with `\uXXXX` escapes and is not HTML escaping. Do not use one in place of another.
 4. **Void elements take no children.** The writer emits `>` and returns. Adding a child to
-   an `img()` is silently dropped, matching Swift.
+   an `img()` is silently dropped; that is the contract.
 5. **`<pre>`, `<code>` and `<textarea>` are never indented inside.** Their whitespace is
    what the browser displays.
 6. **Empty children leave no blank line.** The pretty writer renders each child into a
    scratch buffer and skips it if empty. Do not "optimise" that away — it is what keeps an
    empty `Fragment` from leaving a gap.
 7. **`Document::render` is pretty; `Element::render` is compact.** Asymmetric on purpose,
-   inherited from Swift, and the fixtures encode it.
+   and the fixtures encode it.
 8. **`set_id`, `set_style` and `set_role` replace. Everything else appends.** Also
-   inherited; also load-bearing.
+   load-bearing.
 9. **`html!` is sugar over the builder, never a second code path.** Any form it accepts
    must expand to the same tree the builder produces. There is a test asserting exactly
    that — keep it passing.
 10. **Rendering is configured by a value, never globally.** `RenderOptions` is passed in.
-    Do not add a global switch; Swift had one and is removing it.
+    Do not add a global switch.
 11. **Tests assert on rendered strings, not tree shape.** A test that reads
     `element.children()[0].attributes()[1]` locks in an implementation. A test that asserts
-    the markup locks in the contract. This rule is why Winged-Swift's test suite survived a
-    full internal rewrite unchanged.
+    the markup locks in the contract, which is what lets the internals be rewritten without
+    touching the tests.
 12. **Every `pub` item needs a rustdoc comment with an example.** `missing_docs` is denied.
     Comments explain *why*; the code already says what.
 
@@ -130,8 +129,8 @@ test is listed by name.
 **Fix a security problem.** Start from the surface table in
 `.claude/skills/molt/references/security-owasp.md`: find the place where a caller's string
 reaches the output, make it safe at *write time* so no construction path bypasses it, drop
-rather than repair, and add the row for any new place. Update `SECURITY.md`, `PORTING.md` if
-output differs from Winged-Swift, and `docs/upstream-findings.md`.
+rather than repair, and add the row for any new place. Update `SECURITY.md`, and if the
+output changes for some input, `CHANGELOG.md` and `MIGRATION.md`'s *Output changes* table.
 
 **Change a `pub` item.** It is semver. Check: a new variant or field on an exhaustive item,
 an array length in a type, a changed return type or bound, a renamed method, a name that
@@ -180,7 +179,7 @@ holds.
 ## Style
 
 - Four-space indent, `max_width = 100`, `cargo fmt` is the arbiter.
-- Commit prefixes follow Winged-Swift's CHANGELOG vocabulary: `Add:`, `Fix:`, `Change:`,
+- Commit prefixes: `Add:`, `Fix:`, `Change:`,
   `Update:`, `Docs:`, `Test:`, `Refactor:`, `Perf:`.
 - Branch from `develop`, pull request against `develop`.
 - **Run `./scripts/verify.sh` before you report that a change is done.**

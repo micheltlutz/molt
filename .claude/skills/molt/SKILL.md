@@ -6,9 +6,9 @@ description: Build HTML with the Molt Rust library (molt-framework on crates.io)
 # Molt
 
 Molt builds an HTML **string**. You assemble a tree of values and serialize it once. There is
-no DOM, no runtime, no reactivity. It is a port of Winged-Swift 3.0.1, and the Swift golden
-fixtures are the parity gate. `AGENTS.md` at the repo root is the rulebook; this skill is the
-reasoning behind it and the lessons that produced it.
+no DOM, no runtime, no reactivity. Four golden fixtures pin its output byte for byte.
+`AGENTS.md` at the repo root is the rulebook; this skill is the reasoning behind it and the
+lessons that produced it.
 
 ```rust
 use molt::prelude::*;

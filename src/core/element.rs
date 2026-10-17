@@ -443,7 +443,7 @@ impl Element {
     ///
     /// Takes an ordered iterator rather than a map. Winged-Swift's `dataAttributes(_:)`
     /// takes a Swift `Dictionary`, so its rendered attribute order is nondeterministic
-    /// between runs; this signature makes the output stable. See `PORTING.md`.
+    /// between runs; this signature makes the output stable. See `docs/history/PORTING.md`.
     #[must_use]
     pub fn data_attrs<K: AsRef<str>, V: AsRef<str>>(
         mut self,

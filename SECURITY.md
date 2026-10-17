@@ -36,8 +36,6 @@ and where each is enforced (the full table of inputs is in
 | A09 Logging Failures | not applicable: the library does not log | — |
 | A02, A07, A10 | no cryptography, authentication or network access | — |
 
-Where Molt's behaviour is stricter than Winged-Swift's, [`PORTING.md`](PORTING.md) says so,
-and [`docs/upstream-findings.md`](docs/upstream-findings.md) records what was found there.
 
 ## What counts as a vulnerability here
 
@@ -53,9 +51,8 @@ These are vulnerabilities:
 - A class, id, style or `data-*` value that can inject an additional attribute.
 - An attribute value that ends a raw-text ancestor (`noscript`, `iframe`, `xmp`, `noembed`,
   `noframes`, `script`, `style`, `plaintext`) early. `escape_attribute` leaves `<` and `>`
-  alone, matching Winged-Swift, but the renderer writes them as `&lt;` and `&gt;` for every
-  attribute under one of those ancestors. This is the one place where output differs from
-  Winged-Swift for the same tree; the fixtures are unaffected.
+  alone, since neither can end a quoted value, but the renderer writes them as `&lt;` and
+  `&gt;` for every attribute under one of those ancestors; the fixtures are unaffected.
 - `Node::comment` content that can terminate the comment early.
 - A tag name that survives into the output with a space, quote, `<`, `>` or `/`. A tag
   that is not a letter followed by letters, digits, `-`, `_`, `.` or `:` is **not
@@ -77,8 +74,7 @@ suite, in both render modes.
 Before this, a deep enough tree exhausted the stack, and a stack overflow is a process
 **abort**, not a catchable panic — `catch_unwind` would not have saved you. That made
 nesting depth a denial-of-service vector anywhere it could be influenced by untrusted
-input. Fixed in [#33](https://github.com/micheltlutz/winged-rust/issues/33); Winged-Swift
-still has the recursive shape.
+input. Fixed before the first release under the name Molt.
 
 **What deep trees still cost is output size.** Pretty mode writes one indent string per
 level on every line, so output grows with the square of the depth: a 100,000-level tree
@@ -107,7 +103,7 @@ These are **not** vulnerabilities, because they are documented behaviour:
 
 - `raw_text()` and `Node::Raw` not escaping their input. That is their entire purpose; they
   are named and documented so that an audit can grep for them.
-- `<script>` and `<style>` content not being escaped by default, matching Winged-Swift. For
+- `<script>` and `<style>` content not being escaped by default. For
   JSON data in a `<script>` (JSON-LD, a data block) use `seo::json_ld` or `seo::script_json`,
   which write `<`, `>` and `&` as JSON escapes so a `</script>` in a value cannot end the
   element. Untrusted text in script *code* has no safe form; do not put it there.
@@ -122,7 +118,7 @@ reader then rejects every entry. A sitemap `<loc>` and an RSS `<link>` that are 
 `http(s)` URLs are left out, since feed readers and crawlers present them as something to
 open; `isPermaLink="true"` is written only for an `http(s)` guid. The sitemap protocol's
 50,000-URL and 50 MiB limits are exposed as `MAX_URLS`/`MAX_BYTES` with
-`SitemapGenerator::chunks`, not enforced silently. See `PORTING.md` §12.
+`SitemapGenerator::chunks`, not enforced silently.
 
 ### URL attributes are checked at write time
 

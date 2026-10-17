@@ -8,9 +8,9 @@ lose.
 
 ## Standing constraints (from `docs/plans/2026-10-17-seguranca-e-performance.md`)
 
-- **Three escapers, never one.** Fixtures depend on the differences; `MOLT_SPEC.md` §3.3 is
-  wrong. *Changes if:* Winged-Swift changes its escapers and the fixtures are regenerated
-  upstream.
+- **Three escapers, never one.** Fixtures depend on the differences; the original spec
+  (`docs/history/MOLT_SPEC.md` §3.3) is wrong. *Changes if:* the fixtures are regenerated on
+  purpose, with a `MIGRATION.md` row.
 - **`panic = "abort"` stays in the release profile.** The WASM budget (120 KB gzip) depends on
   it. *Changes if:* the budget is renegotiated; server unwind is the engine's decision.
 - **No Strategy/Visitor/Escaper as public traits.** One consumer, frozen API.
@@ -22,9 +22,9 @@ lose.
 ## Batch A — security and correctness
 
 - **Contextual `<` `>` escaping in attributes, not a wider `escape_attribute`** (S4). *Why:*
-  keeps byte parity with the Swift fixtures everywhere except under raw-text ancestors, where
-  the unescaped form is exploitable. *Changes if:* upstream Winged-Swift adopts the stricter
-  escape, then drop the contextual branch and widen the function.
+  keeps the golden fixtures byte-identical everywhere except under raw-text ancestors, where
+  the unescaped form is exploitable. *Changes if:* the fixtures are regenerated with the
+  stricter escape on purpose, then drop the contextual branch and widen the function.
 - **Invalid tag → whole element dropped before the indent** (S2). *Why:* no safe guess for what
   `div><script>` meant; dropping before the indent leaves no blank line in pretty mode. Rust
   API unchanged (no `Result` from `Element::new`), JS API unchanged.
@@ -87,31 +87,30 @@ lose.
   **no larger initial stack** (P9, #38): each analysed or measured with no win, recorded on its
   issue.
 
-## Standing policy: Molt may exceed Winged-Swift
+## Standing policy: unsafe output is fixed, not preserved
 
-(Owner's decision, after batch D.) Winged-Swift is the reference for **what the markup should
-be** and the golden fixtures are the parity gate for valid input. It is not the reference for
-what is safe or correct. Where it is unsafe or wrong, Molt fixes it in the port. A divergence
-carries three obligations: a row in `PORTING.md`, a test asserting the rendered string (with a
-comment saying how it differs, if a ported Swift test encoded the old behaviour), and an entry
-in `docs/upstream-findings.md` so it can be reported upstream. Never copy a Swift bug to keep
-parity; never diverge silently. *Examples:* `isPermaLink`, `data:` in frames, `srcdoc`,
-contextual `<` `>` escaping.
+(Owner's decision, after batch D.) Molt began as a port of a Swift library that is to be
+discontinued after Molt 1.0.0, and it is now the reference for its own behaviour. The four
+golden fixtures pin the output of valid input. Where behaviour is unsafe or wrong, fix it
+instead of keeping an old output for its own sake. A change that alters output is complete
+with a test asserting the rendered string, an entry in `CHANGELOG.md` (*Security* or
+*Breaking*) and a row in `MIGRATION.md`'s *Output changes* table. The history of what the
+port found, and where it was reported, is in `docs/history/`. *Examples:* `isPermaLink`,
+`data:` in frames, `srcdoc`, contextual `<` `>` escaping.
 
 ## Batch D — security hardening
 
 - **The URL policy takes the element's tag** (S7). `is_blocked_in(tag, key, value)`, with
   `is_blocked` kept tag-free. *Why:* `data:image/svg+xml` is inert on `<img>` and runs script in
-  `iframe`/`frame`/`embed`/`object`. *Diverges from* Winged-Swift 3.0.1, which blocks only
-  `data:text/html` (`PORTING.md` §9).
+  `iframe`/`frame`/`embed`/`object`. Before this, only `data:text/html` was blocked (`CHANGELOG.md`, *Security*).
 - **`srcdoc` is written empty unless `trusted_url`** (S7), not replaced by `#`.
 - **`meta refresh` is not checked** (S7): the HTML spec makes browsers ignore `javascript:`
   there. *Changes if:* a browser is found to honour it.
 - **`escape_json_script` is a fourth escaper and does not validate** (S8). *Why:* HTML escaping
   corrupts JSON; validating needs a parser dependency this crate does not have.
 - **A non-`http(s)` sitemap `loc` or feed `link` is omitted, not repaired** (S9), and
-  `isPermaLink` is `true` only for an `http(s)` guid. *Diverges from* Winged-Swift
-  (`PORTING.md` §12). Sitemap limits are exposed (`MAX_URLS`, `MAX_BYTES`, `chunks`) rather
+  `isPermaLink` is `true` only for an `http(s)` guid. (`CHANGELOG.md`, *Security*).
+  Sitemap limits are exposed (`MAX_URLS`, `MAX_BYTES`, `chunks`) rather
   than enforced by silent truncation.
 - **`RenderOptions::indent` is private; `max_depth` is opt-in** (S10). *Why:* the indent is
   written on every line; a depth bound is what limits O(depth²) output. The depth counter

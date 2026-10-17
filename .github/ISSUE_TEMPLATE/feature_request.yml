@@ -24,13 +24,3 @@ body:
       label: What might the API look like?
       description: Optional. A sketch is fine.
       render: rust
-
-  - type: dropdown
-    id: swift-parity
-    attributes:
-      label: Does Winged-Swift already do this?
-      description: >
-        If so, name the Swift type or method — parity gaps are prioritised.
-      options:
-        - "No / I don't know"
-        - "Yes — parity gap"

@@ -31,9 +31,9 @@ Read this *before* proposing a trait, a visitor, or a new abstraction.
 | **Escaper / strategy trait for escaping** | three free functions chosen at the call site are the right shape; a trait has no second implementer and would be frozen |
 | **Decorator** | there is nothing wrapping the same interface; `From<Element> for Node` is conversion, not decoration |
 | **Command/undo, Memento, Observer, State** | no history, no reactivity, no mutable lifecycle. The mental model is "build a value, serialize once" |
-| **Typestate for void elements** (`Element<Void>` with no `.child`) | would make `Element` generic and break `Vec<Element>`, `ALL_TAGS`, `From<Element> for Node`; and "void drops children silently" is the *parity* contract |
+| **Typestate for void elements** (`Element<Void>` with no `.child`) | would make `Element` generic and break `Vec<Element>`, `ALL_TAGS`, `From<Element> for Node`; and "void drops children silently" is the contract the fixtures encode |
 | **Director / `Builder` trait with an associated output** | exists to build several product types; Molt builds one |
-| **Global render switch** | AGENTS.md rule 10: `RenderOptions` is passed by value. Swift had a global and is removing it |
+| **Global render switch** | AGENTS.md rule 10: `RenderOptions` is passed by value, so two threads can render the same tree differently |
 | **A second code path in `html!`** | AGENTS.md rule 9: `html!` is sugar over the builder. Any form it accepts must expand to the same tree, and a test asserts it |
 | **Interior mutability / `Rc` in the tree** | breaks `Send + Sync`, which `parallel` relies on |
 | **Singleton / lazy global registry** (tag tables, interner) | `matches!` or a sorted `&'static [&str]` is enough |
@@ -46,7 +46,7 @@ Read this *before* proposing a trait, a visitor, or a new abstraction.
 4. Will it appear in a `pub` signature? Then it is semver: go to
    [`rust-guidelines.md`](rust-guidelines.md) § API, and justify it in the PR.
 5. Does it change what `html!` expands to, the writer's bytes, or the three escapers? Stop; it
-   is probably a parity or rule 6/9/10 violation.
+   is probably a fixture-contract or rule 6/9/10 violation.
 
 ## If a pattern genuinely helps
 

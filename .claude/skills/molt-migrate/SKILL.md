@@ -11,7 +11,7 @@ stricter URL and XML handling). Compile errors are the easy half.
 
 Read first: [`MIGRATION.md`](../../../MIGRATION.md) (every break, before and after, with a table
 of output changes) and the `[Unreleased]`/version entry of [`CHANGELOG.md`](../../../CHANGELOG.md).
-For why something differs from Winged-Swift, [`PORTING.md`](../../../PORTING.md).
+For the history of why some outputs differ, [`docs/history`](../../../docs/history/README.md).
 
 ## Procedure
 

@@ -1,9 +1,7 @@
 //! Fast, type-safe HTML generation for Rust and WebAssembly.
 //!
-//! A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1: the same
-//! composite tree, the same escape-by-default guarantee, the same compact and pretty
-//! render modes — compiled to native code or to `wasm32-unknown-unknown`. Where the Swift
-//! original is unsafe or wrong, Molt fixes it instead of copying it.
+//! A composite tree of plain values, escaped by default and rendered compact or pretty,
+//! compiled to native code or to `wasm32-unknown-unknown`.
 //!
 //! # Getting started
 //!
@@ -51,11 +49,11 @@
 //! indent string per level. When depth comes from untrusted input, bound it with
 //! [`RenderOptions::with_max_depth`]. See [`Render`] and `SECURITY.md`.
 //!
-//! # Parity
+//! # Golden fixtures
 //!
-//! The crate is verified against Winged-Swift's own golden fixtures — the same bytes, from
-//! the same page, built through both APIs. Behavioural differences that were introduced on
-//! purpose are listed in `PORTING.md`.
+//! The rendered markup of a whole page, a sitemap and a feed is compared byte for byte with
+//! files in `tests/fixtures/`, so a change to the output of valid input cannot go unnoticed.
+//! `MIGRATION.md` lists what changed between releases.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

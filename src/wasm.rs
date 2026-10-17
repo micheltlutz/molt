@@ -1,6 +1,6 @@
 //! WebAssembly bindings.
 //!
-//! # Why this does not follow `MOLT_SPEC.md` §4.1
+//! # Why this does not follow `docs/history/MOLT_SPEC.md` §4.1
 //!
 //! The spec's `WasmDocument` holds `body_nodes: Vec<String>`: it renders each node to a
 //! string on insertion and concatenates at the end. That throws the tree away, so

@@ -45,8 +45,8 @@ numbers are in [micheltlutz/molt](https://github.com/micheltlutz/molt/issues).
 
 ### Security
 
-Output now differs from Winged-Swift 3.0.1 in the cases below, on purpose; each is listed
-in [`PORTING.md`](PORTING.md).
+Output now differs in the cases below, on purpose; each is also a row in the *Output changes*
+table of [`MIGRATION.md`](MIGRATION.md).
 
 - **Comments can no longer close early.** `Node::comment("x--->")` used to leave a `-->`
   that ended the comment and let the rest through as markup. ([#2](https://github.com/micheltlutz/molt/issues/2))
@@ -250,7 +250,7 @@ because they were claimed but missing ([#57](https://github.com/micheltlutz/molt
 
 ### Changed from Winged-Swift 2.0.0
 
-Every deliberate difference is listed with its reason in [`PORTING.md`](PORTING.md).
+Every deliberate difference is listed with its reason in [`PORTING.md`](docs/history/PORTING.md).
 The short version:
 
 - `data_attrs` and `aria_attrs` produce deterministic output; the Swift versions iterate a
