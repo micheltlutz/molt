@@ -15,7 +15,29 @@ patch release, and the advisory is published once users have had a chance to upg
 
 ## Supported versions
 
-The latest released version. There are no long-term support branches.
+The latest released version. There are no long-term support branches. When 1.0.0 ships, 0.1.x
+stops receiving fixes: [`MIGRATION.md`](MIGRATION.md) is the way forward, and several of the
+fixes below changed output, so they are not backported.
+
+## How the guarantees map onto the OWASP Top 10 (2021)
+
+Molt generates strings and writes files, so most categories do not apply. The ones that do,
+and where each is enforced (the full table of inputs is in
+`.claude/skills/molt/references/security-owasp.md`):
+
+| category | in Molt | enforced by |
+| --- | --- | --- |
+| A01 Broken Access Control | path traversal and destructive operations in `StaticSiteGenerator` | component whitelist, symlink refusal, a pure `clean()` guard |
+| A03 Injection | text, attribute values, names, comments, URLs, JSON and XML reaching the output | escaping on entry, write-time validation, the URL policy, `escape_json_script`, `escape_xml` |
+| A04 Insecure Design | an unsafe call that is only discouraged in a comment | types that cannot be built wrongly (`Markup`, `ChangeFreq`, private `indent`) |
+| A05 Security Misconfiguration | CI and release | pinned actions, read-only token, a release gated on `main` and green CI |
+| A06 Vulnerable Components | the dependency graph | `cargo deny`, `Cargo.lock` committed, optional runtime dependencies only |
+| A08 Integrity Failures | half-written files, the release pipeline | atomic writes with unique temporaries; verify and publish in separate jobs |
+| A09 Logging Failures | not applicable: the library does not log | — |
+| A02, A07, A10 | no cryptography, authentication or network access | — |
+
+Where Molt's behaviour is stricter than Winged-Swift's, [`PORTING.md`](PORTING.md) says so,
+and [`docs/upstream-findings.md`](docs/upstream-findings.md) records what was found there.
 
 ## What counts as a vulnerability here
 

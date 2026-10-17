@@ -8,11 +8,20 @@ Context and rules for an agent changing this repository. Humans want
 This library builds an HTML **string**. There is no DOM, no runtime, no reactivity and no
 template language. You construct a tree of values and serialize it once.
 
-It is a port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 2.0.0. When a
+It is a port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1. When a
 design question comes up, the Swift source at
-`../WingedSwiftProjects/Winged-Swift/Sources/WingedSwift/` is the reference — and its
-`.claude/skills/wingedswift/references/pitfalls.md` documents behaviours the source alone
-does not make obvious.
+`../WingedSwiftProjects/Winged-Swift/Sources/WingedSwift/` is the reference for **what the
+markup should be** — and its `.claude/skills/wingedswift/references/pitfalls.md` documents
+behaviours the source alone does not make obvious.
+
+**It is not the reference for what is safe or correct.** Molt is meant to be better than the
+original, so where the Swift behaviour is unsafe or wrong, fix it in the port instead of
+copying it. Three obligations come with a divergence, and a change that skips one is
+incomplete: list it in `PORTING.md` with the reason; give it a test that asserts the rendered
+string (and, if a Swift test encoded the old behaviour, say in that test's comment how it
+differs); record it in `docs/upstream-findings.md` so it can be reported upstream. Never copy
+a Swift bug to keep parity, and never diverge silently. Parity still holds for valid input:
+the four golden fixtures do not move.
 
 ## Knowledge base
 
@@ -110,6 +119,63 @@ If a change alters rendered output, `cargo test --test golden` fails. That is th
 working. Either the change is wrong, or the fixtures need regenerating — and if they do,
 say so explicitly in the pull request, because a fixture diff is the only place a markup
 change is visible to a reviewer.
+
+## Recipes
+
+**Fix a bug.** Reproduce it with the hostile or failing input as a test that asserts on the
+rendered string, watch it fail, fix it, then switch the fix off by hand and watch the test
+fail again (see lesson L21 in the knowledge base). Check the test count rose and that the
+test is listed by name.
+
+**Fix a security problem.** Start from the surface table in
+`.claude/skills/molt/references/security-owasp.md`: find the place where a caller's string
+reaches the output, make it safe at *write time* so no construction path bypasses it, drop
+rather than repair, and add the row for any new place. Update `SECURITY.md`, `PORTING.md` if
+output differs from Winged-Swift, and `docs/upstream-findings.md`.
+
+**Change a `pub` item.** It is semver. Check: a new variant or field on an exhaustive item,
+an array length in a type, a changed return type or bound, a renamed method, a name that
+collides with a trait method. If any applies it is `breaking`: say so in the PR, add it to
+`CHANGELOG.md` under *Breaking* and to `MIGRATION.md` with a compiled before/after.
+
+**Walk a tree.** Use an explicit stack, never recursion, and never `derive` `Clone`,
+`PartialEq`, `Hash` or `Drop` on a recursive type. Add a 100,000-level test. In it, compare
+with `assert!(a == b)`; `assert_eq!` formats the trees with the recursive `Debug`.
+
+**Make something faster.** A claim needs a before/after number from `cargo bench --bench
+render` and, for allocations, `tests/allocations.rs`. Put the regressions in the PR too. See
+`references/performance.md`.
+
+**Touch the WASM bindings.** Arguments are by value (they consume the JS handle). Run
+`wasm-pack test --node -- --features wasm`; `cargo check` is not a test.
+
+## What a reviewer blocks
+
+Verdicts follow `references/rust-guidelines.md`: **block** for an injection path, an
+abort on input, `unsafe`, a swallowed error, a `pub` item you cannot take back, or a claim
+with no measurement; **warn** for an avoidable clone or a missing `#[must_use]`. In practice:
+`unwrap`/`expect` in library code, an unexplained use of `raw_text`/`Node::raw`/
+`Attribute::raw`/`trusted_url`, recursion over the tree, a derive on a recursive type, a new
+public trait with one implementer, a fixture edited by hand, and a doc that says what nobody
+ran.
+
+## Public API and downstream sites
+
+Anything that changes what a site built on Molt emits is a downstream change, even if no
+signature moves: a tag now dropped, a URL now `#`, a feed link now omitted. It belongs in the
+*Output changes* table of `MIGRATION.md` as well as the changelog. The `molt-migrate` skill
+tells a user how to find these in their own output; if you add a row, the procedure still
+holds.
+
+## Before you say you are done
+
+1. `./scripts/verify.sh` was run and its output read. If it fails only on `cargo-deny`
+   because the tool is not installed, say so; CI runs it.
+2. Every test you mention exists: `grep -rF "fn the_test_name" src tests`.
+3. Every doc claim was run, and every `Guard:` in the knowledge base still resolves.
+4. You reported what you did **not** verify (workflows cannot be run locally; a stacked PR
+   gets no CI until its base is `main` or `develop`).
+5. Nothing outward-facing happened that the user did not ask for.
 
 ## Style
 
