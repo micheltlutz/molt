@@ -12,7 +12,7 @@ use crate::core::attribute::Attribute;
 use crate::core::element::Element;
 use crate::core::escape::write_escaped_text;
 use crate::core::render::{Render, RenderOptions};
-use crate::core::tags::{is_void, is_whitespace_sensitive};
+use crate::core::tags::{is_valid_tag_name, is_void, is_whitespace_sensitive};
 
 /// A node in the HTML tree.
 ///
@@ -283,6 +283,11 @@ fn push_compact_element<'a>(
     options: &RenderOptions,
     stack: &mut Vec<Step<'a>>,
 ) {
+    // An unsafe tag name is dropped with its whole subtree rather than repaired: there is
+    // no right guess for what `div><script>` was meant to be.
+    if !is_valid_tag_name(element.tag()) {
+        return;
+    }
     out.push('<');
     out.push_str(element.tag());
     write_attributes(element.attributes(), out);
@@ -312,6 +317,11 @@ fn push_pretty_element<'a>(
     options: &RenderOptions,
     stack: &mut Vec<Step<'a>>,
 ) {
+    // Checked before the indent is written, so a dropped element leaves nothing behind for
+    // `DropIfEmpty` to trip over.
+    if !is_valid_tag_name(element.tag()) {
+        return;
+    }
     // `<pre>`, `<code>` and `<textarea>` render every whitespace character they contain, so
     // indenting their children would change what the browser shows.
     if is_whitespace_sensitive(element.tag()) {

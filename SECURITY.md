@@ -30,6 +30,10 @@ These are vulnerabilities:
   character is omitted rather than written.
 - A class, id, style or `data-*` value that can inject an additional attribute.
 - `Node::comment` content that can terminate the comment early.
+- A tag name that survives into the output with a space, quote, `<`, `>` or `/`. A tag
+  that is not a letter followed by letters, digits, `-`, `_`, `.` or `:` is **not
+  rendered, children included** — see `molt::core::tags::is_valid_tag_name`. This covers
+  `Element::new`, `new WElement(tag)` and `element(tag)` in WASM.
 - `StaticSiteGenerator` writing outside its output directory, or `clean()` deleting outside
   it.
 
