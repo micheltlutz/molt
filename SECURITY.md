@@ -109,8 +109,22 @@ non-URL attribute such as `title`. Comparison is on the stored value, so a value
 through `Attribute::new` has already turned `&` into `&amp;` and is not decoded back into a
 scheme.
 
+Also checked: `ping`, `manifest` and `longdesc`, and `srcset`, whose comma-separated
+candidates are each checked (a `javascript:` URL in any one blanks the attribute). On
+`iframe`, `frame`, `embed` and `object`, a `src` or `data` that starts with `data:` is
+blocked unless it is a raster image (`png`, `jpeg`, `gif`, `webp`, `avif`, `bmp`): those
+elements load a document, and `data:image/svg+xml` or `data:application/xhtml+xml` run script
+in it. The same SVG as an `<img>` source is inert and is left alone. `srcdoc` is not a URL but
+a whole HTML document the frame runs; it is written empty for any non-empty value.
+
 `Attribute::trusted_url` and `Element::trusted_url` (and `trustedUrl` on the WASM element)
-skip that check. The value is still attribute-escaped. Use them only for a URL you wrote.
+skip that check, `srcdoc` included. The value is still attribute-escaped. Use them only for a
+URL, or a `srcdoc` document, you wrote.
+
+Not checked: `<meta http-equiv="refresh" content="0;url=javascript:…">`. The HTML
+specification tells the browser to ignore a `javascript:` URL there, and checking it would
+need the element's other attributes. Event-handler attributes (`on*`) and `style` set through
+`attr()` are not filtered either: do not map untrusted *keys* into `attr()`.
 
 The design, and the work that is deliberately not in this crate, is in
 [docs/plans/2026-10-17-seguranca-e-performance.md](docs/plans/2026-10-17-seguranca-e-performance.md).

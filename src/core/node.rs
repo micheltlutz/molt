@@ -582,7 +582,7 @@ fn push_compact_element<'a>(
     }
     out.push('<');
     out.push_str(element.tag());
-    write_attributes(element.attributes(), out, in_raw_text);
+    write_attributes(element.attributes(), out, in_raw_text, element.tag());
 
     // A void element takes no content and no children — both are silently dropped, which
     // is what Winged-Swift does. `Element::self_closing` opts a non-void tag into the same
@@ -627,7 +627,7 @@ fn push_pretty_element<'a>(
     options.write_indent(out, depth);
     out.push('<');
     out.push_str(element.tag());
-    write_attributes(element.attributes(), out, in_raw_text);
+    write_attributes(element.attributes(), out, in_raw_text, element.tag());
 
     if is_void(element.tag()) || element.is_self_closing() {
         write_void_suffix(out, options);
@@ -693,9 +693,9 @@ fn push_neutralised_comment(out: &mut String, content: &str) {
     }
 }
 
-fn write_attributes(attributes: &[Attribute], out: &mut String, in_raw_text: bool) {
+fn write_attributes(attributes: &[Attribute], out: &mut String, in_raw_text: bool, tag: &str) {
     for attribute in attributes {
-        attribute.write_into_in(out, in_raw_text);
+        attribute.write_into_in(out, in_raw_text, tag);
     }
 }
 
