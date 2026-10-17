@@ -171,24 +171,6 @@ The bindings wrap the real tree rather than accumulating pre-rendered strings, s
 so a handle you have already passed on (or chained from) is gone: using it throws
 `null pointer passed to rust`. Chain calls, or keep the handle each call returns.
 
-## Parity with Winged-Swift
-
-The Swift project ships four golden fixtures. This crate reproduces all four **byte for
-byte**, which is what turns "a port" into a proven port:
-
-| fixture | what it exercises |
-| --- | --- |
-| `marketing-pretty.html` | doctype, `lang`, 17 meta tags, tables, boolean attributes, forms, `<pre><code>`, entity escaping |
-| `marketing-compact.html` | the same tree, minified |
-| `sitemap.xml` | XML escaping, float formatting |
-| `feed.xml` | RSS 2.0 with `atom:self` |
-
-Run `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` to regenerate them. A regenerated
-fixture in a pull-request diff is the signal that markup changed.
-
-Deliberate differences from the Swift API — and the reason for each — are listed in
-[`PORTING.md`](PORTING.md).
-
 ## Known limitations
 
 **Pretty output is quadratic in nesting depth.** Every line carries one indent string per
