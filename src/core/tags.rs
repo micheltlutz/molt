@@ -15,6 +15,35 @@ pub const VOID_TAGS: [&str; 13] = [
 /// Elements whose text content is significant, so pretty printing must not indent inside them.
 pub const WHITESPACE_SENSITIVE_TAGS: [&str; 3] = ["pre", "code", "textarea"];
 
+/// Whether `tag` is safe to write between `<` and `>`.
+///
+/// Attribute names were already checked at write time; a tag name is written just as
+/// verbatim, so `Element::new("img src=x onerror=alert(1)")` would otherwise inject an
+/// attribute and `Element::new("div><script>…")` would inject an element. The accepted
+/// shape is the HTML "tag name" production narrowed to ASCII: a letter, then letters,
+/// digits, `-`, `_`, `.` or `:`. That admits custom elements (`my-card`) and prefixed names
+/// (`svg:rect`), and nothing that can end a tag.
+///
+/// The renderer skips an element whose tag fails this check, children included.
+///
+/// # Examples
+/// ```
+/// use molt::core::tags::is_valid_tag_name;
+/// assert!(is_valid_tag_name("div"));
+/// assert!(is_valid_tag_name("my-card"));
+/// assert!(!is_valid_tag_name("img src=x onerror=alert(1)"));
+/// assert!(!is_valid_tag_name("div><script>"));
+/// assert!(!is_valid_tag_name(""));
+/// ```
+#[must_use]
+pub fn is_valid_tag_name(tag: &str) -> bool {
+    let mut bytes = tag.bytes();
+    bytes
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic())
+        && bytes.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':'))
+}
+
 /// Whether `tag` is a void element.
 ///
 /// # Examples
