@@ -6,7 +6,7 @@
 
 use crate::core::attribute::Attribute;
 use crate::core::escape::{write_escaped_attribute, write_escaped_text};
-use crate::core::node::Node;
+use crate::core::node::{Node, Source};
 use crate::core::render::{Render, RenderOptions};
 
 /// An HTML element: a tag name, attributes, optional text content, and children.
@@ -27,13 +27,155 @@ use crate::core::render::{Render, RenderOptions};
 ///     r#"<div class="card" id="hero"><h1>Welcome</h1><p>Fuel, tyres &amp; chain.</p></div>"#
 /// );
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Element {
     tag: String,
     attributes: Vec<Attribute>,
     content: Option<String>,
     children: Vec<Node>,
     self_closing: bool,
+}
+
+impl Clone for Element {
+    fn clone(&self) -> Self {
+        match clone_tree(Source::Element(self)) {
+            Node::Element(element) => element,
+            _ => unreachable!("cloning an element yields an element"),
+        }
+    }
+}
+
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        trees_equal(Source::Element(self), Source::Element(other))
+    }
+}
+
+impl Eq for Element {}
+
+/// A copy of `element` with everything but its children.
+fn shell(element: &Element) -> Element {
+    Element {
+        tag: element.tag.clone(),
+        attributes: element.attributes.clone(),
+        content: element.content.clone(),
+        children: Vec::with_capacity(element.children.len()),
+        self_closing: element.self_closing,
+    }
+}
+
+/// An element or fragment whose children are being copied one at a time.
+enum CloneFrame<'a> {
+    Element {
+        source: &'a [Node],
+        built: Element,
+    },
+    Fragment {
+        source: &'a [Node],
+        built: Vec<Node>,
+    },
+}
+
+/// Deep-copies a tree with an explicit stack, in the same shape as the writer.
+pub(crate) fn clone_tree(root: Source<'_>) -> Node {
+    let mut stack: Vec<CloneFrame<'_>> = Vec::new();
+    let mut descend = Some(root);
+
+    loop {
+        // A finished subtree, once there is one, goes into the frame that was waiting for it.
+        let mut finished = None;
+        if let Some(source) = descend.take() {
+            match source {
+                Source::Element(element) | Source::Node(Node::Element(element)) => {
+                    stack.push(CloneFrame::Element {
+                        source: &element.children,
+                        built: shell(element),
+                    });
+                }
+                Source::Node(Node::Fragment(children)) => stack.push(CloneFrame::Fragment {
+                    source: children,
+                    built: Vec::with_capacity(children.len()),
+                }),
+                Source::Node(Node::Text(text)) => finished = Some(Node::Text(text.clone())),
+                Source::Node(Node::Raw(text)) => finished = Some(Node::Raw(text.clone())),
+                Source::Node(Node::Comment(text)) => finished = Some(Node::Comment(text.clone())),
+            }
+        }
+
+        if finished.is_none() {
+            // Take the next child of the innermost open frame, or close the frame.
+            let Some(frame) = stack.last_mut() else {
+                // Only reachable if `root` was a leaf that `finished` already carried out.
+                return Node::Fragment(Vec::new());
+            };
+            let (source, built_len) = match frame {
+                CloneFrame::Element { source, built } => (*source, built.children.len()),
+                CloneFrame::Fragment { source, built } => (*source, built.len()),
+            };
+            if let Some(next) = source.get(built_len) {
+                descend = Some(Source::Node(next));
+                continue;
+            }
+            finished = stack.pop().map(|frame| match frame {
+                CloneFrame::Element { built, .. } => Node::Element(built),
+                CloneFrame::Fragment { built, .. } => Node::Fragment(built),
+            });
+        }
+
+        let Some(done) = finished else { continue };
+        match stack.last_mut() {
+            None => return done,
+            Some(CloneFrame::Element { built, .. }) => built.children.push(done),
+            Some(CloneFrame::Fragment { built, .. }) => built.push(done),
+        }
+    }
+}
+
+/// Structural equality with an explicit stack of pairs still to compare.
+pub(crate) fn trees_equal(left: Source<'_>, right: Source<'_>) -> bool {
+    let mut pending = vec![(left, right)];
+    while let Some((left, right)) = pending.pop() {
+        match (left, right) {
+            (
+                Source::Element(a) | Source::Node(Node::Element(a)),
+                Source::Element(b) | Source::Node(Node::Element(b)),
+            ) => {
+                if a.tag != b.tag
+                    || a.attributes != b.attributes
+                    || a.content != b.content
+                    || a.self_closing != b.self_closing
+                    || a.children.len() != b.children.len()
+                {
+                    return false;
+                }
+                pending.extend(
+                    a.children
+                        .iter()
+                        .zip(&b.children)
+                        .map(|(a, b)| (Source::Node(a), Source::Node(b))),
+                );
+            }
+            (Source::Node(Node::Fragment(a)), Source::Node(Node::Fragment(b))) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                pending.extend(
+                    a.iter()
+                        .zip(b)
+                        .map(|(a, b)| (Source::Node(a), Source::Node(b))),
+                );
+            }
+            (Source::Node(Node::Text(a)), Source::Node(Node::Text(b)))
+            | (Source::Node(Node::Raw(a)), Source::Node(Node::Raw(b)))
+            | (Source::Node(Node::Comment(a)), Source::Node(Node::Comment(b))) => {
+                if a != b {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
 }
 
 impl Element {
@@ -328,6 +470,44 @@ impl Drop for Element {
 
 #[cfg(test)]
 mod tests {
+
+    /// The hand-written `Clone`/`PartialEq` must agree with what the derives did.
+    #[test]
+    fn a_clone_equals_its_source_and_is_independent() {
+        let source = div()
+            .attr("id", "a")
+            .add_class("x y")
+            .child(p().text("t").child(Node::comment("c")))
+            .child(Node::fragment([
+                Node::text("a"),
+                Node::raw("<b>"),
+                Node::fragment([]),
+                span().into(),
+            ]))
+            .child(Node::text("tail"));
+        let copy = source.clone();
+        assert_eq!(source, copy);
+        assert_eq!(source.render(), copy.render());
+
+        let changed = copy.clone().child(Node::text("more"));
+        assert_ne!(source, changed);
+        assert_eq!(source.render(), copy.render(), "the original is untouched");
+    }
+
+    #[test]
+    fn equality_sees_every_field() {
+        let base = div().attr("id", "a").text("t");
+        assert_eq!(base, div().attr("id", "a").text("t"));
+        assert_ne!(base, div().attr("id", "b").text("t"));
+        assert_ne!(base, div().attr("id", "a").text("u"));
+        assert_ne!(base, span().attr("id", "a").text("t"));
+        assert_ne!(base, div().attr("id", "a").text("t").self_closing(true));
+        assert_ne!(Node::text("a"), Node::raw("a"));
+        assert_ne!(Node::text("a"), Node::comment("a"));
+        assert_ne!(Node::fragment([]), Node::fragment([Node::text("")]));
+        assert_eq!(Node::from(base.clone()), Node::from(base));
+    }
+
     use super::*;
     use crate::core::RenderOptions;
     use crate::elements::{

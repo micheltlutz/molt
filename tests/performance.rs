@@ -125,3 +125,98 @@ fn nesting_to_the_documented_depth_renders() {
     assert!(node.render().len() > 256);
     assert!(node.render_pretty().lines().count() > 256);
 }
+
+/// `Document::render_with` used to build `<html>` from clones of head and body. `Clone` is
+/// recursive, so a deep body aborted the process before the writer ran.
+#[test]
+fn a_document_with_a_very_deep_body_renders_in_both_modes() {
+    let page = molt::Document::new(Some("en"))
+        .head_children([title().text("deep")])
+        .body_children([deep_tree(VERY_DEEP)]);
+
+    assert_eq!(
+        page.render_compact().matches("<div>").count(),
+        VERY_DEEP,
+        "compact"
+    );
+    let pretty = page.render_with(&RenderOptions::pretty().with_indent(""));
+    assert_eq!(pretty.lines().count(), VERY_DEEP * 2 + 9, "pretty");
+
+    let mut streamed = Vec::new();
+    page.render_to(&mut streamed, &RenderOptions::compact())
+        .expect("written");
+    assert_eq!(streamed, page.render_compact().into_bytes());
+}
+
+/// `audit` recursed once per level, so it aborted on the tree the renderer handles.
+#[test]
+fn auditing_a_very_deep_tree_does_not_abort() {
+    use molt::accessibility::audit;
+
+    let mut node = Node::from(img().attr("src", "/a.png"));
+    for _ in 0..VERY_DEEP {
+        node = Node::from(div().child(node));
+    }
+    node = Node::fragment([node, Node::from(img().attr("src", "/b.png"))]);
+
+    let issues = audit(&node);
+    assert_eq!(issues.len(), 2);
+    assert!(!node.is_empty());
+}
+
+#[test]
+fn a_chain_of_empty_fragments_is_empty_without_recursing() {
+    let mut node = Node::text("");
+    for _ in 0..VERY_DEEP {
+        node = Node::fragment([node]);
+    }
+    assert!(node.is_empty());
+    // Freed on a thread with a large stack: a bare fragment chain is dropped recursively
+    // (documented in SECURITY.md), which is not what this test is about.
+    std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(move || drop(node))
+        .expect("spawned")
+        .join()
+        .expect("dropped");
+}
+
+/// `Clone`, `PartialEq` and `Debug` were derived, so each recursed once per level. A deep
+/// tree rendered fine and then aborted in `assert_eq!` or `.clone()`.
+// `assert!(a == b)` on purpose: a failing `assert_eq!` would format both trees with the
+// derived, recursive `Debug`, and overflow the stack in the very case under test.
+#[allow(clippy::manual_assert_eq)]
+#[test]
+fn cloning_and_comparing_a_very_deep_tree_does_not_abort() {
+    let tree = deep_tree(VERY_DEEP);
+    let copy = tree.clone();
+    assert!(tree == copy);
+    assert_eq!(copy.render().matches("<div>").count(), VERY_DEEP);
+
+    // A difference at the very bottom is found, and a shorter tree is not equal.
+    let mut different = deep_tree(VERY_DEEP);
+    different = div().child(different);
+    assert!(tree != different);
+    let other_leaf = {
+        let mut node = p().text("other");
+        for _ in 0..VERY_DEEP {
+            node = div().child(node);
+        }
+        node
+    };
+    assert!(tree != other_leaf);
+}
+
+#[allow(clippy::manual_assert_eq)]
+#[test]
+fn cloning_and_comparing_deep_fragments_does_not_abort() {
+    let mut node = Node::from(p().text("bottom"));
+    for _ in 0..VERY_DEEP {
+        node = Node::fragment([node, Node::text("x")]);
+    }
+    // Wrapped in an element so teardown is the iterative one.
+    let root = div().child(node);
+    let copy = root.clone();
+    assert!(root == copy);
+    assert_eq!(copy.render(), root.render());
+}

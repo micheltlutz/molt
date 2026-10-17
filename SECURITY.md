@@ -64,6 +64,11 @@ pretty-prints to tens of gigabytes. If depth comes from untrusted input, bound i
 render compact, or set an empty indent with
 `RenderOptions::pretty().with_indent("")`.
 
+`Document::render`, `audit`, `Clone` and `PartialEq` are iterative as well, so a document, an
+accessibility audit, a copy or a comparison of a 100,000-level tree is safe. **`Debug` is
+not**: `{:?}` (and the failure message of `assert_eq!`) on a tree that deep recurses and
+aborts. Compare with `assert!(a == b)` in tests that build trees that deep.
+
 One residual, and it is not a stack limit on rendering: a bare `Node::Fragment` chain with
 no element anywhere in it is still freed recursively. Giving `Node` its own `Drop` would
 forbid `match node { Node::Element(element) => element }` — a partial move this crate's own
@@ -78,8 +83,6 @@ These are **not** vulnerabilities, because they are documented behaviour:
 - `<script>` and `<style>` content not being escaped by default, matching Winged-Swift.
 - `Attribute::raw` not escaping. It exists for library-controlled keys. It does **not**
   skip the URL check below: a raw `href="javascript&#58;..."` is still rendered as `href="#"`.
-- Rendering a tree deeper than the documented 256 levels. See the limitation above — it is
-  a known bound, not an undisclosed one.
 
 ### URL attributes are checked at write time
 

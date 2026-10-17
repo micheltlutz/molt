@@ -4,6 +4,7 @@
 
 use std::io::{self, Write};
 
+use crate::core::node::write_document_root;
 use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 use crate::elements::{body, head, html_tag};
 
@@ -92,7 +93,15 @@ impl Document {
     pub fn render_with(&self, options: &RenderOptions) -> String {
         let mut out = String::with_capacity(2048);
         out.push_str("<!DOCTYPE html>\n");
-        self.root().write_into(&mut out, options, 0);
+        // Not `self.root().write_into(..)`: that clones head and body, and `Clone` is
+        // recursive, so a deep body aborted the process before anything was written.
+        write_document_root(
+            self.lang.as_deref(),
+            &self.head,
+            &self.body,
+            &mut out,
+            options,
+        );
         out
     }
 
@@ -226,6 +235,33 @@ mod tests {
     use crate::elements::{body, h1, h2, head, img, meta, p, section, title};
 
     /// Ports `DocumentTests.rendersDoctypeAndLanguage`.
+    /// The borrowed-parts writer must produce what rendering a cloned `<html>` tree did.
+    #[test]
+    fn rendering_matches_the_cloned_root_tree_byte_for_byte() {
+        use crate::elements::{div, p, pre, title};
+        let documents = [
+            Document::new(None),
+            Document::new(Some("pt-BR")).head_children([title().text("T")]),
+            Document::new(Some("a\"b")).body_children([div().child(p().text("x")), div()]),
+            Document::new(Some("en")).body_children([Node::fragment([]), Node::text("")]),
+            Document::with_parts(Some("en"), head(), pre().text("  keep  ")),
+            Document::with_parts(None, Element::new("bad tag"), body().text("t")),
+            Document::with_parts(None, head(), body().self_closing(true)),
+        ];
+        for document in &documents {
+            for options in [
+                RenderOptions::pretty(),
+                RenderOptions::compact(),
+                RenderOptions::pretty().with_xhtml_self_closing(true),
+                RenderOptions::compact().with_indent("\t"),
+            ] {
+                let mut expected = String::from("<!DOCTYPE html>\n");
+                document.root().write_into(&mut expected, &options, 0);
+                assert_eq!(document.render_with(&options), expected, "{document:?}");
+            }
+        }
+    }
+
     #[test]
     fn a_document_owns_the_doctype_and_the_lang_attribute() {
         let page = Document::new(Some("pt-BR"));
