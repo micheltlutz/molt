@@ -62,17 +62,20 @@ impl Node {
 
     /// Creates a comment node.
     ///
-    /// Any `--` in the content is replaced with `- -`, so the comment cannot terminate
-    /// early and inject markup.
+    /// A space is put between every two adjacent `-` and after a trailing `-`, so no run of
+    /// two hyphens survives and the comment cannot terminate early and inject markup.
     ///
     /// # Examples
     /// ```
     /// use molt::prelude::*;
     /// assert_eq!(Node::comment("a -- b").render(), "<!-- a - - b -->");
+    /// assert_eq!(Node::comment("x--->").render(), "<!-- x- - -> -->");
     /// ```
     #[must_use]
     pub fn comment(content: impl AsRef<str>) -> Self {
-        Self::Comment(content.as_ref().replace("--", "- -"))
+        let mut neutralised = String::with_capacity(content.as_ref().len());
+        push_neutralised_comment(&mut neutralised, content.as_ref());
+        Self::Comment(neutralised)
     }
 
     /// Creates a transparent group of nodes.
@@ -361,8 +364,29 @@ fn push_pretty_element<'a>(
 
 fn write_comment(out: &mut String, content: &str) {
     out.push_str("<!-- ");
-    out.push_str(content);
+    // `Node::Comment` is a public variant, so the content may not have come through
+    // `Node::comment`. Neutralising again is idempotent and keeps the guarantee in the
+    // writer, where it cannot be bypassed.
+    push_neutralised_comment(out, content);
     out.push_str(" -->");
+}
+
+/// Appends `content` with a space between adjacent `-` and after a trailing `-`.
+///
+/// A single `replace("--", "- -")` is not enough: `---` becomes `- --`, which still holds
+/// `--`, and `--->` still closes the comment.
+fn push_neutralised_comment(out: &mut String, content: &str) {
+    let mut previous_hyphen = false;
+    for c in content.chars() {
+        if c == '-' && previous_hyphen {
+            out.push(' ');
+        }
+        out.push(c);
+        previous_hyphen = c == '-';
+    }
+    if previous_hyphen {
+        out.push(' ');
+    }
 }
 
 fn write_attributes(attributes: &[Attribute], out: &mut String) {
@@ -416,6 +440,35 @@ mod tests {
         let rendered = Node::comment("a --> b").render();
         assert_eq!(rendered.matches("-->").count(), 1);
         assert!(rendered.ends_with("-->"));
+    }
+
+    /// `replace("--", "- -")` turned `--->` into `- -->`, which still closed the comment.
+    #[test]
+    fn a_comment_survives_runs_of_hyphens_and_bang_closers() {
+        for hostile in [
+            "x---><img src=x onerror=alert(1)>",
+            "--!><b>",
+            "a-",
+            "---",
+            "-->",
+            "--",
+        ] {
+            let rendered = Node::comment(hostile).render();
+            let inner = rendered
+                .strip_prefix("<!-- ")
+                .and_then(|r| r.strip_suffix(" -->"));
+            let inner = inner.expect("comment keeps its delimiters");
+            assert!(!inner.contains("--"), "{hostile:?} -> {rendered:?}");
+            assert!(!inner.ends_with('-'), "{hostile:?} -> {rendered:?}");
+        }
+    }
+
+    /// `Node::Comment` is a public variant: building it directly must not bypass the guard.
+    #[test]
+    fn a_directly_built_comment_is_neutralised_by_the_writer() {
+        let rendered = Node::Comment("x---><img onerror=1>".into()).render();
+        assert_eq!(rendered.matches("-->").count(), 1);
+        assert!(rendered.ends_with(" -->"));
     }
 
     /// Ports `FragmentTests.testEmptyFragmentDoesNotLeaveBlankLines`.
