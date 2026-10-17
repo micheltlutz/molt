@@ -104,20 +104,19 @@ pub fn audit(node: &Node) -> Vec<A11yIssue> {
     issues
 }
 
-fn walk(node: &Node, issues: &mut Vec<A11yIssue>) {
-    match node {
-        Node::Element(element) => {
-            check(element, issues);
-            for child in element.children() {
-                walk(child, issues);
+/// Pre-order, with an explicit stack: the renderer is iterative so that a 100,000-level tree
+/// is safe to render, and an audit that recursed would abort the process on the same tree.
+fn walk(root: &Node, issues: &mut Vec<A11yIssue>) {
+    let mut pending = vec![root];
+    while let Some(node) = pending.pop() {
+        match node {
+            Node::Element(element) => {
+                check(element, issues);
+                pending.extend(element.children().iter().rev());
             }
+            Node::Fragment(children) => pending.extend(children.iter().rev()),
+            Node::Text(_) | Node::Raw(_) | Node::Comment(_) => {}
         }
-        Node::Fragment(children) => {
-            for child in children {
-                walk(child, issues);
-            }
-        }
-        Node::Text(_) | Node::Raw(_) | Node::Comment(_) => {}
     }
 }
 

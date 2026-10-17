@@ -22,7 +22,7 @@ use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_s
 /// let node = Node::from(div().text("hi"));
 /// assert_eq!(node.render(), "<div>hi</div>");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Node {
     /// An element with a tag name, attributes and children.
     Element(Element),
@@ -95,9 +95,51 @@ impl Node {
         match self {
             Self::Element(_) | Self::Comment(_) => false,
             Self::Text(s) | Self::Raw(s) => s.is_empty(),
-            Self::Fragment(children) => children.iter().all(Self::is_empty),
+            Self::Fragment(children) => {
+                // Iterative: a chain of nested fragments, which nothing else bounds, must
+                // not cost a stack frame per level.
+                let mut pending: Vec<&Node> = children.iter().collect();
+                while let Some(node) = pending.pop() {
+                    match node {
+                        Self::Element(_) | Self::Comment(_) => return false,
+                        Self::Text(s) | Self::Raw(s) => {
+                            if !s.is_empty() {
+                                return false;
+                            }
+                        }
+                        Self::Fragment(children) => pending.extend(children),
+                    }
+                }
+                true
+            }
         }
     }
+}
+
+// `Clone` and `PartialEq` are written by hand, not derived: the derives recurse once per
+// level and a stack overflow is an abort, so comparing or copying a tree the renderer
+// handles fine would have killed the process. `Debug` is still derived — formatting a
+// tree that deep is a diagnostic nobody reads, and `{:?}` on one is documented as unsafe
+// in `SECURITY.md`.
+impl Clone for Node {
+    fn clone(&self) -> Self {
+        crate::core::element::clone_tree(Source::Node(self))
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        crate::core::element::trees_equal(Source::Node(self), Source::Node(other))
+    }
+}
+
+impl Eq for Node {}
+
+/// Where an iterative tree walk starts: a node, or an element that has no `Node` around it.
+#[derive(Clone, Copy)]
+pub(crate) enum Source<'a> {
+    Node(&'a Node),
+    Element(&'a Element),
 }
 
 impl From<Element> for Node {
@@ -154,6 +196,51 @@ pub(crate) fn write_element_tree(
     );
 }
 
+/// Writes `<html>` around a borrowed `head` and `body`, without copying either.
+///
+/// `Document::root` builds the same tree by cloning both, and cloning is recursive, so
+/// rendering a document with a deep body aborted in `Clone` before the writer ran. The
+/// bytes are identical to rendering that tree: this queues the same steps
+/// `push_compact_element`/`push_pretty_element` would for an `<html>` with two children.
+pub(crate) fn write_document_root(
+    lang: Option<&str>,
+    head: &Element,
+    body: &Element,
+    out: &mut String,
+    options: &RenderOptions,
+) {
+    if options.pretty {
+        options.write_indent(out, 0);
+    }
+    out.push_str("<html");
+    if let Some(lang) = lang {
+        Attribute::new("lang", lang).write_into(out);
+    }
+    out.push('>');
+
+    // The stack is a LIFO: the last step pushed runs first.
+    let steps = if options.pretty {
+        vec![
+            Step::ClosePretty("html", 0),
+            Step::PrettyChildElement {
+                element: body,
+                depth: 1,
+            },
+            Step::PrettyChildElement {
+                element: head,
+                depth: 1,
+            },
+        ]
+    } else {
+        vec![
+            Step::Close("html"),
+            Step::CompactElement(body),
+            Step::CompactElement(head),
+        ]
+    };
+    run_steps(steps, out, options);
+}
+
 /// One unit of work for the writer.
 ///
 /// The writer used to recurse once per nesting level, which made tree depth a stack
@@ -185,6 +272,9 @@ enum Step<'a> {
         depth: usize,
         group_start: Option<usize>,
     },
+    /// An element child of a borrowed parent, in pretty mode: [`Step::PrettyChild`] for
+    /// callers that hold `&Element` and have no `Node` to point at.
+    PrettyChildElement { element: &'a Element, depth: usize },
     /// Truncates back to `mark` when nothing was appended after `after`.
     ///
     /// This replaces rendering each child into a scratch buffer to test it for emptiness:
@@ -198,11 +288,15 @@ enum Step<'a> {
 fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
     let mut stack = Vec::with_capacity(16);
     stack.push(start);
+    run_steps(stack, out, options);
+}
+
+/// Runs a prepared stack to completion.
+fn run_steps(mut stack: Vec<Step<'_>>, out: &mut String, options: &RenderOptions) {
     // How many raw-text elements (`noscript`, `script`, …) enclose the node being written.
     // Their descendants' attribute values get `<` and `>` escaped; see
     // `Attribute::write_into_in`.
     let mut raw_text_depth = 0usize;
-
     while let Some(step) = stack.pop() {
         match step {
             // Escaped text and verbatim markup write the same way; they differ only in
@@ -286,6 +380,13 @@ fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
                 // Pushed first so it runs last: the child goes on top of it.
                 stack.push(Step::DropIfEmpty { mark, after });
                 stack.push(Step::Pretty(node, depth));
+            }
+            Step::PrettyChildElement { element, depth } => {
+                let mark = out.len();
+                out.push('\n');
+                let after = out.len();
+                stack.push(Step::DropIfEmpty { mark, after });
+                stack.push(Step::PrettyElement(element, depth));
             }
             Step::DropIfEmpty { mark, after } => {
                 if out.len() == after {

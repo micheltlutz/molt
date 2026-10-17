@@ -24,7 +24,7 @@ use crate::seo::SeoBuilder;
 /// do in Rust:
 ///
 /// ```js
-/// const card = wElement("div").addClass("card").child(wElement("h1").text("Hi"));
+/// const card = element("div").addClass("card").child(element("h1").text("Hi"));
 /// card.render();  // '<div class="card"><h1>Hi</h1></div>'
 /// ```
 #[wasm_bindgen(js_name = WElement)]
