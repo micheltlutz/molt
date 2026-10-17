@@ -7,7 +7,8 @@ the lesson is forgotten; `scripts/check-knowledge-base.sh` verifies the guards s
 Issue numbers are `micheltlutz/molt` issues; PR numbers are the pull requests that closed them.
 
 Batch A = correctness and security (S1–S6, B1–B5). Batch B = the public API before 1.0 (A1–A10,
-W1–W2). Batch C = performance, measured (P0 onward).
+W1–W2). Batch C = performance, measured (P0 onward). Batch D = the remaining security work
+(S7–S11).
 
 ---
 
@@ -292,6 +293,101 @@ optimisation is not.
 
 ---
 
+## Batch D — Security hardening
+
+### L25. A guard that has to know where it is: pass the context
+
+(S7, #25, PR #66)
+
+`data:image/svg+xml` is inert as an `<img src>` and runs script as an `<iframe src>`. A URL
+policy that sees only the attribute name and value cannot tell them apart, so it is wrong in
+one direction whatever you choose: block it everywhere and legitimate inline SVG images break;
+allow it everywhere and frames run script. `is_blocked_in(tag, key, value)` takes the element,
+and the writer passes `element.tag()` (the same trick as the raw-text ancestor counter, L3).
+`is_blocked(key, value)` stays as the context-free form. Other items in the same PR: `srcset`
+must be checked per candidate, because normalising the whole value deletes the spaces that
+separate candidates; `srcdoc` is markup, not a URL, so its replacement is empty, not `#`.
+
+Say what you did **not** do. `<meta http-equiv=refresh content="0;url=javascript:…">` is left
+alone because the HTML specification tells browsers to ignore a `javascript:` URL there, and
+checking it needs the element's other attributes. That reasoning is in `SECURITY.md`.
+
+- **Guard.** `data_documents_are_blocked_where_they_run_and_allowed_where_they_do_not`,
+  `srcdoc_is_blocked_unless_it_is_opted_into`, `srcset_is_checked_one_candidate_at_a_time`
+
+### L26. Pick the escaper for the language the text will be read in
+
+(S8, #26, PR #67)
+
+JSON inside `<script>` is read by the HTML parser first and by a JSON parser second.
+HTML-escaping (`&lt;`) is wrong: JSON does not decode entities, so the data changes. Raw is
+wrong: `</script>` ends the element. The right escaper writes `<`, `>`, `&` and U+2028/2029 as
+JSON `\uXXXX` escapes, which the HTML parser does not see and the JSON parser reads back as
+the same characters. That is a fourth escaper, `escape_json_script`, deliberately separate from
+the three HTML/XML ones (AGENTS.md rule 3). It does not validate the JSON (no dependency); it
+makes valid JSON safe to embed. Untrusted text inside script *code* has no safe form, and the
+docs say so.
+
+- **Guard.** `json_ld_cannot_be_broken_out_of_by_a_value`,
+  `json_ld_keeps_the_document_and_only_rewrites_what_is_dangerous`
+
+### L27. Reject what the format cannot represent, not only what is dangerous
+
+(S9, #27, PR #65)
+
+One control character in a feed title is not an XSS, but it makes the XML ill-formed and a
+reader rejects every entry. `escape_xml` drops the characters XML 1.0 cannot hold (listed in
+its docs; boundaries tested on both sides, including U+FFFD and U+10000 which are legal).
+Links in a sitemap or feed must be absolute `http(s)`, because readers render them as
+something to click. And a **parity test can encode a bug**: the ported test expected
+`isPermaLink="true"` for `urn:uuid:1234`; the RSS 2.0 specification makes `true` a promise
+that readers may open the guid, so the Rust test now expects `false`, says so in its comment,
+and the divergence is listed in `PORTING.md` §12. Check the specification before copying a
+ported assertion.
+
+- **Guard.** `xml_drops_exactly_the_characters_xml_1_0_cannot_hold`,
+  `a_link_that_is_not_http_is_left_out_of_the_feed`, `an_explicit_guid_wins_over_the_link`
+
+### L28. An opt-in counter in the hot loop: monomorphise it away
+
+(S10, #28, PR #64)
+
+`with_max_depth` needs a count of open elements. Incrementing and decrementing it for every
+element cost **+6–7%** on the 10,000-item benchmark, and moving the test around inside the
+`match` did not help; the cost was the counter itself. Making the writer generic over a
+`const LIMITED: bool` compiles two copies: the unlimited one has no counter at all. Result:
+within noise. Measure, then try the structural fix, and keep the benchmark number in the PR.
+The same change turned `indent` into a private field filtered in `with_indent` (spaces and
+tabs, at most 16): a pub `String` that is written at the start of every line is an injection
+point (L11), and `renderWithIndent(untrusted)` from JavaScript was one.
+
+- **Guard.** `an_indent_that_is_not_whitespace_is_dropped`,
+  `a_depth_limit_gives_the_same_bytes_streamed_and_whole`,
+  `a_depth_limit_drops_what_is_deeper_in_both_modes`
+
+### L29. Supply chain: resolve pins from the source, and say what you could not run
+
+(S11, #29, PR #68)
+
+34 action references were pinned to commit SHAs, each resolved with
+`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha` and written with the version in a
+comment. Two actions select behaviour by **branch name** (`dtolnay/rust-toolchain@stable`,
+`taiki-e/install-action@cargo-deny`); once pinned by SHA the name is gone, so the choice moves
+into `with: toolchain:` / `with: tool:`. Other changes: `permissions: contents: read`,
+`persist-credentials: false`, job timeouts, the release refuses a tag off `main` or without a
+green CI run, and `id-token: write` only where it is used.
+
+A workflow cannot be run locally. Say which changes were only syntax-checked (`release.yml`,
+`docs.yml`) and which have a real test (`ci.yml`, once CI runs on it). And remember that CI
+only triggers for the branches it names: **stacked PRs whose base is not `main`/`develop` get
+no CI**, so the one that changes the workflow must be checked after the chain lands. Do not
+guess a permission scope you cannot confirm (`configure-pages` kept `pages: write`).
+
+- **Guard.** `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
+  `scripts/check-knowledge-base.sh`
+
+---
+
 ## Process lessons
 
 ### L17. Chain commands with `&&` when a failure must stop the chain
@@ -345,3 +441,15 @@ Both fixes were merged without coverage; a knowledge-base guard check found it l
   test_x"` finds it.
 - **Guard.** `scripts/check-knowledge-base.sh`, `an_unsafe_tag_name_renders_nothing`,
   `angle_brackets_in_attributes_are_escaped_only_under_raw_text_parents`
+
+### L30. Scripted anchors drift when an earlier change lands in between
+
+While adding the URL policy I matched `BLOCKED_SCHEMES … ;\n\n/// The value written…` and it
+did not match, because the previous PR (S9) had inserted a function between those two lines.
+It failed loudly **because the script asserted the anchor** (L21), nothing was written, and
+the fix was to read the file as it is now. Also: the shell here is zsh, which does not
+word-split an unquoted variable, so `set -- $pair` silently produced one argument and the
+first batch of `gh api` calls hit URLs like `.../commits/v7@`. When a command "works" but
+returns nonsense, check the shell semantics before the data.
+
+- **Guard.** `scripts/check-knowledge-base.sh`

@@ -87,6 +87,29 @@ lose.
   **no larger initial stack** (P9, #38): each analysed or measured with no win, recorded on its
   issue.
 
+## Batch D — security hardening
+
+- **The URL policy takes the element's tag** (S7). `is_blocked_in(tag, key, value)`, with
+  `is_blocked` kept tag-free. *Why:* `data:image/svg+xml` is inert on `<img>` and runs script in
+  `iframe`/`frame`/`embed`/`object`. *Diverges from* Winged-Swift 3.0.1, which blocks only
+  `data:text/html` (`PORTING.md` §9).
+- **`srcdoc` is written empty unless `trusted_url`** (S7), not replaced by `#`.
+- **`meta refresh` is not checked** (S7): the HTML spec makes browsers ignore `javascript:`
+  there. *Changes if:* a browser is found to honour it.
+- **`escape_json_script` is a fourth escaper and does not validate** (S8). *Why:* HTML escaping
+  corrupts JSON; validating needs a parser dependency this crate does not have.
+- **A non-`http(s)` sitemap `loc` or feed `link` is omitted, not repaired** (S9), and
+  `isPermaLink` is `true` only for an `http(s)` guid. *Diverges from* Winged-Swift
+  (`PORTING.md` §12). Sitemap limits are exposed (`MAX_URLS`, `MAX_BYTES`, `chunks`) rather
+  than enforced by silent truncation.
+- **`RenderOptions::indent` is private; `max_depth` is opt-in** (S10). *Why:* the indent is
+  written on every line; a depth bound is what limits O(depth²) output. The depth counter
+  exists only in the `LIMITED` monomorphisation (zero cost otherwise).
+- **Actions pinned by SHA; the release gates on `main` and green CI; Trusted Publishing is
+  not switched on** (S11). *Why not:* it needs a crates.io setting only the owner can make, and
+  switching the workflow first would break releases. *Owner's steps:* required reviewers on the
+  `release` environment; register the Trusted Publisher; then retire `CARGO_REGISTRY_TOKEN`.
+
 ## Open decisions (not taken yet)
 
 - Whether `Box<Element>` inside `Node` is worth a visible change to the public enum (needs a
