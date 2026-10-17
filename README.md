@@ -12,6 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-dea584.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
+[![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
 Fast, type-safe HTML generation for Rust — and for the browser, through WebAssembly.
 
@@ -208,7 +209,27 @@ cargo bench                # render performance
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`AGENTS.md`](AGENTS.md) if you are an agent.
+Molt is open source and contributions are welcome — a bug report with the input that
+triggered it is as useful as a patch.
+
+- **Found a bug or want a feature?** [Open an issue](https://github.com/micheltlutz/molt/issues).
+  The [`1.0.0` milestone](https://github.com/micheltlutz/molt/milestone/1) lists what is
+  planned.
+- **Found a security problem?** Please do not open a public issue; use
+  [a private security advisory](https://github.com/micheltlutz/molt/security/advisories/new).
+  See [`SECURITY.md`](SECURITY.md).
+- **Sending code?** Branch from `develop`, add a test that asserts on the rendered markup, and
+  run `./scripts/verify.sh` before you open the pull request. The rules and the reasons behind
+  them are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Using an AI agent?** Point it at [`AGENTS.md`](AGENTS.md) and the knowledge base in
+  [`.claude/skills/molt`](.claude/skills/molt/SKILL.md): security rules, Rust practices and the
+  lessons learned getting to 1.0.
+
+### Support the project
+
+If Molt saves you time, you can help keep it maintained by
+**[sponsoring on GitHub](https://github.com/sponsors/micheltlutz)**. Starring the repository,
+sharing it, and telling me what you built with it help just as much.
 
 ## License
 
