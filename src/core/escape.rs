@@ -176,14 +176,43 @@ pub fn escape_attribute(input: &str) -> Cow<'_, str> {
 /// Differs from [`escape_text`] in one character: `'` becomes `&apos;`, which is an XML
 /// entity, rather than `&#x27;`.
 ///
+/// It also **drops** the characters XML 1.0 cannot represent at all, even escaped: the
+/// control characters U+0000–U+0008, U+000B, U+000C and U+000E–U+001F, and the
+/// non-characters U+FFFE and U+FFFF. One of them in a title makes the whole document
+/// ill-formed, so a feed reader or crawler rejects every entry, not just that one. Tab,
+/// newline and carriage return are legal and kept.
+///
 /// # Examples
 /// ```
 /// use molt::core::escape::escape_xml;
 /// assert_eq!(escape_xml("Tom & Jerry's <show>"), "Tom &amp; Jerry&apos;s &lt;show&gt;");
+/// assert_eq!(escape_xml("a\u{0}b\u{8}c\u{FFFE}d\te"), "abcd\te");
 /// ```
 #[must_use]
 pub fn escape_xml(input: &str) -> Cow<'_, str> {
-    escape_with(input, xml_entity)
+    if !input.chars().any(needs_xml_change) {
+        return Cow::Borrowed(input);
+    }
+    let mut out = String::with_capacity(input.len() + input.len() / 4 + 16);
+    for c in input.chars() {
+        if is_xml_illegal(c) {
+            continue;
+        }
+        match u8::try_from(c).ok().and_then(xml_entity) {
+            Some(entity) => out.push_str(entity),
+            None => out.push(c),
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// Whether XML 1.0 has no way to write `c`, escaped or not.
+fn is_xml_illegal(c: char) -> bool {
+    matches!(c, '\u{0}'..='\u{8}' | '\u{B}' | '\u{C}' | '\u{E}'..='\u{1F}' | '\u{FFFE}' | '\u{FFFF}')
+}
+
+fn needs_xml_change(c: char) -> bool {
+    is_xml_illegal(c) || u8::try_from(c).ok().and_then(xml_entity).is_some()
 }
 
 /// Appends escaped HTML text to an existing buffer.
@@ -211,6 +240,41 @@ pub(crate) fn write_escaped_attribute(out: &mut String, input: &str) {
 
 #[cfg(test)]
 mod tests {
+    /// The boundaries of XML 1.0's `Char` production, one on each side.
+    #[test]
+    fn xml_drops_exactly_the_characters_xml_1_0_cannot_hold() {
+        for illegal in [
+            '\u{0}', '\u{8}', '\u{B}', '\u{C}', '\u{E}', '\u{1F}', '\u{FFFE}', '\u{FFFF}',
+        ] {
+            assert_eq!(
+                escape_xml(&format!("a{illegal}b")),
+                "ab",
+                "U+{:04X}",
+                illegal as u32
+            );
+        }
+        for legal in [
+            '\t',
+            '\n',
+            '\r',
+            ' ',
+            '\u{7F}',
+            '\u{80}',
+            '\u{FFFD}',
+            '\u{10000}',
+            'é',
+        ] {
+            assert_eq!(
+                escape_xml(&format!("a{legal}b")),
+                format!("a{legal}b"),
+                "U+{:04X}",
+                legal as u32
+            );
+        }
+        assert!(matches!(escape_xml("plain"), std::borrow::Cow::Borrowed(_)));
+        assert_eq!(escape_xml("<\u{0}&"), "&lt;&amp;");
+    }
+
     /// Text with nothing to escape comes back borrowed: no allocation, no copy.
     #[test]
     fn clean_input_is_returned_without_allocating() {

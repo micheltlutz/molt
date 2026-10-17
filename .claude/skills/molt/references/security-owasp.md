@@ -20,7 +20,8 @@ a new such place, add a row *and* a test.
 | tag **name** | `Element::new`, `new WElement` | element dropped unless letter + `[A-Za-z0-9-_.:]*` | `tags::is_valid_tag_name` |
 | comment body | `Node::comment` | no adjacent hyphens, no trailing hyphen | `node.rs` |
 | `<meta>` name/value | `meta_name`, … | `Attribute::new` (escaped) | `src/seo.rs` |
-| XML text | sitemap, RSS | `escape_xml` (`'` → `&apos;`) | `sitemap.rs`, `feed.rs` |
+| XML text | sitemap, RSS | `escape_xml` (`'` → `&apos;`; XML-illegal characters dropped) | `sitemap.rs`, `feed.rs` |
+| sitemap `<loc>`, RSS `<link>` | `SitemapUrl`, `RssItem`, `RssGenerator` | omitted unless absolute `http(s)` (`url_policy::is_http_url`) | `sitemap.rs`, `feed.rs` |
 | output file path | `StaticSiteGenerator::*` | component whitelist, symlink refusal, atomic write | `src/ssg.rs` |
 | indent string | `RenderOptions::with_indent` | only spaces and tabs, at most 16; the field is private | `render.rs`, `wasm.rs` |
 | nesting depth | any tree | `RenderOptions::with_max_depth` drops deeper elements (opt-in) | `render.rs`, `node.rs` |
@@ -107,8 +108,9 @@ No network access in the library.
 - Depth: rendering, audit, clone, eq, hash and drop are iterative; 100,000 levels are tested.
 - Output: pretty mode is O(depth²) in output size (an indent per level per line). Bound depth
   from untrusted input with `with_max_depth`, render compact, or set an empty indent.
-- XML: characters illegal in XML 1.0 are not yet removed (#27), so one stray control character
-  can make a feed unparseable.
+- XML: `escape_xml` drops the characters XML 1.0 cannot hold, links must be `http(s)`, and the
+  sitemap limits are `MAX_URLS`/`MAX_BYTES` with `chunks` (S9). A single stray control
+  character used to make a whole feed unparseable.
 
 ## Reviewing a diff for security (5 minutes)
 
