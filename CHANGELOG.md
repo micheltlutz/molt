@@ -7,13 +7,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-17
+
 ### Renamed
 
-- **winged-rust is now Molt.** The crate and the npm package are `molt`, the Rust path is
-  `molt::`, the WebAssembly files are `molt.js` / `molt_bg.wasm`, and the repository moved
-  to [micheltlutz/molt](https://github.com/micheltlutz/molt). `WINGED_UPDATE_FIXTURES` is
-  now `MOLT_UPDATE_FIXTURES` and `WINGED_WASM_BUDGET_KB` is `MOLT_WASM_BUDGET_KB`. Issue
-  links below still point to the winged-rust repository, where those issues live.
+- **winged-rust is now Molt.** The crate is published as `molt-framework` (`molt` on
+  crates.io is an unrelated project) and imported as `molt::`. The WebAssembly files are
+  `molt.js` / `molt_bg.wasm`, and the repository moved to
+  [micheltlutz/molt](https://github.com/micheltlutz/molt). `WINGED_UPDATE_FIXTURES` is now
+  `MOLT_UPDATE_FIXTURES` and `WINGED_WASM_BUDGET_KB` is `MOLT_WASM_BUDGET_KB`. Issue links
+  below still point to the winged-rust repository, where those issues live.
+
+### Removed
+
+- The npm package. The `wasm` feature and `scripts/build-wasm.sh` stay; the build now goes
+  to `pkg/{web,node,bundler}` and is not published.
 
 ### Added
 
@@ -35,10 +43,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The release workflow verifies in a job with no registry token, then publishes from a
-  fresh build with `cargo publish --locked --no-verify` via crates.io Trusted Publishing.
-  Registering the `release` environment on crates.io and retiring `CARGO_REGISTRY_TOKEN`
-  is a manual step.
+- The release workflow verifies (including `cargo publish --dry-run`) in a job with no
+  registry token, then publishes from a fresh build with `cargo publish --locked
+  --no-verify`, reading the `CARGO_REGISTRY_TOKEN` repository secret. CI runs the same
+  dry run on every push.
 
 ## [1.0.1] - 2026-09-21
 

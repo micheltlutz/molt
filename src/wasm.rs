@@ -8,9 +8,9 @@
 //! API is limited to the two element types the spec hard-codes.
 //!
 //! These bindings wrap the real [`Element`] and [`Document`] behind opaque handles instead.
-//! JavaScript therefore drives the *same* renderer as Rust does, which is what lets the
-//! Node smoke test diff its output against the same golden fixture the Rust tests use. If
-//! native and WASM ever diverge, that diff catches it.
+//! JavaScript therefore drives the *same* renderer as Rust does, which is what lets
+//! `tests/wasm.rs` build one document through both APIs and compare the bytes. If native and
+//! WASM ever diverge, that comparison catches it.
 
 use wasm_bindgen::prelude::*;
 

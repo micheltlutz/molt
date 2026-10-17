@@ -70,7 +70,7 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-molt = { path = "$PWD" }
+molt-framework = { path = "$PWD" }
 
 [workspace]
 TOML

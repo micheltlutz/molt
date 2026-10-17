@@ -280,8 +280,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "molt"
-version = "1.0.1"
+name = "molt-framework"
+version = "1.1.0"
 dependencies = [
  "criterion",
  "rayon",

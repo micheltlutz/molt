@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { element, WDocument, WSeo } = require(join(here, "../../npm/node/molt.js"));
+const { element, WDocument, WSeo } = require(join(here, "../../pkg/node/molt.js"));
 
 const OUT = join(here, "dist");
 const SITE = "https://ridekeeper.example";

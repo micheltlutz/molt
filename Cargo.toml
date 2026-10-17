@@ -1,20 +1,33 @@
 [package]
-name = "molt"
-version = "1.0.1"
+name = "molt-framework"
+version = "1.1.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Michel Anderson Lutz Teixeira <michel@micheltlutz.me>"]
 description = "Fast, type-safe HTML DSL and static site generation engine in Rust and WebAssembly"
-documentation = "https://docs.rs/molt"
+documentation = "https://docs.rs/molt-framework"
 repository = "https://github.com/micheltlutz/molt"
 homepage = "https://github.com/micheltlutz/molt"
 license = "MIT"
 readme = "README.md"
 keywords = ["html", "dsl", "wasm", "static-site", "templating"]
 categories = ["web-programming", "template-engine", "wasm"]
-exclude = ["/.github", "/scripts", "/examples/web", "/npm", "MOLT_SPEC.md", "molt-logo.jpg"]
+exclude = [
+    "/.github",
+    "/scripts",
+    "/examples/web",
+    "/examples/node",
+    "/fuzz",
+    "/docs/plans",
+    "MOLT_SPEC.md",
+    "molt-logo.jpg",
+    "*.code-workspace",
+]
 
+# `molt` on crates.io is an unrelated TCL interpreter, so the package is published as
+# `molt-framework` while the library keeps the short name: `use molt::prelude::*`.
 [lib]
+name = "molt"
 crate-type = ["cdylib", "rlib"]
 
 [features]

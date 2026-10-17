@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-molt = { path = ".." }
+molt-framework = { path = ".." }
 
 [[bin]]
 name = "escape_text"

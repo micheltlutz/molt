@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds the WebAssembly package for all three JavaScript environments and reports the
+# Builds the WebAssembly bindings for all three JavaScript environments and reports the
 # gzipped size of each.
 #
 # A WebAssembly library nobody can afford to load is not a shipped library, so the size is
@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUDGET_KB="${MOLT_WASM_BUDGET_KB:-120}"
-OUT="npm"
+OUT="pkg"
 
 for target in web nodejs bundler; do
   case "$target" in
@@ -45,15 +45,5 @@ for dir in web node bundler; do
     FAILED=1
   fi
 done
-
-# wasm-pack writes a package.json into each out-dir; ours is the one that ships.
-for dir in web node bundler; do
-  rm -f "$OUT/$dir/package.json" "$OUT/$dir/.gitignore" "$OUT/$dir/README.md"
-done
-
-# `--target nodejs` emits CommonJS while the package itself is ESM ("type": "module"), so
-# Node needs a nested marker telling it how to read this one directory. This is the
-# standard way to ship both module systems from one package.
-printf '{ "type": "commonjs" }\n' > "$OUT/node/package.json"
 
 exit "$FAILED"

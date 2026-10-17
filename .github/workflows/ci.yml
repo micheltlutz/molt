@@ -62,25 +62,19 @@ jobs:
       - uses: taiki-e/install-action@wasm-pack
       - run: cargo build --features wasm --target wasm32-unknown-unknown
       - run: wasm-pack test --node -- --features wasm
+      # Builds all three targets and fails if the gzipped size exceeds the budget.
+      - run: ./scripts/build-wasm.sh
 
-  npm:
-    name: NPM package
+  package:
+    name: Package (cargo publish --dry-run)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@wasm-pack
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      # Builds all three targets and fails if the gzipped size exceeds the budget.
-      - run: ./scripts/build-wasm.sh
-      # tsc over the generated typings, then installs a packed tarball into a throwaway
-      # project and renders the golden page through it.
-      - run: ./scripts/verify-npm.sh
+      # Builds the crate from the tarball crates.io would receive, so a file left out by
+      # `exclude` or a broken manifest fails here instead of in the release job.
+      - run: cargo publish --locked --dry-run
 
   verify:
     name: Verify (build, test, lint, catalog, smoke)

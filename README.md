@@ -1,14 +1,13 @@
 <p align="center">
-  <img src="molt-logo.jpg" alt="Molt — High-Performance Rust Web Framework" width="520">
+  <img src="https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.jpg" alt="Molt — High-Performance Rust Web Framework" width="520">
 </p>
 
 # Molt
 
 > **High-Performance Rust Web Framework**
 
-[![crates.io](https://img.shields.io/crates/v/molt.svg?logo=rust)](https://crates.io/crates/molt)
-[![docs.rs](https://img.shields.io/docsrs/molt?logo=docsdotrs)](https://docs.rs/molt)
-[![npm](https://img.shields.io/npm/v/molt.svg?logo=npm)](https://www.npmjs.com/package/molt)
+[![crates.io](https://img.shields.io/crates/v/molt-framework.svg?logo=rust)](https://crates.io/crates/molt-framework)
+[![docs.rs](https://img.shields.io/docsrs/molt-framework?logo=docsdotrs)](https://docs.rs/molt-framework)
 [![CI](https://github.com/micheltlutz/molt/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/micheltlutz/molt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-dea584.svg)](https://www.rust-lang.org)
@@ -113,18 +112,21 @@ problem. `Node` is a value type, so bulk generation parallelises safely — that
 
 ## Install
 
-The crate is on [crates.io](https://crates.io/crates/molt), its API documentation on
-[docs.rs](https://docs.rs/molt), and the WebAssembly build on
-[npm](https://www.npmjs.com/package/molt).
+The crate is on [crates.io](https://crates.io/crates/molt-framework) and its API
+documentation on [docs.rs](https://docs.rs/molt-framework). It is published as
+`molt-framework` — `molt` on crates.io is an unrelated project — and imported as `molt`.
 
 ```toml
 [dependencies]
-molt = "1.0"
+molt-framework = "1.1"
 ```
 
 ```bash
-cargo add molt      # Rust
-npm install molt    # WebAssembly, see below
+cargo add molt-framework
+```
+
+```rust
+use molt::prelude::*;
 ```
 
 Features:

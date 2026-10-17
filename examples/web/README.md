@@ -4,7 +4,7 @@ A single page that loads the WebAssembly build and renders markup in the browser
 live-editable builder snippet.
 
 ```bash
-./scripts/build-wasm.sh          # produces npm/web/
+./scripts/build-wasm.sh          # produces pkg/web/
 python3 -m http.server           # from the repository root
 # then open http://localhost:8000/examples/web/
 ```
