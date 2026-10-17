@@ -125,6 +125,18 @@ table of [`MIGRATION.md`](MIGRATION.md).
   slower (still ~400 MB/s).
 - `Attribute::raw` is documented as one of the three escape hatches, with the reason.
 
+- The published crate leaves out development tooling: `rust-toolchain.toml` (it made rustup
+  install a wasm target and extra components for anyone building inside the unpacked tarball),
+  `AGENTS.md`, `CLAUDE.md`, `clippy.toml`, `rustfmt.toml`, `deny.toml` and `codecov.yml`. The
+  tests run from the extracted tarball: 480 pass.
+- `core::url_policy::is_http_url` no longer ignores leading whitespace. It is an allow list
+  used to decide what a sitemap or feed may link to, and a reader that does not trim would
+  read `"\thttps://…"` as a relative path.
+- CI builds the documentation the way docs.rs does (nightly, every feature, `--cfg docsrs`).
+- `tests/invariants.rs`: property tests that run the escapers, the URL policy, the tag and
+  attribute writers, the XML generators and the static site generator on tens of thousands of
+  hostile inputs per run, from a fixed seed, on every platform.
+
 ### Not changed, deliberately
 
 `panic = "abort"`, the three HTML/XML escapers, `escape_attribute` leaving `<` and `>` alone
