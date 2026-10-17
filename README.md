@@ -15,7 +15,9 @@
 
 Fast, type-safe HTML generation for Rust — and for the browser, through WebAssembly.
 
-A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 2.0.0: the same
+📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework)
+
+A port of [Winged-Swift](https://github.com/micheltlutz/Winged-Swift) 3.0.1: the same
 composite tree, the same escape-by-default guarantee, the same compact and pretty render
 modes. Verified against the Swift project's own golden fixtures, byte for byte.
 
@@ -41,14 +43,6 @@ For this project, the name marks a shift in architecture and mindset:
 
 > *Molt is about honoring our origins, shedding unnecessary overhead, and embracing maximum
 > performance.*
-
-### Brand
-
-The logo is a continuous-line geometric mark that combines a lightning bolt (speed), wings
-(lightness, and the Winged-Swift lineage), a gear (Rust engineering) and crab claws
-(Ferris). The primary colour is deep navy/slate (`#1A2B3C`) on white. The typeface is
-[Montserrat](https://fonts.google.com/specimen/Montserrat): Semi-Bold or Bold for the name,
-Light or Regular with +12% tracking for the tagline.
 
 ```rust
 use molt::prelude::*;
