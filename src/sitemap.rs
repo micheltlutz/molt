@@ -6,14 +6,100 @@ use std::fmt::Write as _;
 
 use crate::core::escape::escape_xml;
 
+/// How often a page is expected to change, as the sitemap protocol spells it.
+///
+/// An enum rather than a string so `"weakly"` is a compile error instead of a sitemap that
+/// search engines quietly ignore. Use [`str::parse`] when the value arrives as text.
+///
+/// # Examples
+/// ```
+/// use molt::sitemap::ChangeFreq;
+/// assert_eq!(ChangeFreq::Weekly.as_str(), "weekly");
+/// assert_eq!("monthly".parse::<ChangeFreq>(), Ok(ChangeFreq::Monthly));
+/// assert!("weakly".parse::<ChangeFreq>().is_err());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ChangeFreq {
+    /// `always` — changes on every access.
+    Always,
+    /// `hourly`.
+    Hourly,
+    /// `daily`.
+    Daily,
+    /// `weekly`.
+    Weekly,
+    /// `monthly`.
+    Monthly,
+    /// `yearly`.
+    Yearly,
+    /// `never` — archived content.
+    Never,
+}
+
+impl ChangeFreq {
+    /// The value written between `<changefreq>` tags.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::Hourly => "hourly",
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Yearly => "yearly",
+            Self::Never => "never",
+        }
+    }
+}
+
+impl std::fmt::Display for ChangeFreq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// The text was not one of the seven values the protocol defines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseChangeFreqError(String);
+
+impl std::fmt::Display for ParseChangeFreqError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?} is not a change frequency (always, hourly, daily, weekly, monthly, yearly, never)",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseChangeFreqError {}
+
+impl std::str::FromStr for ChangeFreq {
+    type Err = ParseChangeFreqError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        Ok(match text {
+            "always" => Self::Always,
+            "hourly" => Self::Hourly,
+            "daily" => Self::Daily,
+            "weekly" => Self::Weekly,
+            "monthly" => Self::Monthly,
+            "yearly" => Self::Yearly,
+            "never" => Self::Never,
+            other => return Err(ParseChangeFreqError(other.to_owned())),
+        })
+    }
+}
+
 /// One entry in a sitemap.
 ///
 /// # Examples
 /// ```
-/// use molt::sitemap::{SitemapGenerator, SitemapUrl};
+/// use molt::sitemap::{ChangeFreq, SitemapGenerator, SitemapUrl};
 ///
 /// let xml = SitemapGenerator::generate(&[
-///     SitemapUrl::new("https://example.com/").changefreq("weekly").priority(1.0),
+///     SitemapUrl::new("https://example.com/").changefreq(ChangeFreq::Weekly).priority(1.0),
 /// ]);
 /// assert!(xml.contains("<priority>1.0</priority>"));
 /// ```
@@ -24,10 +110,13 @@ pub struct SitemapUrl {
     pub loc: String,
     /// The last modification date, typically `YYYY-MM-DD`.
     pub lastmod: Option<String>,
-    /// How often the page changes: `always`, `hourly`, `daily`, `weekly`, `monthly`,
-    /// `yearly`, `never`.
-    pub changefreq: Option<String>,
+    /// How often the page changes.
+    pub changefreq: Option<ChangeFreq>,
     /// Relative priority within the site, from `0.0` to `1.0`.
+    ///
+    /// Set through [`SitemapUrl::priority`], which clamps. A value written to this field
+    /// directly is checked again when the sitemap is rendered: out of range is clamped and
+    /// a non-finite one is left out, because `NaN` is not a number a sitemap can hold.
     pub priority: Option<f64>,
 }
 
@@ -49,15 +138,18 @@ impl SitemapUrl {
 
     /// Sets the change frequency.
     #[must_use]
-    pub fn changefreq(mut self, changefreq: impl Into<String>) -> Self {
-        self.changefreq = Some(changefreq.into());
+    pub fn changefreq(mut self, changefreq: ChangeFreq) -> Self {
+        self.changefreq = Some(changefreq);
         self
     }
 
-    /// Sets the priority.
+    /// Sets the priority, clamped to `0.0..=1.0`. A non-finite value clears it.
+    ///
+    /// Clamping rather than failing keeps the builder chainable; the protocol allows no
+    /// value outside the range, so there is nothing to preserve.
     #[must_use]
     pub fn priority(mut self, priority: f64) -> Self {
-        self.priority = Some(priority);
+        self.priority = valid_priority(priority);
         self
     }
 }
@@ -82,14 +174,10 @@ impl SitemapGenerator {
             if let Some(lastmod) = &url.lastmod {
                 let _ = writeln!(xml, "    <lastmod>{}</lastmod>", escape_xml(lastmod));
             }
-            if let Some(changefreq) = &url.changefreq {
-                let _ = writeln!(
-                    xml,
-                    "    <changefreq>{}</changefreq>",
-                    escape_xml(changefreq)
-                );
+            if let Some(changefreq) = url.changefreq {
+                let _ = writeln!(xml, "    <changefreq>{changefreq}</changefreq>");
             }
-            if let Some(priority) = url.priority {
+            if let Some(priority) = url.priority.and_then(valid_priority) {
                 let _ = writeln!(
                     xml,
                     "    <priority>{}</priority>",
@@ -122,6 +210,11 @@ impl SitemapGenerator {
         xml.push_str("</sitemapindex>");
         xml
     }
+}
+
+/// A priority the protocol can hold: clamped into `0.0..=1.0`, and `None` for `NaN`/infinity.
+fn valid_priority(priority: f64) -> Option<f64> {
+    priority.is_finite().then(|| priority.clamp(0.0, 1.0))
 }
 
 /// Formats a priority the way Swift's `Double` interpolation does.
@@ -164,6 +257,41 @@ mod tests {
         assert_eq!(format_priority(0.0), "0.0");
         assert_eq!(format_priority(0.7), "0.7");
         assert_eq!(format_priority(0.25), "0.25");
+    }
+
+    #[test]
+    fn a_change_frequency_round_trips_through_text() {
+        for freq in [
+            ChangeFreq::Always,
+            ChangeFreq::Hourly,
+            ChangeFreq::Daily,
+            ChangeFreq::Weekly,
+            ChangeFreq::Monthly,
+            ChangeFreq::Yearly,
+            ChangeFreq::Never,
+        ] {
+            assert_eq!(freq.as_str().parse(), Ok(freq));
+            assert_eq!(freq.to_string(), freq.as_str());
+        }
+        let error = "Weekly".parse::<ChangeFreq>().expect_err("case-sensitive");
+        assert!(error.to_string().contains("\"Weekly\""));
+    }
+
+    #[test]
+    fn a_priority_outside_the_range_is_clamped_and_a_non_number_is_left_out() {
+        let render = |priority: f64| {
+            SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/").priority(priority)])
+        };
+        assert!(render(7.0).contains("<priority>1.0</priority>"));
+        assert!(render(-3.0).contains("<priority>0.0</priority>"));
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(!render(bad).contains("<priority>"), "{bad}");
+        }
+
+        // The field is public, so the renderer checks again.
+        let mut url = SitemapUrl::new("https://e.com/");
+        url.priority = Some(f64::NAN);
+        assert!(!SitemapGenerator::generate(&[url]).contains("NaN"));
     }
 
     /// Ports `SitemapGeneratorTests.testOptionalFieldsAreOmitted`.

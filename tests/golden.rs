@@ -227,15 +227,15 @@ fn the_two_render_modes_agree_on_content() {
 /// Ports `GoldenFileTests.feedsMatchFixtures`.
 #[test]
 fn sitemap_matches_the_fixture() {
-    use molt::sitemap::{SitemapGenerator, SitemapUrl};
+    use molt::sitemap::{ChangeFreq, SitemapGenerator, SitemapUrl};
 
     let xml = SitemapGenerator::generate(&[
         SitemapUrl::new("https://ridekeeper.example/")
-            .changefreq("weekly")
+            .changefreq(ChangeFreq::Weekly)
             .priority(1.0),
         SitemapUrl::new("https://ridekeeper.example/pricing?plan=pro&billing=year")
             .lastmod("2026-08-11")
-            .changefreq("monthly")
+            .changefreq(ChangeFreq::Monthly)
             .priority(0.7),
     ]);
 
