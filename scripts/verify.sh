@@ -11,6 +11,10 @@ set -uo pipefail
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; BLUE=$'\033[0;34m'; RESET=$'\033[0m'
 FAILURES=0
+# A private log file: a fixed path in /tmp is one another user on a shared machine can
+# pre-create as a symlink to a file of yours.
+LOG=$(mktemp "${TMPDIR:-/tmp}/molt-verify.XXXXXX")
+trap 'rm -f "$LOG"' EXIT
 
 step() { printf '\n%s==> %s%s\n' "$BLUE" "$1" "$RESET"; }
 ok()   { printf '%s  ok%s  %s\n' "$GREEN" "$RESET" "$1"; }
@@ -18,11 +22,11 @@ fail() { printf '%s  FAIL%s %s\n' "$RED" "$RESET" "$1"; FAILURES=$((FAILURES + 1
 
 run() {
   local label="$1"; shift
-  if "$@" > /tmp/molt-verify.log 2>&1; then
+  if "$@" > "$LOG" 2>&1; then
     ok "$label"
   else
     fail "$label"
-    sed 's/^/      /' /tmp/molt-verify.log | tail -40
+    sed 's/^/      /' "$LOG" | tail -40
   fi
 }
 

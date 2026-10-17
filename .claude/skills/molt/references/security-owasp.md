@@ -76,11 +76,14 @@ returns an error.
 
 ## A05 Security Misconfiguration → CI and defaults
 
-Open (#29): `ci.yml` has no `permissions: contents: read`; some actions are pinned to mutable
-refs, not SHAs; the release job should require a commit on `main` with green CI and use
-Trusted Publishing; `scripts/verify.sh` should use `mktemp`. When you touch workflows: least
-privilege, pin by SHA, never print secrets, never `pull_request_target` with a checkout of
-untrusted code.
+Done (S11): `ci.yml` is `contents: read`; every action is pinned to a commit SHA (version in a
+comment, kept current by Dependabot); checkouts use `persist-credentials: false`; jobs have
+timeouts; the release refuses a tag not on `main` or without a green CI run; `verify.sh` uses
+`mktemp`. **Still the owner's:** required reviewers on the `release` environment and Trusted
+Publishing on crates.io. When you touch workflows: least privilege, pin by SHA (resolve it
+with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`, never from memory), never print
+secrets, never `pull_request_target` with a checkout of untrusted code. You cannot run a
+workflow locally: say which changes were only syntax-checked.
 
 ## A06 Vulnerable and Outdated Components
 

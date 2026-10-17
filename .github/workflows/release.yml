@@ -12,17 +12,47 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # `actions: read` lets the CI check below list workflow runs; nothing here can write.
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Publishing cannot be undone, so refuse a tag that was not cut from reviewed code:
+      # the commit must be on `main`, and the CI workflow must already have passed on it.
+      - name: The tag must point at a commit on main
+        run: |
+          # `fetch-depth: 0` above already brought every branch, `origin/main` included.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Release from main."
+            exit 1
+          fi
+
+      - name: CI must have passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success \
+                     --json databaseId --jq length)
+          if [ "${passed:-0}" -lt 1 ]; then
+            echo "::error::No successful CI run for $GITHUB_SHA. Wait for CI on main to finish, then tag."
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-deny
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-deny
 
       - name: Verify
         run: ./scripts/verify.sh
@@ -34,14 +64,22 @@ jobs:
     name: Publish
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A named environment is where required reviewers and the registry credential are
+    # configured in the repository settings. GitHub creates it on first use; protecting it is
+    # a setting, not code (see SECURITY.md).
+    environment: release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
 
       - name: Resolve the version
         id: version
@@ -95,7 +133,7 @@ jobs:
           fi
 
       - name: Create the GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           generate_release_notes: true
           body: |

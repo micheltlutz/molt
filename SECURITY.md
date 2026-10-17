@@ -132,6 +132,24 @@ need the element's other attributes. Event-handler attributes (`on*`) and `style
 The design, and the work that is deliberately not in this crate, is in
 [docs/plans/2026-10-17-seguranca-e-performance.md](docs/plans/2026-10-17-seguranca-e-performance.md).
 
+## CI and release
+
+What the workflows do, and what only the repository owner can switch on.
+
+- Every third-party action is pinned to a commit SHA with its version in a comment, and
+  Dependabot's `github-actions` ecosystem keeps the pins current. A tag such as `@v3` can be
+  moved by whoever controls the action's repository; a SHA cannot.
+- `ci.yml` is `contents: read`. Jobs have a `timeout-minutes`. Checkouts use
+  `persist-credentials: false`, so the token is not left in `.git/config` for later steps.
+- The release workflow refuses a tag whose commit is not on `main`, or on which the CI
+  workflow has not already succeeded. The publish job names the `release` environment.
+- `scripts/verify.sh` writes its log to a `mktemp` file, not a fixed path in `/tmp`.
+
+**Owner steps, not code:** in the repository settings, add required reviewers to the
+`release` environment; and register `molt-framework` as a Trusted Publisher on crates.io so
+the long-lived `CARGO_REGISTRY_TOKEN` secret can be retired (the workflow still uses the
+token until then, so a release keeps working).
+
 ## For users
 
 - Pass untrusted data through `text()` and `attr()`, never `raw_text()` or `Node::Raw`.
