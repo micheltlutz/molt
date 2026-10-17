@@ -92,7 +92,7 @@ pub struct A11yIssue {
 /// use molt::accessibility::audit;
 ///
 /// let good = image("/a.png", "A cat");
-/// assert!(audit(&good.clone().into()).is_empty());
+/// assert_eq!(audit(&good.clone().into()), Vec::new());
 ///
 /// let bad = Node::from(img().attr("src", "/a.png"));
 /// assert_eq!(audit(&bad).len(), 1);
@@ -197,34 +197,43 @@ mod tests {
 
     #[test]
     fn an_image_with_an_empty_alt_is_accepted_as_decorative() {
-        assert!(audit(&image("/a.png", "").into()).is_empty());
+        assert_eq!(audit(&image("/a.png", "").into()), Vec::new());
     }
 
     #[test]
     fn an_iframe_without_a_title_is_reported() {
         assert_eq!(audit(&iframe().attr("src", "/e").into()).len(), 1);
-        assert!(audit(&iframe_titled("/e", "A map").into()).is_empty());
+        assert_eq!(audit(&iframe_titled("/e", "A map").into()), Vec::new());
     }
 
     #[test]
     fn a_button_needs_text_or_a_label() {
         assert_eq!(audit(&button().into()).len(), 1);
-        assert!(audit(&button().text("Send").into()).is_empty());
-        assert!(audit(&button().aria_attr("label", "Send").into()).is_empty());
+        assert_eq!(audit(&button().text("Send").into()), Vec::new());
+        assert_eq!(
+            audit(&button().aria_attr("label", "Send").into()),
+            Vec::new()
+        );
     }
 
     #[test]
     fn a_link_needs_an_accessible_name() {
         assert_eq!(audit(&a().attr("href", "/x").into()).len(), 1);
-        assert!(audit(&link_to("/x").text("Home").into()).is_empty());
-        assert!(audit(&link_to("/x").child(image("/i.png", "Home")).into()).is_empty());
+        assert_eq!(audit(&link_to("/x").text("Home").into()), Vec::new());
+        assert_eq!(
+            audit(&link_to("/x").child(image("/i.png", "Home")).into()),
+            Vec::new()
+        );
     }
 
     #[test]
     fn an_input_needs_something_a_label_can_attach_to() {
         assert_eq!(audit(&input().attr("type", "email").into()).len(), 1);
-        assert!(audit(&input().attr("id", "email").into()).is_empty());
-        assert!(audit(&input().aria_attr("label", "E-mail").into()).is_empty());
+        assert_eq!(audit(&input().attr("id", "email").into()), Vec::new());
+        assert_eq!(
+            audit(&input().aria_attr("label", "E-mail").into()),
+            Vec::new()
+        );
     }
 
     #[test]
@@ -242,7 +251,7 @@ mod tests {
             .child(image("/a.png", "A cat"))
             .child(button().text("Send"))
             .child(link_to("/x").text("Home"));
-        assert!(audit(&tree.into()).is_empty());
+        assert_eq!(audit(&tree.into()), Vec::new());
     }
 
     #[test]

@@ -546,8 +546,8 @@ mod tests {
     /// Ports `FragmentTests.testEmptyFragmentRendersNothing`.
     #[test]
     fn an_empty_fragment_renders_nothing_in_either_mode() {
-        assert!(Node::fragment([]).render().is_empty());
-        assert!(Node::fragment([]).render_pretty().is_empty());
+        assert_eq!(Node::fragment([]).render(), "");
+        assert_eq!(Node::fragment([]).render_pretty(), "");
     }
 
     /// Ports `FragmentTests.testFragmentKeepsPrettyIndentation`.
