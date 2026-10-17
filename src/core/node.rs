@@ -362,7 +362,8 @@ pub(crate) fn write_document_root(
             Step::CompactElement(head),
         ]
     };
-    run_steps(steps, out, options);
+    // `<html>` is written above by hand, so head and body already sit one level down.
+    run_steps(steps, out, options, 1);
 }
 
 /// One unit of work for the writer.
@@ -412,15 +413,38 @@ enum Step<'a> {
 fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
     let mut stack = Vec::with_capacity(16);
     stack.push(start);
-    run_steps(stack, out, options);
+    run_steps(stack, out, options, 0);
 }
 
 /// Runs a prepared stack to completion.
-fn run_steps(mut stack: Vec<Step<'_>>, out: &mut String, options: &RenderOptions) {
+fn run_steps(stack: Vec<Step<'_>>, out: &mut String, options: &RenderOptions, already_open: usize) {
+    // Two monomorphised copies: the one that counts open elements for `max_depth`, and the
+    // one that does not. The counter costs a few percent per element on a wide tree, and most
+    // renders set no limit, so they run the copy without it.
+    if options.max_depth.is_some() {
+        run_steps_with::<true>(stack, out, options, already_open);
+    } else {
+        run_steps_with::<false>(stack, out, options, already_open);
+    }
+}
+
+// One `match` over every `Step`, which is the writer's whole state machine: splitting it
+// would hide the single place where all the cases can be read together.
+#[allow(clippy::too_many_lines)]
+fn run_steps_with<const LIMITED: bool>(
+    mut stack: Vec<Step<'_>>,
+    out: &mut String,
+    options: &RenderOptions,
+    already_open: usize,
+) {
     // How many raw-text elements (`noscript`, `script`, …) enclose the node being written.
     // Their descendants' attribute values get `<` and `>` escaped; see
     // `Attribute::write_into_in`.
     let mut raw_text_depth = 0usize;
+    // How many elements are open around the node being written, for `max_depth`. Counted
+    // here, not read from the pretty indent depth, so compact mode is covered too.
+    let mut open_depth = already_open;
+    let max_depth = options.max_depth;
     while let Some(step) = stack.pop() {
         match step {
             // Escaped text and verbatim markup write the same way; they differ only in
@@ -455,23 +479,40 @@ fn run_steps(mut stack: Vec<Step<'_>>, out: &mut String, options: &RenderOptions
             }
 
             Step::CompactElement(element) => {
+                // Too deep: write nothing, before any indent, so pretty mode's rollback of
+                // the child separator leaves no blank line (the path an invalid tag takes).
+                if LIMITED && max_depth.is_some_and(|max| open_depth >= max) {
+                    continue;
+                }
                 let in_raw_text = raw_text_depth > 0;
-                if push_compact_element(element, out, options, &mut stack, in_raw_text)
-                    && is_raw_text(element.tag())
-                {
-                    raw_text_depth += 1;
+                if push_compact_element(element, out, options, &mut stack, in_raw_text) {
+                    if LIMITED {
+                        open_depth += 1;
+                    }
+                    if is_raw_text(element.tag()) {
+                        raw_text_depth += 1;
+                    }
                 }
             }
             Step::PrettyElement(element, depth) => {
+                if LIMITED && max_depth.is_some_and(|max| open_depth >= max) {
+                    continue;
+                }
                 let in_raw_text = raw_text_depth > 0;
-                if push_pretty_element(element, depth, out, options, &mut stack, in_raw_text)
-                    && is_raw_text(element.tag())
-                {
-                    raw_text_depth += 1;
+                if push_pretty_element(element, depth, out, options, &mut stack, in_raw_text) {
+                    if LIMITED {
+                        open_depth += 1;
+                    }
+                    if is_raw_text(element.tag()) {
+                        raw_text_depth += 1;
+                    }
                 }
             }
 
             Step::Close(tag) => {
+                if LIMITED {
+                    open_depth = open_depth.saturating_sub(1);
+                }
                 if is_raw_text(tag) {
                     raw_text_depth = raw_text_depth.saturating_sub(1);
                 }
@@ -480,6 +521,9 @@ fn run_steps(mut stack: Vec<Step<'_>>, out: &mut String, options: &RenderOptions
                 out.push('>');
             }
             Step::ClosePretty(tag, depth) => {
+                if LIMITED {
+                    open_depth = open_depth.saturating_sub(1);
+                }
                 if is_raw_text(tag) {
                     raw_text_depth = raw_text_depth.saturating_sub(1);
                 }

@@ -22,7 +22,8 @@ a new such place, add a row *and* a test.
 | `<meta>` name/value | `meta_name`, … | `Attribute::new` (escaped) | `src/seo.rs` |
 | XML text | sitemap, RSS | `escape_xml` (`'` → `&apos;`) | `sitemap.rs`, `feed.rs` |
 | output file path | `StaticSiteGenerator::*` | component whitelist, symlink refusal, atomic write | `src/ssg.rs` |
-| indent string | `RenderOptions::with_indent` | **not yet sanitised** (issue #28) | `render.rs`, `wasm.rs` |
+| indent string | `RenderOptions::with_indent` | only spaces and tabs, at most 16; the field is private | `render.rs`, `wasm.rs` |
+| nesting depth | any tree | `RenderOptions::with_max_depth` drops deeper elements (opt-in) | `render.rs`, `node.rs` |
 | `raw_text`, `Node::raw`, `Attribute::raw` | caller | **not** escaped — the three declared hatches | — |
 
 ## A01 Broken Access Control → path traversal and destructive operations
@@ -105,7 +106,7 @@ No network access in the library.
 
 - Depth: rendering, audit, clone, eq, hash and drop are iterative; 100,000 levels are tested.
 - Output: pretty mode is O(depth²) in output size (an indent per level per line). Bound depth
-  from untrusted input, render compact, or set an empty indent. Optional limits are issue #28.
+  from untrusted input with `with_max_depth`, render compact, or set an empty indent.
 - XML: characters illegal in XML 1.0 are not yet removed (#27), so one stray control character
   can make a feed unparseable.
 
