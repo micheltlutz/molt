@@ -220,3 +220,28 @@ fn cloning_and_comparing_deep_fragments_does_not_abort() {
     assert!(root == copy);
     assert_eq!(copy.render(), root.render());
 }
+
+/// `Hash` walks the tree with the same explicit stack as `Clone` and `PartialEq`.
+#[test]
+fn hashing_a_very_deep_tree_does_not_abort() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let hash = |tree: &Element| {
+        let mut hasher = DefaultHasher::new();
+        tree.hash(&mut hasher);
+        hasher.finish()
+    };
+    let tree = deep_tree(VERY_DEEP);
+    assert_eq!(hash(&tree), hash(&tree.clone()));
+    assert_ne!(hash(&tree), hash(&div().child(tree.clone())));
+}
+
+/// Displaying goes through the same iterative writer.
+#[test]
+fn displaying_a_very_deep_tree_does_not_abort() {
+    assert_eq!(
+        deep_tree(VERY_DEEP).to_string().matches("<div>").count(),
+        VERY_DEEP
+    );
+}

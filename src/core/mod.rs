@@ -15,5 +15,5 @@ pub mod url_policy;
 
 pub use attribute::Attribute;
 pub use element::Element;
-pub use node::Node;
+pub use node::{Markup, Node};
 pub use render::{Render, RenderOptions};

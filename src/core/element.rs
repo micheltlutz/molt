@@ -57,6 +57,68 @@ impl PartialEq for Element {
 
 impl Eq for Element {}
 
+impl std::fmt::Display for Element {
+    /// The compact render, or the pretty one with the alternate flag: `{el}` / `{el:#}`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&if f.alternate() {
+            self.render_pretty()
+        } else {
+            self.render()
+        })
+    }
+}
+
+impl std::hash::Hash for Element {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_tree(Source::Element(self), state);
+    }
+}
+
+/// Appends nodes as children, so `element.extend(items)` works beside `children_from`.
+impl<N: Into<Node>> Extend<N> for Element {
+    fn extend<I: IntoIterator<Item = N>>(&mut self, iter: I) {
+        self.children.extend(iter.into_iter().map(Into::into));
+    }
+}
+
+/// Feeds a tree to a hasher with an explicit stack, matching [`trees_equal`]: trees that
+/// compare equal hash equal, and a deep tree cannot overflow the stack on the way.
+pub(crate) fn hash_tree<H: std::hash::Hasher>(root: Source<'_>, state: &mut H) {
+    use std::hash::Hash;
+
+    let mut pending = vec![root];
+    while let Some(source) = pending.pop() {
+        match source {
+            Source::Element(element) | Source::Node(Node::Element(element)) => {
+                0_u8.hash(state);
+                element.tag.hash(state);
+                element.attributes.hash(state);
+                element.content.hash(state);
+                element.self_closing.hash(state);
+                element.children.len().hash(state);
+                pending.extend(element.children.iter().rev().map(Source::Node));
+            }
+            Source::Node(Node::Fragment(children)) => {
+                1_u8.hash(state);
+                children.len().hash(state);
+                pending.extend(children.iter().rev().map(Source::Node));
+            }
+            Source::Node(Node::Text(text)) => {
+                2_u8.hash(state);
+                text.hash(state);
+            }
+            Source::Node(Node::Raw(text)) => {
+                3_u8.hash(state);
+                text.hash(state);
+            }
+            Source::Node(Node::Comment(text)) => {
+                4_u8.hash(state);
+                text.hash(state);
+            }
+        }
+    }
+}
+
 /// A copy of `element` with everything but its children.
 fn shell(element: &Element) -> Element {
     Element {

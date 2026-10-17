@@ -28,21 +28,85 @@ pub enum Node {
     /// An element with a tag name, attributes and children.
     Element(Element),
     /// Escaped text. The escaping already happened — see [`crate::core::escape`].
-    Text(String),
+    Text(Markup),
     /// Verbatim markup, never escaped. For imported snippets: an SVG, an embed code.
     ///
     /// Unlike [`Node::Fragment`], this is an opaque string, so pretty printing can only
     /// indent the whole blob. Reach for a fragment when you want the children indented.
-    Raw(String),
+    Raw(Markup),
     /// An HTML comment. **New in the Rust port** — Winged-Swift has no comment node.
     ///
     /// The content has `--` neutralised so the comment cannot be closed early.
-    Comment(String),
+    Comment(Markup),
     /// A transparent group that renders its children with no wrapper element.
     ///
     /// Use it to return several nodes from one expression — a `map` of cards, the body of
     /// an `if`, a group of `<meta>` tags — without introducing an extra `<div>`.
     Fragment(Vec<Node>),
+}
+
+/// A string that is safe to write into the output exactly as it is.
+///
+/// What a [`Node::Text`], [`Node::Raw`] or [`Node::Comment`] holds. It has **no public
+/// constructor**: the only ways in are [`Node::text`] (which escapes), [`Node::comment`]
+/// (which neutralises `--`) and [`Node::raw`] (the greppable escape hatch). Before this
+/// type the variants held a bare `String`, so `Node::Text("<script>".into())` skipped the
+/// escaping that the rest of the crate promises happens once, on entry.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let Node::Text(text) = Node::text("a < b") else { unreachable!() };
+/// assert_eq!(text.as_str(), "a &lt; b");
+/// ```
+///
+/// Building one directly does not compile, which is the point:
+///
+/// ```compile_fail
+/// use molt::core::{Markup, Node};
+/// let _ = Node::Text(Markup("<script>".into()));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Markup(String);
+
+impl Markup {
+    /// The content, already escaped or neutralised as its node requires.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for Markup {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for Markup {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Markup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl PartialEq<str> for Markup {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Markup {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
 }
 
 impl Node {
@@ -52,13 +116,13 @@ impl Node {
         let raw = content.as_ref();
         let mut escaped = String::with_capacity(raw.len());
         write_escaped_text(&mut escaped, raw, false);
-        Self::Text(escaped)
+        Self::Text(Markup(escaped))
     }
 
     /// Creates a raw markup node. The content is **not** escaped.
     #[must_use]
     pub fn raw(content: impl Into<String>) -> Self {
-        Self::Raw(content.into())
+        Self::Raw(Markup(content.into()))
     }
 
     /// Creates a comment node.
@@ -76,7 +140,7 @@ impl Node {
     pub fn comment(content: impl AsRef<str>) -> Self {
         let mut neutralised = String::with_capacity(content.as_ref().len());
         push_neutralised_comment(&mut neutralised, content.as_ref());
-        Self::Comment(neutralised)
+        Self::Comment(Markup(neutralised))
     }
 
     /// Creates a transparent group of nodes.
@@ -141,6 +205,50 @@ impl Eq for Node {}
 pub(crate) enum Source<'a> {
     Node(&'a Node),
     Element(&'a Element),
+}
+
+impl std::fmt::Display for Node {
+    /// The compact render, or the pretty one with the alternate flag: `{node}` / `{node:#}`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&if f.alternate() {
+            self.render_pretty()
+        } else {
+            self.render()
+        })
+    }
+}
+
+impl std::hash::Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        crate::core::element::hash_tree(Source::Node(self), state);
+    }
+}
+
+/// Collects nodes into a [`Node::Fragment`], so `.collect::<Node>()` replaces
+/// `Node::fragment(iter)`.
+impl<N: Into<Node>> FromIterator<N> for Node {
+    fn from_iter<I: IntoIterator<Item = N>>(iter: I) -> Self {
+        Self::Fragment(iter.into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<Vec<Node>> for Node {
+    fn from(children: Vec<Node>) -> Self {
+        Self::Fragment(children)
+    }
+}
+
+/// `None` is an empty fragment, which renders to nothing and leaves no blank line.
+impl<T: Into<Node>> From<Option<T>> for Node {
+    fn from(value: Option<T>) -> Self {
+        value.map_or_else(|| Self::Fragment(Vec::new()), Into::into)
+    }
+}
+
+impl From<char> for Node {
+    fn from(c: char) -> Self {
+        Self::text(c.to_string())
+    }
 }
 
 impl From<Element> for Node {
@@ -501,11 +609,10 @@ fn push_pretty_element<'a>(
 }
 
 fn write_comment(out: &mut String, content: &str) {
+    // The content was neutralised when the node was built, and `Markup` has no public
+    // constructor, so a `Node::Comment` cannot hold anything else.
     out.push_str("<!-- ");
-    // `Node::Comment` is a public variant, so the content may not have come through
-    // `Node::comment`. Neutralising again is idempotent and keeps the guarantee in the
-    // writer, where it cannot be bypassed.
-    push_neutralised_comment(out, content);
+    out.push_str(content);
     out.push_str(" -->");
 }
 
@@ -544,6 +651,89 @@ fn write_void_suffix(out: &mut String, options: &RenderOptions) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    fn hash_of(value: &impl Hash) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn equal_trees_hash_equal_and_different_trees_do_not() {
+        let a = div()
+            .attr("id", "x")
+            .child(p().text("t"))
+            .child(Node::comment("c"));
+        let b = div()
+            .attr("id", "x")
+            .child(p().text("t"))
+            .child(Node::comment("c"));
+        assert_eq!(a, b);
+        assert_eq!(hash_of(&a), hash_of(&b));
+        assert_eq!(hash_of(&Node::from(a.clone())), hash_of(&Node::from(b)));
+        assert_ne!(hash_of(&a), hash_of(&a.clone().add_class("y")));
+        assert_ne!(hash_of(&Node::text("a")), hash_of(&Node::raw("a")));
+        assert_ne!(
+            hash_of(&Node::fragment([Node::text("a"), Node::text("b")])),
+            hash_of(&Node::fragment([
+                Node::fragment([Node::text("a")]),
+                Node::text("b")
+            ]))
+        );
+    }
+
+    #[test]
+    fn display_is_compact_and_alternate_is_pretty() {
+        let el = div().child(p().text("hi"));
+        assert_eq!(el.to_string(), "<div><p>hi</p></div>");
+        assert_eq!(format!("{el:#}"), "<div>\n  <p>hi</p>\n</div>");
+        let node = Node::from(el);
+        assert_eq!(node.to_string(), "<div><p>hi</p></div>");
+        assert_eq!(format!("{node:#}"), "<div>\n  <p>hi</p>\n</div>");
+    }
+
+    #[test]
+    fn nodes_collect_and_convert_from_the_common_shapes() {
+        let collected: Node = ["a", "b"].into_iter().map(Node::text).collect();
+        assert_eq!(collected.render(), "ab");
+        assert_eq!(
+            Node::from(vec![Node::text("a"), Node::text("b")]).render(),
+            "ab"
+        );
+        assert_eq!(Node::from(Some(p().text("x"))).render(), "<p>x</p>");
+        assert!(Node::from(None::<Element>).is_empty());
+        assert_eq!(Node::from('<').render(), "&lt;");
+
+        let mut list = ul();
+        list.extend([li().text("1"), li().text("2")]);
+        list.extend(["tail"]);
+        assert_eq!(list.render(), "<ul><li>1</li><li>2</li>tail</ul>");
+    }
+
+    #[test]
+    fn references_boxes_and_options_render_like_what_they_hold() {
+        // Through a generic bound, so the `&T` impl is what runs.
+        fn through<T: Render>(value: T) -> String {
+            value.render()
+        }
+        let el = p().text("x");
+        assert_eq!(through(&el), "<p>x</p>");
+        assert_eq!(Box::new(el.clone()).render(), "<p>x</p>");
+        assert_eq!(Some(el.clone()).render(), "<p>x</p>");
+        assert_eq!(None::<Element>.render(), "");
+        let dynamic: Box<dyn Render> = Box::new(el);
+        assert_eq!(dynamic.render(), "<p>x</p>");
+    }
+
+    #[test]
+    fn a_document_has_a_default_and_a_display() {
+        let page = crate::document::Document::default();
+        assert_eq!(page.to_string(), page.render());
+        assert!(page.to_string().starts_with("<!DOCTYPE html>\n<html>"));
+    }
+
     use super::*;
     use crate::elements::{
         body, code, div, h1, head, html_tag, i, img, li, p, pre, span, textarea, title, ul,
@@ -599,14 +789,6 @@ mod tests {
             assert!(!inner.contains("--"), "{hostile:?} -> {rendered:?}");
             assert!(!inner.ends_with('-'), "{hostile:?} -> {rendered:?}");
         }
-    }
-
-    /// `Node::Comment` is a public variant: building it directly must not bypass the guard.
-    #[test]
-    fn a_directly_built_comment_is_neutralised_by_the_writer() {
-        let rendered = Node::Comment("x---><img onerror=1>".into()).render();
-        assert_eq!(rendered.matches("-->").count(), 1);
-        assert!(rendered.ends_with(" -->"));
     }
 
     /// Ports `FragmentTests.testEmptyFragmentDoesNotLeaveBlankLines`.

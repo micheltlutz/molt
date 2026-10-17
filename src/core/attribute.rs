@@ -18,7 +18,7 @@ use crate::core::url_policy;
 /// assert_eq!(Attribute::new("href", "/a?x=1&y=2").to_string(), r#" href="/a?x=1&amp;y=2""#);
 /// assert_eq!(Attribute::boolean("required").to_string(), " required");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Attribute {
     // `Cow` so the keys this crate writes itself (`class`, `id`, `lang`, …) are borrowed
     // literals rather than a fresh `String` per attribute. The public constructors still

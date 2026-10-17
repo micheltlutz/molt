@@ -41,6 +41,20 @@ pub struct Document {
     pub body: Element,
 }
 
+impl Default for Document {
+    /// An empty document with no `lang`, same as `Document::new(None)`.
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+impl std::fmt::Display for Document {
+    /// The pretty render with doctype, same as [`Document::render`].
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.render())
+    }
+}
+
 impl Document {
     /// Creates an empty document with the given language.
     #[must_use]
