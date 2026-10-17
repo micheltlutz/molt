@@ -79,6 +79,31 @@ fn write_runs(out: &mut String, input: &str, entity: impl Fn(u8) -> Option<&'sta
     out.push_str(&input[start..]);
 }
 
+/// A [`std::fmt::Write`] that escapes what it receives as element text and appends it to a
+/// buffer.
+///
+/// Lets `html!` format a `Display` value straight into its escaped form instead of going
+/// through `to_string()` and escaping a second copy. Escaping is local to a character, so
+/// escaping each piece a `Display` impl writes gives the same result as escaping the whole.
+pub(crate) struct TextWriter<'a>(pub(crate) &'a mut String);
+
+impl std::fmt::Write for TextWriter<'_> {
+    fn write_str(&mut self, piece: &str) -> std::fmt::Result {
+        write_escaped_text(self.0, piece, false);
+        Ok(())
+    }
+}
+
+/// As [`TextWriter`], with attribute-value escaping.
+pub(crate) struct AttributeWriter<'a>(pub(crate) &'a mut String);
+
+impl std::fmt::Write for AttributeWriter<'_> {
+    fn write_str(&mut self, piece: &str) -> std::fmt::Result {
+        write_escaped_attribute(self.0, piece);
+        Ok(())
+    }
+}
+
 /// Escapes `input` only if some byte needs it, and otherwise hands it back untouched.
 ///
 /// Returning [`Cow`] means the common case — text with nothing to escape — costs no

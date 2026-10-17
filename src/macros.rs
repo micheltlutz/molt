@@ -135,7 +135,7 @@ macro_rules! html_nodes {
 
     // Interpolated expression, escaped.
     ($out:ident, ($value:expr) $($rest:tt)*) => {
-        $out.push($crate::Node::text(::std::string::ToString::to_string(&$value)));
+        $out.push($crate::macros::display_text(&$value));
         $crate::html_nodes!($out, $($rest)*);
     };
 
@@ -162,19 +162,19 @@ macro_rules! html_attrs {
     // "key" = value — a string key, for names that are Rust keywords such as `type`.
     ($el:expr, $key:literal = $value:expr, $($rest:tt)*) => {
         $crate::html_attrs!(
-            $el.attr($key, ::std::string::ToString::to_string(&$value)), $($rest)*)
+            $crate::macros::attr_display($el, $key, &$value), $($rest)*)
     };
     ($el:expr, $key:literal = $value:expr) => {
-        $el.attr($key, ::std::string::ToString::to_string(&$value))
+        $crate::macros::attr_display($el, $key, &$value)
     };
 
     // key = value
     ($el:expr, $key:ident = $value:expr, $($rest:tt)*) => {
         $crate::html_attrs!(
-            $el.attr(stringify!($key), ::std::string::ToString::to_string(&$value)), $($rest)*)
+            $crate::macros::attr_display($el, stringify!($key), &$value), $($rest)*)
     };
     ($el:expr, $key:ident = $value:expr) => {
-        $el.attr(stringify!($key), ::std::string::ToString::to_string(&$value))
+        $crate::macros::attr_display($el, stringify!($key), &$value)
     };
 
     // A bare name is a boolean attribute.
@@ -190,6 +190,25 @@ macro_rules! html_attrs {
     ($el:expr, $key:ident) => {
         $el.bool_attr(stringify!($key))
     };
+}
+
+/// A text node from a `Display` value, escaped as it is formatted. Not public API.
+#[doc(hidden)]
+#[must_use]
+pub fn display_text(value: &impl std::fmt::Display) -> Node {
+    Node::text_display(value)
+}
+
+/// Adds `key = value` to an element, formatting the value straight into escaped form. The
+/// key is always a literal in the macro, so it is borrowed, not allocated. Not public API.
+#[doc(hidden)]
+#[must_use]
+pub fn attr_display(
+    element: Element,
+    key: &'static str,
+    value: &impl std::fmt::Display,
+) -> Element {
+    element.add_attribute(crate::core::Attribute::from_display(key, value))
 }
 
 /// An empty sibling buffer for the macro to push into.
@@ -216,11 +235,15 @@ pub fn element_with_children(element: Element, children: Vec<Node>) -> Element {
     let all_text = !children.is_empty() && children.iter().all(|c| matches!(c, Node::Text(_)));
 
     if all_text {
-        let mut content = String::new();
-        for child in children {
-            if let Node::Text(text) = child {
-                content.push_str(&text);
-            }
+        // The first text node's string is reused as the buffer, so the common single-text
+        // child (`li { (name) }`) is moved, not copied.
+        let mut texts = children.into_iter().filter_map(|child| match child {
+            Node::Text(text) => Some(text.into_string()),
+            _ => None,
+        });
+        let mut content = texts.next().unwrap_or_default();
+        for text in texts {
+            content.push_str(&text);
         }
         // The text was escaped when each node was built, so it goes in verbatim.
         return element.raw_text(content);
@@ -262,6 +285,45 @@ macro_rules! html_for {
 
 #[cfg(test)]
 mod tests {
+    /// A `Display` impl that writes in several pieces, each holding a special character.
+    /// Escaping per piece must equal escaping the whole.
+    struct Pieces;
+
+    impl std::fmt::Display for Pieces {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a<")?;
+            f.write_str("b&")?;
+            write!(f, "{}\"c'", 7)
+        }
+    }
+
+    #[test]
+    fn a_display_value_is_escaped_as_it_is_formatted() {
+        let text = crate::html! { p { (Pieces) } };
+        assert_eq!(text.render(), "<p>a&lt;b&amp;7&quot;c&#x27;</p>");
+        let attribute = crate::html! { p(title = Pieces) { "x" } };
+        assert_eq!(
+            attribute.render(),
+            "<p title=\"a<b&amp;7&quot;c&#x27;\">x</p>"
+        );
+        assert_eq!(
+            text.render(),
+            Node::from(crate::elements::p().text(Pieces.to_string())).render()
+        );
+    }
+
+    #[test]
+    fn numbers_and_keyword_keys_still_work_as_attributes() {
+        let image = crate::html! { img(width = 100, "type" = 'x', hidden) };
+        assert_eq!(image.render(), r#"<img width="100" type="x" hidden>"#);
+    }
+
+    #[test]
+    fn several_text_children_are_joined_into_one_content_string() {
+        let paragraph = crate::html! { p { "a " (1) " <b>" } };
+        assert_eq!(paragraph.render(), "<p>a 1 &lt;b&gt;</p>");
+    }
+
     use crate::prelude::*;
 
     #[test]
