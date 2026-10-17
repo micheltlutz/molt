@@ -110,7 +110,7 @@ documentation on [docs.rs](https://docs.rs/molt-framework). It is published as
 
 ```toml
 [dependencies]
-molt-framework = "0.1"
+molt-framework = "1.0"
 ```
 
 ```bash
