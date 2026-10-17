@@ -31,6 +31,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-15]
         toolchain: [stable, "1.85"]
+    env:
+      # `rust-toolchain.toml` pins `stable`, and rustup lets that file override the toolchain the
+      # action installs. Without this variable (which outranks the file) the "1.85" legs ran on
+      # stable, so the minimum supported Rust version was advertised and never tested.
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -38,6 +43,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ matrix.toolchain }}
+      - name: The compiler in use is the one this leg asks for
+        if: matrix.toolchain != 'stable'
+        run: |
+          rustc --version
+          rustc --version | grep -q "^rustc ${{ matrix.toolchain }}\." || {
+            echo "::error::expected rustc ${{ matrix.toolchain }}.x but rustup selected another toolchain"
+            exit 1
+          }
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo test --locked --all-features --verbose
       - run: cargo test --locked --no-default-features --verbose
@@ -84,6 +97,36 @@ jobs:
       - run: wasm-pack test --node -- --features wasm
       # Builds all three targets and fails if the gzipped size exceeds the budget.
       - run: ./scripts/build-wasm.sh
+
+  docsrs:
+    name: docs.rs build (nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Same reason as the test matrix: the repository's `rust-toolchain.toml` would otherwise
+      # select stable, which rejects `#![feature(doc_cfg)]`. docs.rs does not deny warnings, so
+      # neither does this job (the workflow-level `-D warnings` is cleared).
+      RUSTUP_TOOLCHAIN: nightly
+      RUSTFLAGS: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: The compiler in use is nightly
+        run: |
+          rustc --version
+          rustc --version | grep -q nightly || { echo "::error::rustup did not select nightly"; exit 1; }
+      # What docs.rs runs: nightly, every feature, `--cfg docsrs` (see `package.metadata.docs.rs`
+      # in Cargo.toml). The crate uses `feature(doc_cfg)`, which only nightly accepts, so a
+      # stable build cannot catch a break here, and a break means no documentation page at
+      # all. Warnings are not denied (docs.rs does not deny them); an error fails the job.
+      - run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: --cfg docsrs
 
   package:
     name: Package (cargo publish --dry-run)

@@ -53,8 +53,12 @@ const RASTER_DATA_PREFIXES: &[&str] = &[
 ///
 /// What a sitemap `<loc>` and an RSS `<link>` must be: both specifications call for a full
 /// URL, and a feed reader renders the link as something to click, so `javascript:` there is
-/// as dangerous as in an `href`. The scheme is compared ASCII case-insensitively and a
-/// leading run of whitespace is ignored, as a browser does.
+/// as dangerous as in an `href`. The scheme is compared ASCII case-insensitively.
+///
+/// Strict on purpose: this is an *allow* list, so nothing before the scheme is tolerated. A
+/// browser ignores leading whitespace when it reads a URL, but a feed reader or crawler that
+/// does not would treat `"\thttps://…"` as a relative path, and the generators write the
+/// value exactly as given.
 ///
 /// # Examples
 /// ```
@@ -65,10 +69,11 @@ const RASTER_DATA_PREFIXES: &[&str] = &[
 /// assert!(!is_http_url("/relative/path"));
 /// assert!(!is_http_url("ftp://example.com"));
 /// assert!(!is_http_url("https:"));
+/// assert!(!is_http_url(" https://example.com"));
+/// assert!(!is_http_url("\thttps://example.com"));
 /// ```
 #[must_use]
 pub fn is_http_url(url: &str) -> bool {
-    let url = url.trim_start();
     ["http://", "https://"].iter().any(|scheme| {
         url.len() > scheme.len()
             && url.is_char_boundary(scheme.len())

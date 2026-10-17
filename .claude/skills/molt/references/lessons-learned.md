@@ -543,3 +543,74 @@ that leaves the same pattern one screen further down is half a fix: after changi
 
 - **Guard.** `scripts/verify.sh`
 
+### L36. State the invariant, run it on hostile input, and let a surviving mutation tell you what it does not say
+
+(`tests/invariants.rs`)
+
+The libFuzzer targets need nightly and a separate job, so on most runs nothing hammered the
+escapers. `tests/invariants.rs` states the same properties (an escaped string contains no
+markup and unescapes back to the input; a comment never closes early; a tag name renders as
+itself or not at all; no spelling of `javascript:` survives in a URL attribute as a browser
+reads it; the XML generators emit well-formed text; no path writes outside the output
+directory) and checks them on tens of thousands of inputs from a fixed-seed PRNG, in every
+`cargo test`. Three things came out of writing it:
+
+- **It found a real gap.** `is_http_url` trimmed leading whitespace "like a browser", so a
+  feed link of `"\thttps://…"` was accepted and written with the tab. An allow list should be
+  stricter than the deny list it complements. Fixed, with a doctest.
+- **Two failures were the test's, not the library's** (newlines in the *data* mistaken for
+  blank lines from the writer; a user file named `.index…` mistaken for a leftover temporary).
+  Say so, and fix the test; a property that cries wolf gets ignored.
+- **Mutation-check every property.** Six deliberate breakages (comment neutraliser, tag
+  validation, scheme check, quote escaping, `..` in paths, the trim) were each caught by the
+  right test, except one: removing the explicit `..` refusal **survived**, because the second
+  loop in `resolve` drops `..` components anyway. The property said "nothing escapes", the
+  contract says "a path with `..` is refused". The test now asserts the contract too, and that
+  mutation is killed.
+
+- **Guard.** `escape_text_neutralises_markup_and_round_trips`,
+  `a_comment_never_closes_early`, `no_generated_path_lands_outside_the_output_directory`
+
+### L37. Test the crate you publish, not the checkout you built it from
+
+(`Cargo.toml` `exclude`)
+
+`cargo package` verifies that the tarball *compiles*. It does not run the tests, and the tests
+may read files the tarball does not contain. Extract the `.crate` into an empty directory and
+run `cargo test --all-features` there (480 passed). The same inspection showed the tarball
+carried `rust-toolchain.toml`, which makes rustup install extra components and a wasm target
+for anyone who builds inside it (an offline packager fails), plus `AGENTS.md` pointing at a
+`.claude/` directory that is not shipped. List what ships with `cargo package --list` and ask,
+for each file, who needs it. Do this before a first release, when nobody has complained yet.
+
+- **Guard.** `Cargo.toml`
+
+### L38. A CI matrix leg can run a different compiler than its name says
+
+(`.github/workflows/ci.yml`)
+
+For the whole life of the repository the CI had a `Test (…, 1.85)` leg, green, backing the
+`rust-version = "1.85"` in `Cargo.toml` and the badge in the README. Every one of its 19 `rustc`
+invocations was `.rustup/toolchains/stable-…`. The repository's `rust-toolchain.toml` says
+`channel = "stable"`, and rustup lets that file override the default toolchain that the setup
+action installs. It was found only because a *new* job asking for nightly failed with "`#![feature]`
+may not be used on the stable release channel". Running the suite on 1.85.1 locally showed the
+claim was true all along; the CI simply had never tested it.
+
+- **Rule.** A job named after a toolchain must prove it is using that toolchain. Set
+  `RUSTUP_TOOLCHAIN` (it outranks the file) and add a step that fails when `rustc --version`
+  is not what the leg asks for.
+- **Rule.** A green check proves only what it ran. When a check backs a public promise (MSRV,
+  platform support, a feature flag), read its log once and confirm the thing it claims.
+- **Rule.** A new job that fails is information, not noise: this one was the only reason the
+  gap was found.
+- **And the real compiler found more.** Once the 1.85 leg ran 1.85, it failed under the CI's
+  `-D warnings` on a lint the newer compiler does not raise there (`unused_allocation`), in a
+  test of mine, `Box::new(el).render()`. Reproduce a CI failure with the CI's own flags
+  (`RUSTFLAGS="-D warnings"`), not the bare command: I had already run the suite on 1.85.1
+  without them and it passed. The lint was right in a way that mattered: calling `.render()`
+  on a `Box<Element>` auto-derefs to the element's method, so that test never exercised
+  `impl Render for Box<T>`. Going through a generic `fn through<T: Render>(t: T)` does.
+
+- **Guard.** `.github/workflows/ci.yml`
+

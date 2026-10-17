@@ -12,8 +12,19 @@ license = "MIT"
 readme = "README.md"
 keywords = ["html", "dsl", "wasm", "static-site", "templating"]
 categories = ["web-programming", "template-engine", "wasm"]
+# Development tooling stays out of the published crate. `rust-toolchain.toml` matters most: it
+# makes rustup install a wasm target and extra components for anyone who builds inside the
+# unpacked tarball, which breaks an offline packager. `AGENTS.md` and `CLAUDE.md` point at
+# `.claude/`, which is not shipped either.
 exclude = [
     "/.claude",
+    "/AGENTS.md",
+    "/CLAUDE.md",
+    "/clippy.toml",
+    "/codecov.yml",
+    "/deny.toml",
+    "/rust-toolchain.toml",
+    "/rustfmt.toml",
     "/.github",
     "/scripts",
     "/examples/web",
