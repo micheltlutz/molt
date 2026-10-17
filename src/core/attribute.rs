@@ -83,9 +83,24 @@ impl Attribute {
 
     /// Creates an attribute **without** escaping the value.
     ///
-    /// Winged-Swift uses this for the keys it controls itself — `Meta`'s `name`,
-    /// `property`, `charset` and `http-equiv` are all inserted with `escape: false`.
-    /// Never pass user data here.
+    /// One of the three escape hatches, with [`Node::raw`](crate::core::Node::raw) and
+    /// [`Element::raw_text`](crate::core::Element::raw_text) — grep for the three to audit
+    /// a codebase. Use it for a value you wrote yourself and have already escaped. **Never
+    /// pass user data**: a `"` in the value closes the attribute and what follows is markup.
+    ///
+    /// The URL policy still runs on the stored value, so a raw `javascript:` URL in `href`
+    /// is rendered as `#`; only [`Self::trusted_url`] skips that.
+    ///
+    /// Winged-Swift used it for `Meta`'s `name`, `property`, `charset` and `http-equiv`.
+    /// The `meta_*` helpers here no longer do: they are `pub` and take `&str`, so they
+    /// escape.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::core::Attribute;
+    /// // Already escaped by the caller, so it must not be escaped again.
+    /// assert_eq!(Attribute::raw("title", "a &amp; b").to_string(), r#" title="a &amp; b""#);
+    /// ```
     pub fn raw(key: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             key: Cow::Owned(key.into()),
