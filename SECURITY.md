@@ -39,8 +39,11 @@ These are vulnerabilities:
   that is not a letter followed by letters, digits, `-`, `_`, `.` or `:` is **not
   rendered, children included** — see `molt::core::tags::is_valid_tag_name`. This covers
   `Element::new`, `new WElement(tag)` and `element(tag)` in WASM.
-- `StaticSiteGenerator` writing outside its output directory, or `clean()` deleting outside
-  it.
+- `StaticSiteGenerator` writing outside its output directory (a `..` component, a root or
+  drive prefix, or an existing symbolic link on the way), or `clean()` deleting outside it.
+  `clean()` refuses `.`, the working directory and its ancestors, the home directory, and
+  top-level directories such as `/usr`. A symlink created *while* a build runs is a race this
+  crate does not close.
 
 ### Rendering depth is no longer bounded by the stack
 
