@@ -133,6 +133,10 @@ table of [`MIGRATION.md`](MIGRATION.md).
   used to decide what a sitemap or feed may link to, and a reader that does not trim would
   read `"\thttps://…"` as a relative path.
 - CI builds the documentation the way docs.rs does (nightly, every feature, `--cfg docsrs`).
+- **CI now tests the minimum supported Rust version for real.** The `1.85` legs of the test
+  matrix had been running on stable: the repository's `rust-toolchain.toml` overrides the
+  toolchain the setup action installs. They now set `RUSTUP_TOOLCHAIN` and fail if `rustc` is
+  not the version asked for. The claim held (all tests pass on 1.85.1), but nothing had proved it.
 - `tests/invariants.rs`: property tests that run the escapers, the URL policy, the tag and
   attribute writers, the XML generators and the static site generator on tens of thousands of
   hostile inputs per run, from a fixed seed, on every platform.

@@ -585,3 +585,25 @@ for each file, who needs it. Do this before a first release, when nobody has com
 
 - **Guard.** `Cargo.toml`
 
+### L38. A CI matrix leg can run a different compiler than its name says
+
+(`.github/workflows/ci.yml`)
+
+For the whole life of the repository the CI had a `Test (…, 1.85)` leg, green, backing the
+`rust-version = "1.85"` in `Cargo.toml` and the badge in the README. Every one of its 19 `rustc`
+invocations was `.rustup/toolchains/stable-…`. The repository's `rust-toolchain.toml` says
+`channel = "stable"`, and rustup lets that file override the default toolchain that the setup
+action installs. It was found only because a *new* job asking for nightly failed with "`#![feature]`
+may not be used on the stable release channel". Running the suite on 1.85.1 locally showed the
+claim was true all along; the CI simply had never tested it.
+
+- **Rule.** A job named after a toolchain must prove it is using that toolchain. Set
+  `RUSTUP_TOOLCHAIN` (it outranks the file) and add a step that fails when `rustc --version`
+  is not what the leg asks for.
+- **Rule.** A green check proves only what it ran. When a check backs a public promise (MSRV,
+  platform support, a feature flag), read its log once and confirm the thing it claims.
+- **Rule.** A new job that fails is information, not noise: this one was the only reason the
+  gap was found.
+
+- **Guard.** `.github/workflows/ci.yml`
+
