@@ -60,6 +60,13 @@ fn the_hot_paths_stay_within_their_allocation_budgets() {
     check("p().text()", allocations(|| p().text("hello")).0, 1);
     check("Node::text", allocations(|| Node::text("hello")).0, 1);
 
+    // Replacing an attribute compares keys by reference; it used to copy the key first.
+    check(
+        "a().trusted_url(href)",
+        allocations(|| a().trusted_url("href", "/x")).0,
+        3,
+    );
+
     // `html!`: a `Display` value is escaped as it is formatted, not copied through
     // `to_string()`, and a text-only element moves its text instead of rebuilding it.
     let name = String::from("Ana");
@@ -101,6 +108,20 @@ fn the_hot_paths_stay_within_their_allocation_budgets() {
 
     // Cloning, which has to allocate every owned string once.
     check("clone, 100 items", allocations(|| tree.clone()).0, 302);
+
+    // Not a speed check: a ceiling on how large the tree types may grow. `Node` is as large as
+    // its largest variant, `Element` (104 bytes), so every text node in a `Vec<Node>` costs 104
+    // bytes. Boxing the element would shrink a text node to about 32 bytes but add one
+    // allocation per element child, the cost batch C spent effort removing, and change the
+    // public shape of `Node`. Nothing measured shows memory pressure, so it was not done; this
+    // notices if the types grow past what was measured. Kept inside this test because the
+    // allocator counts globally and a second test thread would corrupt the figures above.
+    {
+        use std::mem::size_of;
+        check("size_of::<Node>()", size_of::<Node>(), 104);
+        check("size_of::<Element>()", size_of::<Element>(), 104);
+        check("size_of::<Attribute>()", size_of::<Attribute>(), 56);
+    }
 
     eprintln!("{}", report.join("\n"));
 }
