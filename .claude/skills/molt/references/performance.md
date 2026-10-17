@@ -46,8 +46,8 @@ Allocation baseline: `div()` 0; `div().add_class()` 2; `li().add_class().text()`
 `a().attr("href", …)` 3; render compact of 100 items 6, pretty 7; `escape_text` of dirty input 2.
 
 Reading it: rendering is already hundreds of MiB/s; **building** the tree (allocations) costs
-more than rendering it. `html!` costs ~1.8× the equivalent builder although AGENTS.md rule 9
-says it is only sugar — a real finding to chase.
+more than rendering it. `html!` cost ~1.8× the equivalent builder although AGENTS.md rule 9
+says it is only sugar — found by the baseline, fixed in PR #59 (below).
 
 ## What each change did (keep appending, with numbers)
 
@@ -55,6 +55,7 @@ says it is only sugar — a real finding to chase.
 | --- | --- |
 | `Cow<'static, str>` for tag and attribute key (A3) | `div()` makes 0 allocations; asserted. Time effect: not separately measured |
 | `add_class` appends in place (P2) | one fewer copy and key reallocation per second class; covered by the allocation test |
+| `html!` formats `Display` straight into escaped form (PR #59) | build/1000 178 → 107 µs (−40%); `html! li { (name) }` 5 → 3 allocations; remaining gap to the builder ~14% |
 | escapers copy clean runs with `push_str` (P4) | sparse text 21.8 → 10.3 µs; clean 5.7 → 5.2 µs; **dense 19.7 → 55.6 µs (worse)**; `escape_text` dirty 2 → 1 alloc |
 
 ## Rules that came out of measuring

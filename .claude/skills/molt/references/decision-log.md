@@ -70,11 +70,15 @@ lose.
   still ~400 MB/s. *Reverts cleanly:* the change is one commit. *Changes if:* the owner
   prefers a flat worst case.
 - **Generic `impl Fn` entity tables, not `fn` pointers** — the pointer form is not inlined.
+- **`html!` formats `Display` through a `fmt::Write` that escapes** (`TextWriter`,
+  `AttributeWriter`), the key is borrowed, and a text-only element moves its text (PR #59).
+  *Why:* rule 9 says `html!` is sugar over the builder, yet it cost 1.8× because of three
+  intermediate copies. The tree it produces is unchanged. *Invariant to keep:* escaping each
+  piece a `Display` writes equals escaping the whole, because escaping is per character.
 - **`[profile.bench] opt-level = 3`**, release stays `z` for WASM.
 
 ## Open decisions (not taken yet)
 
-- Whether `html!` should be brought to builder speed (it is ~1.8× slower despite rule 9).
 - Whether `Box<Element>` inside `Node` is worth a visible change to the public enum (needs a
   `size_of` measurement first).
 - A safe JSON-LD helper (#26) versus documenting `raw_text` as unsafe for `<script>`.

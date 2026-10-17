@@ -238,6 +238,19 @@ so a counting allocator cannot be written in the repo. Without this test, the cl
 
 - **Guard.** `the_hot_paths_stay_within_their_allocation_budgets`
 
+### L22. Chase the finding the baseline hands you
+
+The first baseline showed `html!` at ~1.8× the builder, against a project rule that it is
+"only sugar". The cause was three intermediate copies (`to_string()`, an owned `String` key
+for a literal, a rebuilt content string), not the macro's structure. Fixing them cut the build
+by 40% and the allocations from 5 to 3 with an identical tree. When a measurement contradicts
+a stated rule, the discrepancy is usually the cheapest win in the file.
+Safe-by-construction trick used: a `fmt::Write` adaptor that escapes each piece it receives,
+valid because escaping is per character (escaping the pieces equals escaping the whole).
+
+- **Guard.** `a_display_value_is_escaped_as_it_is_formatted`,
+  `several_text_children_are_joined_into_one_content_string`
+
 ### L16. Report the regression you caused
 
 The first P4 attempt (escaping clean runs with `push_str`) made the dense-escape benchmark
