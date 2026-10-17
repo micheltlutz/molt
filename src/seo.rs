@@ -16,7 +16,7 @@ use crate::elements::{meta, title};
 #[must_use]
 pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::new("name", name))
+        .add_attribute(Attribute::new_static("name", name))
         .attr("content", content)
 }
 
@@ -24,21 +24,21 @@ pub fn meta_name(name: &str, content: impl AsRef<str>) -> Element {
 #[must_use]
 pub fn meta_property(property: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::new("property", property))
+        .add_attribute(Attribute::new_static("property", property))
         .attr("content", content)
 }
 
 /// A `<meta charset="…">`.
 #[must_use]
 pub fn meta_charset(charset: &str) -> Element {
-    meta().add_attribute(Attribute::new("charset", charset))
+    meta().add_attribute(Attribute::new_static("charset", charset))
 }
 
 /// A `<meta http-equiv="…" content="…">`.
 #[must_use]
 pub fn meta_http_equiv(http_equiv: &str, content: impl AsRef<str>) -> Element {
     meta()
-        .add_attribute(Attribute::new("http-equiv", http_equiv))
+        .add_attribute(Attribute::new_static("http-equiv", http_equiv))
         .attr("content", content)
 }
 

@@ -4,8 +4,10 @@
 //! `core/AttributeHelpers.swift`. Those three files are the *complete* chainable surface
 //! of Winged-Swift — there is nothing else.
 
+use std::borrow::Cow;
+
 use crate::core::attribute::Attribute;
-use crate::core::escape::{write_escaped_attribute, write_escaped_text};
+use crate::core::escape::write_escaped_text;
 use crate::core::node::{Node, Source};
 use crate::core::render::{Render, RenderOptions};
 
@@ -29,7 +31,9 @@ use crate::core::render::{Render, RenderOptions};
 /// ```
 #[derive(Debug)]
 pub struct Element {
-    tag: String,
+    // `Cow` for the same reason as `Attribute::key`: the ~90 built-in constructors hand over
+    // a `'static` literal, so `div()` allocates no tag name.
+    tag: Cow<'static, str>,
     attributes: Vec<Attribute>,
     content: Option<String>,
     children: Vec<Node>,
@@ -181,8 +185,27 @@ pub(crate) fn trees_equal(left: Source<'_>, right: Source<'_>) -> bool {
 impl Element {
     /// Creates an element with the given tag name.
     pub fn new(tag: impl Into<String>) -> Self {
+        Self::with_tag(Cow::Owned(tag.into()))
+    }
+
+    /// Creates an element whose tag is a `'static` string, without allocating it.
+    ///
+    /// What the built-in constructors (`div()`, `p()`, …) use. Reach for it when you define
+    /// your own element helpers with a literal tag, such as a custom element.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// assert_eq!(Element::from_static("my-card").text("hi").render(), "<my-card>hi</my-card>");
+    /// ```
+    #[must_use]
+    pub fn from_static(tag: &'static str) -> Self {
+        Self::with_tag(Cow::Borrowed(tag))
+    }
+
+    fn with_tag(tag: Cow<'static, str>) -> Self {
         Self {
-            tag: tag.into(),
+            tag,
             attributes: Vec::new(),
             content: None,
             children: Vec::new(),
@@ -403,9 +426,9 @@ impl Element {
         self.replace_attribute("role", role.as_ref())
     }
 
-    fn replace_attribute(mut self, key: &str, value: &str) -> Self {
+    fn replace_attribute(mut self, key: &'static str, value: &str) -> Self {
         self.attributes.retain(|a| a.key() != key);
-        self.attributes.push(Attribute::new(key, value));
+        self.attributes.push(Attribute::new_static(key, value));
         self
     }
 
@@ -420,13 +443,9 @@ impl Element {
     pub fn add_class(mut self, class_name: impl AsRef<str>) -> Self {
         let raw = class_name.as_ref();
         if let Some(existing) = self.attributes.iter_mut().find(|a| a.key() == "class") {
-            let mut merged = existing.value().to_string();
-            merged.push(' ');
-            write_escaped_attribute(&mut merged, raw);
-            // `Attribute::raw` because `merged` is already escaped.
-            *existing = Attribute::raw("class", merged);
+            existing.push_escaped_word(raw);
         } else {
-            self.attributes.push(Attribute::new("class", raw));
+            self.attributes.push(Attribute::new_static("class", raw));
         }
         self
     }

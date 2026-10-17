@@ -14,6 +14,27 @@
 //! That mirrors Winged-Swift, where `HTMLTag.init` stores already-escaped content, and it
 //! is why [`crate::core::Node::Raw`] exists as the documented escape hatch.
 
+use std::borrow::Cow;
+
+/// Escapes `input` only if some byte needs it, and otherwise hands it back untouched.
+///
+/// Every escaped character is ASCII, and no byte of a multi-byte UTF-8 sequence is, so
+/// scanning bytes finds exactly the characters a `char` loop would. Returning [`Cow`]
+/// means the common case — text with nothing to escape — costs no allocation and no copy.
+fn escape_with(
+    input: &str,
+    needs_escape: impl Fn(u8) -> bool,
+    write: impl FnOnce(&mut String, &str),
+) -> Cow<'_, str> {
+    if input.bytes().any(needs_escape) {
+        let mut out = String::with_capacity(input.len() + input.len() / 8);
+        write(&mut out, input);
+        Cow::Owned(out)
+    } else {
+        Cow::Borrowed(input)
+    }
+}
+
 /// Escapes text for use as HTML element content.
 ///
 /// Set `escape_slashes` to also turn `/` into `&#x2F;`. It defaults to off in
@@ -29,10 +50,12 @@
 /// );
 /// ```
 #[must_use]
-pub fn escape_text(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_text(&mut out, input, false);
-    out
+pub fn escape_text(input: &str) -> Cow<'_, str> {
+    escape_with(
+        input,
+        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''),
+        |out, input| write_escaped_text(out, input, false),
+    )
 }
 
 /// Escapes text for HTML content, optionally escaping `/` as well.
@@ -43,10 +66,12 @@ pub fn escape_text(input: &str) -> String {
 /// assert_eq!(escape_text_with_slashes("a/b"), "a&#x2F;b");
 /// ```
 #[must_use]
-pub fn escape_text_with_slashes(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_text(&mut out, input, true);
-    out
+pub fn escape_text_with_slashes(input: &str) -> Cow<'_, str> {
+    escape_with(
+        input,
+        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'' | b'/'),
+        |out, input| write_escaped_text(out, input, true),
+    )
 }
 
 /// Escapes a value for use inside a double-quoted HTML attribute.
@@ -66,10 +91,12 @@ pub fn escape_text_with_slashes(input: &str) -> String {
 /// assert_eq!(escape_attribute(r#"a "b" & <c>"#), "a &quot;b&quot; &amp; <c>");
 /// ```
 #[must_use]
-pub fn escape_attribute(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    write_escaped_attribute(&mut out, input);
-    out
+pub fn escape_attribute(input: &str) -> Cow<'_, str> {
+    escape_with(
+        input,
+        |b| matches!(b, b'&' | b'"' | b'\''),
+        write_escaped_attribute,
+    )
 }
 
 /// Escapes text for XML content — used by the sitemap and RSS generators.
@@ -83,19 +110,23 @@ pub fn escape_attribute(input: &str) -> String {
 /// assert_eq!(escape_xml("Tom & Jerry's <show>"), "Tom &amp; Jerry&apos;s &lt;show&gt;");
 /// ```
 #[must_use]
-pub fn escape_xml(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            _ => out.push(c),
-        }
-    }
-    out
+pub fn escape_xml(input: &str) -> Cow<'_, str> {
+    escape_with(
+        input,
+        |b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''),
+        |out, input| {
+            for c in input.chars() {
+                match c {
+                    '&' => out.push_str("&amp;"),
+                    '<' => out.push_str("&lt;"),
+                    '>' => out.push_str("&gt;"),
+                    '"' => out.push_str("&quot;"),
+                    '\'' => out.push_str("&apos;"),
+                    _ => out.push(c),
+                }
+            }
+        },
+    )
 }
 
 /// Appends escaped HTML text to an existing buffer.
@@ -132,6 +163,32 @@ pub(crate) fn write_escaped_attribute(out: &mut String, input: &str) {
 
 #[cfg(test)]
 mod tests {
+    /// Text with nothing to escape comes back borrowed: no allocation, no copy.
+    #[test]
+    fn clean_input_is_returned_without_allocating() {
+        use std::borrow::Cow;
+        for clean in ["", "plain text", "ação — 日本語 ✓", "2026/09/16"] {
+            assert!(matches!(escape_text(clean), Cow::Borrowed(_)), "{clean:?}");
+            assert!(
+                matches!(escape_attribute(clean), Cow::Borrowed(_)),
+                "{clean:?}"
+            );
+            assert!(matches!(escape_xml(clean), Cow::Borrowed(_)), "{clean:?}");
+        }
+        assert!(matches!(escape_text("a & b"), Cow::Owned(_)));
+        // `/` is only special when asked for, and `<` is not special to an attribute.
+        assert!(matches!(escape_text_with_slashes("a/b"), Cow::Owned(_)));
+        assert!(matches!(escape_attribute("a < b"), Cow::Borrowed(_)));
+    }
+
+    /// The byte scan must agree with the `char` loop for every special, next to multi-byte text.
+    #[test]
+    fn byte_scanning_finds_specials_beside_multibyte_characters() {
+        assert_eq!(escape_text("é<é"), "é&lt;é");
+        assert_eq!(escape_attribute("日\"本"), "日&quot;本");
+        assert_eq!(escape_xml("✓'✓"), "✓&apos;✓");
+    }
+
     use super::*;
 
     /// No single Swift counterpart: this covers in one assertion what `testEscapeAmpersand`

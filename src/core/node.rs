@@ -215,7 +215,7 @@ pub(crate) fn write_document_root(
     }
     out.push_str("<html");
     if let Some(lang) = lang {
-        Attribute::new("lang", lang).write_into(out);
+        Attribute::new_static("lang", lang).write_into(out);
     }
     out.push('>');
 

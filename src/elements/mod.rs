@@ -25,7 +25,7 @@ macro_rules! define_elements {
             /// ```
             #[must_use]
             pub fn $name() -> Element {
-                Element::new($tag)
+                Element::from_static($tag)
             }
         )*
 

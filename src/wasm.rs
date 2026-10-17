@@ -244,7 +244,7 @@ pub fn element(tag: &str) -> WElement {
 #[wasm_bindgen(js_name = escapeText)]
 #[must_use]
 pub fn escape_text(input: &str) -> String {
-    crate::core::escape::escape_text(input)
+    crate::core::escape::escape_text(input).into_owned()
 }
 
 /// The crate version, so a page can report which build produced it.
