@@ -241,6 +241,18 @@ so a counting allocator cannot be written in the repo. Without this test, the cl
   instead of 2). Fold every new check into the single test, or use another file.
 - **Guard.** `the_hot_paths_stay_within_their_allocation_budgets`
 
+### L16. Report the regression you caused
+
+The first P4 attempt (escaping clean runs with `push_str`) made the dense-escape benchmark
+2.6× slower, because the entity table was passed as a `fn(u8) -> …` **pointer**, which is not
+inlined into the hot loop. Passing it as a generic `impl Fn` fixed the builds but not the
+dense case, whose per-run cost (two `push_str` plus a char-boundary check) is inherent without
+`unsafe`. The PR states both numbers: prose-like text 21.8 → 10.3 µs, adversarial text
+19.7 → 55.6 µs. A win on realistic input and a loss on adversarial input is a trade-off to put
+in front of the owner, not to hide. Details: [`performance.md`](performance.md).
+
+- **Guard.** `performance.md`, `benches/render.rs`
+
 ### L22. Chase the finding the baseline hands you
 
 The first baseline showed `html!` at ~1.8× the builder, against a project rule that it is
@@ -278,18 +290,6 @@ optimisation is not.
 
 - **Guard.** `the_hot_paths_stay_within_their_allocation_budgets`
 
-### L16. Report the regression you caused
-
-The first P4 attempt (escaping clean runs with `push_str`) made the dense-escape benchmark
-2.6× slower, because the entity table was passed as a `fn(u8) -> …` **pointer**, which is not
-inlined into the hot loop. Passing it as a generic `impl Fn` fixed the builds but not the
-dense case, whose per-run cost (two `push_str` plus a char-boundary check) is inherent without
-`unsafe`. The PR states both numbers: prose-like text 21.8 → 10.3 µs, adversarial text
-19.7 → 55.6 µs. A win on realistic input and a loss on adversarial input is a trade-off to put
-in front of the owner, not to hide. Details: [`performance.md`](performance.md).
-
-- **Guard.** `performance.md`, `benches/render.rs`
-
 ---
 
 ## Process lessons
@@ -306,6 +306,25 @@ Independent branches off `develop` conflicted as soon as two of them edited `nod
 `SECURITY.md`. Stack them (each branch built on the previous, each PR based on the previous
 branch), rebase, and run the test suite **at every tip**, not only at the end. Docs that
 several PRs extend (`SECURITY.md`, `AGENTS.md`) are the usual conflict site.
+
+### L19. Tool availability is a fact to report, not to work around
+
+`cargo-deny` was not installed on the dev machine, so `./scripts/verify.sh` always showed one
+failure. State it ("fails only on the missing `cargo-deny`; CI runs it") and move on. Do not
+edit the script to skip the check, and do not install tools globally unasked.
+
+### L20. Clippy (pedantic) rules that bit, and the fix
+
+| lint | where | fix |
+| --- | --- | --- |
+| `manual_assert_eq` | deep-tree tests | keep `assert!(a == b)`, `#[allow]` with the reason (L6) |
+| `needless_pass_by_value` | wasm by-value args | allow with the "consumes the JS handle" comment (L12) |
+| `elidable_lifetime_names` | helper fns | drop the named lifetime |
+| `items_after_statements` | tests with a helper `fn` | declare the helper first |
+| `semicolon_if_nothing_returned` | closures in benches | add the `;` |
+| `cast_possible_truncation` | `u64 as usize` | keep sizes as `usize`, widen with `as u64` |
+| `expect_used` | benches | `let _ = fallible();` with a comment, or handle the error |
+| `needless_borrow` | testing a `&T: Render` impl | go through a generic `fn through<T: Render>(t: T)` |
 
 ### L21. An edit that matched nothing looks exactly like an edit that worked
 
@@ -326,22 +345,3 @@ Both fixes were merged without coverage; a knowledge-base guard check found it l
   test_x"` finds it.
 - **Guard.** `scripts/check-knowledge-base.sh`, `an_unsafe_tag_name_renders_nothing`,
   `angle_brackets_in_attributes_are_escaped_only_under_raw_text_parents`
-
-### L19. Tool availability is a fact to report, not to work around
-
-`cargo-deny` was not installed on the dev machine, so `./scripts/verify.sh` always showed one
-failure. State it ("fails only on the missing `cargo-deny`; CI runs it") and move on. Do not
-edit the script to skip the check, and do not install tools globally unasked.
-
-### L20. Clippy (pedantic) rules that bit, and the fix
-
-| lint | where | fix |
-| --- | --- | --- |
-| `manual_assert_eq` | deep-tree tests | keep `assert!(a == b)`, `#[allow]` with the reason (L6) |
-| `needless_pass_by_value` | wasm by-value args | allow with the "consumes the JS handle" comment (L12) |
-| `elidable_lifetime_names` | helper fns | drop the named lifetime |
-| `items_after_statements` | tests with a helper `fn` | declare the helper first |
-| `semicolon_if_nothing_returned` | closures in benches | add the `;` |
-| `cast_possible_truncation` | `u64 as usize` | keep sizes as `usize`, widen with `as u64` |
-| `expect_used` | benches | `let _ = fallible();` with a comment, or handle the error |
-| `needless_borrow` | testing a `&T: Render` impl | go through a generic `fn through<T: Render>(t: T)` |
