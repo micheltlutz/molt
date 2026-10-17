@@ -4,8 +4,59 @@
 //! [`SeoBuilder`] from `MOLT_SPEC.md` §6 on top of it — the builder is sugar over
 //! these functions, never a second implementation.
 
+use crate::core::escape::escape_json_script;
 use crate::core::{Attribute, Element};
-use crate::elements::{meta, title};
+use crate::elements::{meta, script, title};
+
+/// A `<script type="application/ld+json">` carrying structured data for search engines.
+///
+/// `json` is a JSON document, most often built from page fields that include user text. It
+/// is made safe to embed: `<`, `>`, `&`, U+2028 and U+2029 are written as JSON escapes, so a
+/// value containing `</script>` cannot end the element. It is **not validated**; pass valid
+/// JSON, from a serializer rather than string concatenation.
+///
+/// Before this helper the only way was `script().raw_text(json)`, which writes `json` as it is
+/// and lets a `</script>` in any field break out of the element.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// use molt::seo::json_ld;
+///
+/// let tag = json_ld(r#"{"@type":"Article","headline":"</script><script>alert(1)</script>"}"#);
+/// assert_eq!(
+///     tag.render(),
+///     r#"<script type="application/ld+json">{"@type":"Article","headline":"\u003c/script\u003e\u003cscript\u003ealert(1)\u003c/script\u003e"}</script>"#
+/// );
+/// ```
+#[must_use]
+pub fn json_ld(json: &str) -> Element {
+    script_json("application/ld+json", json)
+}
+
+/// A `<script type="…">` holding a JSON document, made safe to embed. See [`json_ld`].
+///
+/// Use it for other data blocks a page reads with `JSON.parse`, such as
+/// `application/json`. `mime` is attribute-escaped. Do not use it for `type="module"` or for
+/// classic scripts: that content is code, not data, and no escaping makes arbitrary code safe.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// use molt::seo::script_json;
+/// assert_eq!(
+///     script_json("application/json", r#"{"id":7}"#).render(),
+///     r#"<script type="application/json">{"id":7}</script>"#
+/// );
+/// ```
+#[must_use]
+pub fn script_json(mime: &str, json: &str) -> Element {
+    // `raw_text` because `<script>` content must not be HTML-escaped, which would write `&lt;`
+    // that JSON does not decode. It is safe here: `escape_json_script` has removed every `<`.
+    script()
+        .attr("type", mime)
+        .raw_text(escape_json_script(json).into_owned())
+}
 
 /// A `<meta name="…" content="…">`.
 ///
@@ -310,6 +361,46 @@ impl SeoBuilder {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_ld_cannot_be_broken_out_of_by_a_value() {
+        for hostile in [
+            "</script><script>alert(1)</script>",
+            "</SCRIPT >",
+            "<!--<script>",
+            "-->",
+            "<img src=x onerror=alert(1)>",
+        ] {
+            let json = format!(r#"{{"name":"{hostile}"}}"#);
+            let html = json_ld(&json).render();
+            let inner = html
+                .strip_prefix(r#"<script type="application/ld+json">"#)
+                .and_then(|rest| rest.strip_suffix("</script>"))
+                .expect("one script element");
+            for forbidden in ['<', '>', '&'] {
+                assert!(!inner.contains(forbidden), "{hostile:?} -> {html}");
+            }
+        }
+    }
+
+    #[test]
+    fn json_ld_keeps_the_document_and_only_rewrites_what_is_dangerous() {
+        let plain = r#"{"@context":"https://schema.org","name":"Tyres","n":[1,2.5,true,null]}"#;
+        assert_eq!(
+            json_ld(plain).render(),
+            format!(r#"<script type="application/ld+json">{plain}</script>"#)
+        );
+        // `&`, `<`, `>` and the two JS line terminators become JSON escapes; the rest is as given.
+        let json = format!(r#"{{"t":"a & b <c> {} {}"}}"#, '\u{2028}', '\u{2029}');
+        assert_eq!(
+            json_ld(&json).render(),
+            r#"<script type="application/ld+json">{"t":"a \u0026 b \u003cc\u003e \u2028 \u2029"}</script>"#
+        );
+        assert_eq!(
+            script_json("a\"b", "{}").render(),
+            r#"<script type="a&quot;b">{}</script>"#
+        );
+    }
+
     use super::*;
     use crate::core::Render;
 

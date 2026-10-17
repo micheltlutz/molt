@@ -32,5 +32,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "json_script"
+path = "fuzz_targets/json_script.rs"
+test = false
+doc = false
+bench = false
+
 # Own workspace so `cargo test` in the crate does not build the fuzz targets.
 [workspace]

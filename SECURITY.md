@@ -85,7 +85,10 @@ These are **not** vulnerabilities, because they are documented behaviour:
 
 - `raw_text()` and `Node::Raw` not escaping their input. That is their entire purpose; they
   are named and documented so that an audit can grep for them.
-- `<script>` and `<style>` content not being escaped by default, matching Winged-Swift.
+- `<script>` and `<style>` content not being escaped by default, matching Winged-Swift. For
+  JSON data in a `<script>` (JSON-LD, a data block) use `seo::json_ld` or `seo::script_json`,
+  which write `<`, `>` and `&` as JSON escapes so a `</script>` in a value cannot end the
+  element. Untrusted text in script *code* has no safe form; do not put it there.
 - `Attribute::raw` not escaping. It exists for library-controlled keys. It does **not**
   skip the URL check below: a raw `href="javascript&#58;..."` is still rendered as `href="#"`.
 

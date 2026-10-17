@@ -324,6 +324,14 @@ pub fn element(tag: &str) -> WElement {
     WElement::new(tag)
 }
 
+/// A `<script type="application/ld+json">` with the document made safe to embed: `<`, `>`
+/// and `&` become JSON escapes, so a `</script>` in a value cannot end the element.
+#[wasm_bindgen(js_name = jsonLd)]
+#[must_use]
+pub fn json_ld(json: &str) -> WElement {
+    WElement(crate::seo::json_ld(json))
+}
+
 /// Escapes text for HTML content, exposed for callers doing their own assembly.
 #[wasm_bindgen(js_name = escapeText)]
 #[must_use]

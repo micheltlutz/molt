@@ -335,6 +335,12 @@ impl Element {
     ///
     /// The documented escape hatch for markup you already trust. `<script>` and `<style>`
     /// use this by default.
+    ///
+    /// **Do not put untrusted data in a `<script>` or `<style>` through this.** The element
+    /// ends at the first `</script` (or `</style`) wherever it appears, including inside a
+    /// JSON string. For JSON data use [`seo::json_ld`](crate::seo::json_ld) or
+    /// [`seo::script_json`](crate::seo::script_json), which escape it; there is no safe way to
+    /// embed untrusted text in script code.
     #[must_use]
     pub fn raw_text(mut self, content: impl Into<String>) -> Self {
         self.content = Some(content.into());
