@@ -9,6 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `winged-rust 1.0.1` entries at the bottom are the crate's earlier history under its old name
 and are a different version line.
 
+## [Unreleased]
+
 ## [1.0.0] - 2026-10-17
 
 The 1.0.0 hardening release. Everything under **Breaking** needs a change in code that
