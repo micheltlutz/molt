@@ -12,7 +12,7 @@ use crate::core::attribute::Attribute;
 use crate::core::element::Element;
 use crate::core::escape::write_escaped_text;
 use crate::core::render::{Render, RenderOptions};
-use crate::core::tags::{is_valid_tag_name, is_void, is_whitespace_sensitive};
+use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_sensitive};
 
 /// A node in the HTML tree.
 ///
@@ -198,6 +198,10 @@ enum Step<'a> {
 fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
     let mut stack = Vec::with_capacity(16);
     stack.push(start);
+    // How many raw-text elements (`noscript`, `script`, …) enclose the node being written.
+    // Their descendants' attribute values get `<` and `>` escaped; see
+    // `Attribute::write_into_in`.
+    let mut raw_text_depth = 0usize;
 
     while let Some(step) = stack.pop() {
         match step {
@@ -233,18 +237,34 @@ fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
             }
 
             Step::CompactElement(element) => {
-                push_compact_element(element, out, options, &mut stack);
+                let in_raw_text = raw_text_depth > 0;
+                if push_compact_element(element, out, options, &mut stack, in_raw_text)
+                    && is_raw_text(element.tag())
+                {
+                    raw_text_depth += 1;
+                }
             }
             Step::PrettyElement(element, depth) => {
-                push_pretty_element(element, depth, out, options, &mut stack);
+                let in_raw_text = raw_text_depth > 0;
+                if push_pretty_element(element, depth, out, options, &mut stack, in_raw_text)
+                    && is_raw_text(element.tag())
+                {
+                    raw_text_depth += 1;
+                }
             }
 
             Step::Close(tag) => {
+                if is_raw_text(tag) {
+                    raw_text_depth = raw_text_depth.saturating_sub(1);
+                }
                 out.push_str("</");
                 out.push_str(tag);
                 out.push('>');
             }
             Step::ClosePretty(tag, depth) => {
+                if is_raw_text(tag) {
+                    raw_text_depth = raw_text_depth.saturating_sub(1);
+                }
                 out.push('\n');
                 options.write_indent(out, depth);
                 out.push_str("</");
@@ -277,20 +297,23 @@ fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
 }
 
 /// Writes an element's opening token and queues everything that follows it.
+///
+/// Returns whether a closing step was queued, i.e. whether the element is now open.
 fn push_compact_element<'a>(
     element: &'a Element,
     out: &mut String,
     options: &RenderOptions,
     stack: &mut Vec<Step<'a>>,
-) {
+    in_raw_text: bool,
+) -> bool {
     // An unsafe tag name is dropped with its whole subtree rather than repaired: there is
     // no right guess for what `div><script>` was meant to be.
     if !is_valid_tag_name(element.tag()) {
-        return;
+        return false;
     }
     out.push('<');
     out.push_str(element.tag());
-    write_attributes(element.attributes(), out);
+    write_attributes(element.attributes(), out, in_raw_text);
 
     // A void element takes no content and no children — both are silently dropped, which
     // is what Winged-Swift does. `Element::self_closing` opts a non-void tag into the same
@@ -298,7 +321,7 @@ fn push_compact_element<'a>(
     // skip the URL policy in `Attribute::write_into`.
     if is_void(element.tag()) || element.is_self_closing() {
         write_void_suffix(out, options);
-        return;
+        return false;
     }
 
     out.push('>');
@@ -307,6 +330,7 @@ fn push_compact_element<'a>(
     }
     stack.push(Step::Close(element.tag()));
     stack.extend(element.children().iter().rev().map(Step::Compact));
+    true
 }
 
 /// The same, indented, with the children queued one level deeper.
@@ -316,28 +340,29 @@ fn push_pretty_element<'a>(
     out: &mut String,
     options: &RenderOptions,
     stack: &mut Vec<Step<'a>>,
-) {
+    in_raw_text: bool,
+) -> bool {
     // Checked before the indent is written, so a dropped element leaves nothing behind for
     // `DropIfEmpty` to trip over.
     if !is_valid_tag_name(element.tag()) {
-        return;
+        return false;
     }
     // `<pre>`, `<code>` and `<textarea>` render every whitespace character they contain, so
     // indenting their children would change what the browser shows.
     if is_whitespace_sensitive(element.tag()) {
         options.write_indent(out, depth);
         stack.push(Step::CompactElement(element));
-        return;
+        return false;
     }
 
     options.write_indent(out, depth);
     out.push('<');
     out.push_str(element.tag());
-    write_attributes(element.attributes(), out);
+    write_attributes(element.attributes(), out, in_raw_text);
 
     if is_void(element.tag()) || element.is_self_closing() {
         write_void_suffix(out, options);
-        return;
+        return false;
     }
 
     out.push('>');
@@ -349,7 +374,7 @@ fn push_pretty_element<'a>(
         out.push_str("</");
         out.push_str(element.tag());
         out.push('>');
-        return;
+        return false;
     }
 
     if let Some(content) = element.content() {
@@ -370,6 +395,7 @@ fn push_pretty_element<'a>(
                 group_start: None,
             }),
     );
+    true
 }
 
 fn write_comment(out: &mut String, content: &str) {
@@ -399,9 +425,9 @@ fn push_neutralised_comment(out: &mut String, content: &str) {
     }
 }
 
-fn write_attributes(attributes: &[Attribute], out: &mut String) {
+fn write_attributes(attributes: &[Attribute], out: &mut String, in_raw_text: bool) {
     for attribute in attributes {
-        attribute.write_into(out);
+        attribute.write_into_in(out, in_raw_text);
     }
 }
 

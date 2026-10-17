@@ -109,6 +109,19 @@ impl Attribute {
     /// checked by [`url_policy`](crate::core::url_policy); a blocked value is written as `#`. The check sees the
     /// stored value, so [`Self::raw`] is covered and [`Self::trusted_url`] is not.
     pub(crate) fn write_into(&self, out: &mut String) {
+        self.write_into_in(out, false);
+    }
+
+    /// As [`Self::write_into`], for an attribute whose element sits inside a raw-text
+    /// ancestor (`noscript`, `iframe`, `xmp`, `script`, `style`, …).
+    ///
+    /// Attribute escaping leaves `<` and `>` alone because neither can end a quoted value —
+    /// and Winged-Swift's fixtures depend on that. Under a raw-text ancestor, though, the
+    /// parser is not reading attributes at all: a `</noscript>` inside `alt="…"` ends the
+    /// ancestor and what follows is markup. So there, and only there, `<` and `>` are
+    /// written as references. The stored value never contained a `<` reference, so this
+    /// cannot double-escape.
+    pub(crate) fn write_into_in(&self, out: &mut String, in_raw_text: bool) {
         if !is_safe_attribute_name(&self.key) {
             return;
         }
@@ -119,7 +132,17 @@ impl Attribute {
         }
         out.push_str("=\"");
         if self.is_trusted_url || !url_policy::is_blocked(&self.key, &self.value) {
-            out.push_str(&self.value);
+            if in_raw_text {
+                for c in self.value.chars() {
+                    match c {
+                        '<' => out.push_str("&lt;"),
+                        '>' => out.push_str("&gt;"),
+                        _ => out.push(c),
+                    }
+                }
+            } else {
+                out.push_str(&self.value);
+            }
         } else {
             out.push_str(url_policy::REPLACEMENT);
         }

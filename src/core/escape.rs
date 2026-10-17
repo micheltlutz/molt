@@ -55,6 +55,11 @@ pub fn escape_text_with_slashes(input: &str) -> String {
 /// cannot terminate a quoted attribute value. Winged-Swift's `HTMLEscape.escapeAttribute`
 /// does the same, and `marketing-pretty.html` contains attribute values that prove it.
 ///
+/// That holds wherever the parser reads attributes. Under a raw-text ancestor (`noscript`,
+/// `iframe`, `xmp`, `script`, `style`, …) it does not, so the renderer escapes `<` and `>`
+/// itself there — this function cannot, because it never sees the ancestors. Divergence
+/// from Winged-Swift, on purpose; see `SECURITY.md`.
+///
 /// # Examples
 /// ```
 /// use molt::core::escape::escape_attribute;
