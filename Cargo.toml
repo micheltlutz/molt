@@ -13,6 +13,7 @@ readme = "README.md"
 keywords = ["html", "dsl", "wasm", "static-site", "templating"]
 categories = ["web-programming", "template-engine", "wasm"]
 exclude = [
+    "/.claude",
     "/.github",
     "/scripts",
     "/examples/web",

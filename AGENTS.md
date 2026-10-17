@@ -14,6 +14,18 @@ design question comes up, the Swift source at
 `.claude/skills/wingedswift/references/pitfalls.md` documents behaviours the source alone
 does not make obvious.
 
+## Knowledge base
+
+`.claude/skills/molt/` holds the reasoning behind these rules and what the 1.0 hardening
+batches taught: security (OWASP Top 10 mapped onto this code), stack-safety, semver, errors,
+wasm-bindgen, benchmarking, design patterns to use and to refuse, and a decision log. Start
+at `SKILL.md`; its table says which reference to read for your task. The most useful single
+file is `references/lessons-learned.md`: every entry is a bug that already happened, with the
+test that now guards it.
+
+Each lesson names its guard, and `./scripts/check-knowledge-base.sh` (part of `verify.sh`)
+fails when one disappears. When you learn something the hard way, add a lesson and its guard.
+
 ## Commands
 
 | command | when |

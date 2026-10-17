@@ -60,6 +60,20 @@ fn the_hot_paths_stay_within_their_allocation_budgets() {
     check("p().text()", allocations(|| p().text("hello")).0, 1);
     check("Node::text", allocations(|| Node::text("hello")).0, 1);
 
+    // `html!`: a `Display` value is escaped as it is formatted, not copied through
+    // `to_string()`, and a text-only element moves its text instead of rebuilding it.
+    let name = String::from("Ana");
+    check(
+        "html! li { (name) }",
+        allocations(|| molt::html! { li { (name) } }).0,
+        3,
+    );
+    check(
+        "html! li(class = \"item\") { (name) }",
+        allocations(|| molt::html! { li(class = "item") { (name) } }).0,
+        5,
+    );
+
     // Rendering a tree that already exists: the output string, and nothing else.
     let tree = ul().children_from((0..100).map(|i| li().add_class("item").text(format!("n{i}"))));
     check(
