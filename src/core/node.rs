@@ -135,6 +135,25 @@ impl Node {
     }
 
     /// Creates a raw markup node. The content is **not** escaped.
+    ///
+    /// One of the three escape hatches, with [`Element::raw_text`](crate::core::Element::raw_text)
+    /// and [`Attribute::raw`](crate::core::Attribute::raw); grep for the three to audit a
+    /// codebase. Use it for markup you wrote or already sanitised: an SVG icon, an embed
+    /// snippet. **Never pass text a user typed.** `<` in it becomes markup, `</script>` ends a
+    /// script, and nothing downstream will stop it.
+    ///
+    /// For JSON in a `<script>` use [`seo::json_ld`](crate::seo::json_ld), which escapes it.
+    /// To show untrusted text, use [`Node::text`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// let icon = Node::raw(r#"<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>"#);
+    /// assert!(icon.render().starts_with("<svg"));
+    ///
+    /// // The same text through `Node::text` is shown, not interpreted.
+    /// assert_eq!(Node::text("<b>").render(), "&lt;b&gt;");
+    /// ```
     #[must_use]
     pub fn raw(content: impl Into<String>) -> Self {
         Self::Raw(Markup(content.into()))

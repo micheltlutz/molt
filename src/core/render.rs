@@ -147,6 +147,38 @@ impl RenderOptions {
 ///
 /// Implement [`write_into`](Render::write_into); the rest comes free.
 ///
+/// # Implementing it for your own type
+///
+/// Most types should not: build an [`Element`](crate::core::Element) and render that. Do it
+/// when a type *is* a piece of markup and callers want to pass it where a node is expected,
+/// by delegating to the tree it builds.
+///
+/// ```
+/// use molt::prelude::*;
+///
+/// struct Badge(&'static str);
+///
+/// impl Render for Badge {
+///     fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
+///         span().add_class("badge").text(self.0).write_into(out, options, depth);
+///     }
+/// }
+///
+/// assert_eq!(Badge("new").render(), r#"<span class="badge">new</span>"#);
+/// ```
+///
+/// Whatever you write must already be escaped: use [`Element`](crate::core::Element) and
+/// `text()` rather than pushing user text into `out` yourself.
+///
+/// # Stability
+///
+/// `Render` is part of the 1.x API. `write_into(&self, &mut String, &RenderOptions, usize)`
+/// will not change, and no **required** method will be added; provided methods may be. The
+/// buffer is a `String` on purpose, so a whole tree renders into one allocation, and
+/// `depth` is the indentation level the output starts at (`0` for a root). Implementations
+/// for `&T`, `Box<T>` and `Option<T>` exist; `Document` deliberately has none, because its
+/// inherent `render()` is pretty and this trait's is compact.
+///
 /// # Depth
 ///
 /// The provided implementations walk an explicit work stack rather than recursing, so
