@@ -1,6 +1,5 @@
 //! RSS 2.0 feed generation.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/feed/RSSGenerator.swift`.
 
 use std::fmt::Write as _;
 
@@ -28,8 +27,8 @@ pub struct RssItem {
 }
 
 impl RssItem {
-    /// Creates an item. `guid` defaults to `link`, as it does in Winged-Swift's
-    /// initializer — the default is applied here, not at render time.
+    /// Creates an item. `guid` defaults to `link`; the default is applied here, not
+    /// at render time.
     pub fn new(
         title: impl Into<String>,
         link: impl Into<String>,
@@ -104,8 +103,7 @@ pub struct RssGenerator {
     /// The technical contact address.
     ///
     /// Renders as `<webMaster>`. The camelCase spelling is the RSS specification's, not a
-    /// style slip — Winged-Swift disables `SwiftLint`'s `inclusive_language` rule for exactly
-    /// this tag. Do not "fix" it.
+    /// style slip. Do not "fix" it.
     pub webmaster: Option<String>,
 }
 
@@ -252,7 +250,6 @@ mod tests {
         RssGenerator::new("RideKeeper", "https://ridekeeper.example", "Release notes")
     }
 
-    /// Ports `RSSGeneratorTests.testChannelMetadata`.
     #[test]
     fn the_channel_carries_its_metadata_and_an_atom_self_link() {
         let xml = channel().language("pt-BR").generate(&[]);
@@ -264,7 +261,6 @@ mod tests {
         ));
     }
 
-    /// Ports `RSSGeneratorTests.testOptionalChannelFieldsAreOmitted`.
     #[test]
     fn absent_channel_fields_are_omitted_rather_than_emitted_empty() {
         let xml = channel().generate(&[]);
@@ -278,7 +274,6 @@ mod tests {
         }
     }
 
-    /// Ports `RSSGeneratorTests.testGuidDefaultsToTheItemLink`.
     #[test]
     fn the_guid_defaults_to_the_link() {
         let item = RssItem::new(
@@ -323,8 +318,6 @@ mod tests {
         assert_eq!(xml.matches("<category>").count(), 2);
     }
 
-    /// No Swift counterpart: its suite never renders a channel with no items on its own,
-    /// though several cases pass `items: []` while checking something else.
     #[test]
     fn a_feed_with_no_items_is_still_valid() {
         let xml = channel().generate(&[]);
@@ -333,7 +326,6 @@ mod tests {
         assert!(!xml.contains("<item>"));
     }
 
-    /// Ports `RSSGeneratorTests.testEveryOptionalChannelFieldIsRendered`.
     #[test]
     fn every_optional_channel_field_is_rendered_when_supplied() {
         let xml = channel()
@@ -348,7 +340,6 @@ mod tests {
         assert!(xml.contains("<webMaster>web@e.com</webMaster>"));
     }
 
-    /// Ports `RSSGeneratorTests.testItemWithoutOptionalFields`.
     #[test]
     fn an_item_without_optional_fields_emits_neither() {
         let xml = channel().generate(&[RssItem::new(
@@ -362,9 +353,8 @@ mod tests {
         assert!(!xml.contains("<category>"));
     }
 
-    /// Ports `RSSGeneratorTests.testExplicitGuidWinsOverTheLink`. Differs on one attribute:
-    /// Swift writes `isPermaLink="true"` for any guid, which promises readers they may open
-    /// `urn:uuid:1234`; here only a URL guid gets `true` (see `docs/history/PORTING.md` §12).
+    /// `isPermaLink="true"` promises readers they may open the guid, so only a URL guid gets it;
+    /// `urn:uuid:1234` gets `false`.
     #[test]
     fn an_explicit_guid_wins_over_the_link() {
         let xml = channel().generate(&[RssItem::new(
@@ -425,7 +415,6 @@ mod tests {
         assert!(!xml.chars().any(|c| matches!(c, '\u{0}'..='\u{8}' | '\u{B}' | '\u{C}' | '\u{E}'..='\u{1F}' | '\u{FFFE}' | '\u{FFFF}')));
     }
 
-    /// Ports `RSSGeneratorTests.testItemsAreRendered`.
     #[test]
     fn an_item_renders_every_field_it_is_given_xml_escaped() {
         let xml = channel().generate(&[RssItem::new(
@@ -435,12 +424,12 @@ mod tests {
             "Tue, 11 Aug 2026 10:00:00 +0000",
         )
         .author("me@example.com")
-        .categories(["swift", "html"])]);
+        .categories(["rust", "html"])]);
 
         assert!(xml.contains("<title>Hello &amp; welcome</title>"));
         assert!(xml.contains("<description>First &lt;post&gt;</description>"));
         assert!(xml.contains("<pubDate>Tue, 11 Aug 2026 10:00:00 +0000</pubDate>"));
-        assert!(xml.contains("<category>swift</category>"));
+        assert!(xml.contains("<category>rust</category>"));
         assert!(xml.contains("<category>html</category>"));
     }
 }

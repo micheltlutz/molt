@@ -1,9 +1,8 @@
 //! The [`html!`](crate::html) declarative macro.
 //!
-//! Rust's answer to Winged-Swift's `@HTMLBuilder` / `@HTMLFragmentBuilder` result builders
-//! (`Sources/WingedSwift/functions/HTMLFunctions.swift`). It is **sugar over the builder
-//! API, never a second code path** — every form here expands to the same `Element` and
-//! `Node` calls you would write by hand, so there is exactly one renderer to keep correct.
+//! Nested, markup-like syntax for building a tree. It is **sugar over the builder API, never a
+//! second code path** — every form here expands to the same `Element` and `Node` calls you
+//! would write by hand, so there is exactly one renderer to keep correct.
 
 use crate::core::{Element, Node};
 
@@ -366,7 +365,7 @@ mod tests {
         );
     }
 
-    /// Matches `buildArray` in Winged-Swift's `HTMLBuilder`.
+    /// A `@for` produces one sibling per item.
     #[test]
     fn for_loops_expand_to_siblings() {
         let names = ["Ana", "Bruno"];
@@ -424,12 +423,10 @@ mod tests {
         );
     }
 
-    // Ports `BuilderInitTests`, whose thesis is that Swift's result-builder initialiser is
-    // *exactly* equivalent to the array one. `html!` makes the same promise here — rule 9
-    // of AGENTS.md: sugar over the builder, never a second code path — so each of these
-    // asserts the macro and the builder agree, and then pins the markup.
+    // `html!` promises to be exactly equivalent to the builder — rule 9 of AGENTS.md: sugar over
+    // the builder, never a second code path — so each of these asserts the macro and the
+    // builder agree, and then pins the markup.
 
-    /// Ports `BuilderInitTests.plainContainer`.
     #[test]
     fn the_macro_and_the_builder_agree_on_a_plain_container() {
         let macro_built = html! { div { p { "Hi" } } };
@@ -439,7 +436,6 @@ mod tests {
         assert_eq!(macro_built.render(), "<div><p>Hi</p></div>");
     }
 
-    /// Ports `BuilderInitTests.containerWithRequiredAttribute`.
     #[test]
     fn the_macro_and_the_builder_agree_on_a_required_attribute() {
         let macro_built = html! { a(href = "/docs") { span { "Docs" } } };
@@ -452,7 +448,6 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.containerWithAttributesAndContent`.
     #[test]
     fn attributes_and_children_render_together() {
         assert_eq!(
@@ -461,7 +456,6 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.booleanFlagIsPreserved`.
     #[test]
     fn a_boolean_flag_survives_the_macro() {
         assert_eq!(
@@ -470,7 +464,6 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.tableFamily`.
     #[test]
     fn the_table_family_nests() {
         let markup = html! {
@@ -486,10 +479,8 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.formFamily`.
-    ///
-    /// `for` is a Rust keyword, so the attribute name is quoted — the one place the macro
-    /// asks for punctuation the Swift builder does not.
+    /// `for` is a Rust keyword, so the attribute name is quoted — the one place the macro asks
+    /// for punctuation.
     #[test]
     fn the_form_family_nests() {
         let markup = html! {
@@ -510,7 +501,6 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.mediaFamily`.
     #[test]
     fn the_media_family_nests() {
         let markup = html! {
@@ -529,7 +519,6 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.loopsInsideTheBuilder`.
     #[test]
     fn a_loop_inside_the_macro_repeats_its_body() {
         let markup = html! { ul { @for name in ["a", "b", "c"] { li { (name) } } } };
@@ -537,7 +526,6 @@ mod tests {
         assert_eq!(markup.render(), "<ul><li>a</li><li>b</li><li>c</li></ul>");
     }
 
-    /// Ports `BuilderInitTests.conditionsInsideTheBuilder`.
     #[test]
     fn a_false_condition_inside_the_macro_renders_nothing() {
         let is_admin = false;
@@ -551,11 +539,8 @@ mod tests {
         assert_eq!(markup.render(), r#"<nav><a href="/">Home</a></nav>"#);
     }
 
-    /// Ports `BuilderInitTests.mapInsideTheBuilder`.
-    ///
-    /// Swift drops a `map` straight into the builder. The macro takes an iterator through
-    /// `@for` instead, and `children_from` is the builder's spelling of the same thing —
-    /// the test is that both land on identical markup.
+    /// The macro takes an iterator through `@for`, and `children_from` is the builder's
+    /// spelling of the same thing — the test is that both land on identical markup.
     #[test]
     fn a_mapped_sequence_matches_the_macro_loop() {
         let macro_built = html! { ol { @for item in ["x", "y"] { li { (item) } } } };
@@ -565,18 +550,14 @@ mod tests {
         assert_eq!(macro_built.render(), "<ol><li>x</li><li>y</li></ol>");
     }
 
-    /// Ports `BuilderInitTests.emptyBuilderProducesAnEmptyElement`.
     #[test]
     fn an_empty_body_produces_an_empty_element() {
         assert_eq!(html! { div {} }.render(), "<div></div>");
     }
 
-    /// Ports `BuilderInitTests.untypedElementSupportsTheBuilder`.
-    ///
     /// The macro resolves a tag name to its generated constructor, and there is no
-    /// `hgroup()` among the 93 — Winged-Swift has no `Hgroup` type either, which is why its
-    /// own test reaches for the untyped `HTMLTag`. `Element::new` is that escape hatch here,
-    /// and it composes with macro-built children.
+    /// `hgroup()` among the 93. `Element::new` is the escape hatch for a tag without a
+    /// constructor, and it composes with macro-built children.
     #[test]
     fn an_untyped_element_takes_macro_built_children() {
         let group = Element::new("hgroup")
@@ -589,10 +570,7 @@ mod tests {
         );
     }
 
-    /// Ports `BuilderInitTests.chainingStillPreservesTheType`.
-    ///
-    /// Swift's builder initialiser returns the concrete tag type, so `.addClass` chains off
-    /// it. `html!` returns a [`Node`], which is the union of every shape a child can take
+    /// `html!` returns a [`Node`], which is the union of every shape a child can take
     /// and has no builder methods — so chaining happens on the builder, and the macro
     /// supplies the children. Both spellings render the same.
     #[test]
@@ -602,7 +580,6 @@ mod tests {
         assert_eq!(chained.render(), r#"<div class="card"><p>Hi</p></div>"#);
     }
 
-    /// Ports `BuilderInitTests.nestingIsArbitrarilyDeep`.
     #[test]
     fn nesting_goes_as_deep_as_it_is_written() {
         let page = html! {
@@ -615,14 +592,10 @@ mod tests {
         );
     }
 
-    // Ports `HTMLBuilderTests`, which exercises Swift's result-builder plumbing:
-    // `buildOptional`, `buildEither` and `buildExpression`. Those are compiler hooks with
-    // no counterpart here — `html!` lowers `@if`/`@else`/`@for` straight onto the builder —
-    // so each port keeps the *behaviour* the Swift test describes. Several of those tests
-    // reach into `document.children[0].name`; these assert markup instead, which is rule 11
-    // of AGENTS.md and the reason Winged-Swift's own suite survived its 2.0 rewrite.
+    // `html!` lowers `@if`/`@else`/`@for` straight onto the builder. These tests assert markup
+    // rather than reaching into the tree, which is rule 11 of AGENTS.md and what lets the
+    // internals be rewritten without touching them.
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderCreatesRootHTMLTag`.
     #[test]
     fn a_root_html_element_keeps_its_children_in_order() {
         let document = html_tag().child(body()).child(head());
@@ -630,8 +603,6 @@ mod tests {
         assert_eq!(document.render(), "<html><body></body><head></head></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesOptional`.
-    ///
     /// `Option` is an iterator of zero or one item, so `children_from` is all the plumbing
     /// an optional child needs.
     #[test]
@@ -646,7 +617,6 @@ mod tests {
         assert_eq!(html_tag().children_from(absent).render(), "<html></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderWrapsASingleNonGroupedComponent`.
     #[test]
     fn a_single_child_gains_no_wrapper() {
         let document = html_tag().child(body().child(h1().text("Hi")));
@@ -654,7 +624,6 @@ mod tests {
         assert_eq!(document.render(), "<html><body><h1>Hi</h1></body></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderTakesBothBranchesOfAnIfElse`.
     #[test]
     fn an_if_else_renders_whichever_branch_holds() {
         fn page(logged_in: bool) -> Element {
@@ -667,7 +636,6 @@ mod tests {
         assert_eq!(page(false).render(), "<html><nav>Sign in</nav></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderAcceptsAnArrayExpression`.
     #[test]
     fn a_sequence_of_children_flattens_into_siblings() {
         let document = html_tag().children_from(["a", "b"].map(|text| p().text(text)));
@@ -675,10 +643,7 @@ mod tests {
         assert_eq!(document.render(), "<html><p>a</p><p>b</p></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesEitherFirst`.
-    ///
-    /// Swift names the branches with the untyped `HTMLTag("first")`; the macro resolves a
-    /// tag name to its generated constructor, so real tags stand in.
+    /// The macro resolves a tag name to its generated constructor, so real tags stand in.
     #[test]
     fn the_first_branch_of_a_condition_renders_alone() {
         let document = html_tag().child(html! {
@@ -688,7 +653,6 @@ mod tests {
         assert_eq!(document.render(), "<html><header></header></html>");
     }
 
-    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesEitherSecond`.
     #[test]
     fn the_second_branch_of_a_condition_renders_alone() {
         let document = html_tag().child(html! {

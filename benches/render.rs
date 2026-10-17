@@ -8,8 +8,7 @@
 //!
 //! These run under `cargo bench` and are **not** a CI gate — criterion timings are too
 //! noisy for that. The cheap regression guard that does gate CI lives in
-//! `tests/performance.rs`, which asserts on output size rather than time, borrowing the
-//! instinct from `Winged-Swift/Tests/WingedSwiftTests/RenderPerformanceTests.swift`.
+//! `tests/performance.rs`, which asserts on output size rather than time.
 
 #![allow(missing_docs)]
 

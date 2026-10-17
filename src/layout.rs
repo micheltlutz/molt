@@ -1,7 +1,4 @@
 //! Reusable page layouts.
-//!
-//! Ports `Winged-Swift/Sources/WingedSwift/templates/Layout.swift` — the only protocol in
-//! the entire Swift library.
 
 use crate::core::Node;
 use crate::elements::div;
@@ -10,10 +7,9 @@ use crate::elements::div;
 ///
 /// # A footgun that does not exist here
 ///
-/// Winged-Swift's docs spend considerable space warning that `HTMLTag` is a reference type,
-/// so reusing one instance in two places silently shares the node — which is why its
-/// documented component pattern is "a function that returns a fresh tag each call". In Rust
-/// [`Node`] is a value type, so reuse copies. Write components however you like.
+/// A component is a value, not a shared handle. [`Node`] is a value type, so using one
+/// instance in two places copies it and the copies cannot affect each other. Write components
+/// however you like: a function, a struct, a constant.
 ///
 /// # Examples
 /// ```
@@ -44,8 +40,7 @@ pub trait Layout {
 
     /// Wraps several nodes, grouping them in a `<div>` first.
     ///
-    /// Matches the Swift extension, which also introduces a `Div`. Use
-    /// [`Node::fragment`] and [`Layout::wrap`] if you would rather not have the wrapper.
+    /// Use [`Node::fragment`] and [`Layout::wrap`] if you would rather not have the wrapper.
     fn wrap_many(&self, contents: Vec<Node>) -> Node {
         self.wrap(div().children_from(contents).into())
     }
@@ -68,7 +63,6 @@ mod tests {
         }
     }
 
-    /// Ports `LayoutTests.wrapsASingleTag`.
     #[test]
     fn a_layout_wraps_a_single_node() {
         let page = Minimal.wrap(p().text("body").into());
@@ -78,7 +72,6 @@ mod tests {
         );
     }
 
-    /// Ports `LayoutTests.wrapsSeveralTagsInAContainer`.
     #[test]
     fn wrap_many_groups_the_contents_in_a_div() {
         let page = Minimal.wrap_many(vec![p().text("a").into(), p().text("b").into()]);
@@ -88,7 +81,6 @@ mod tests {
         );
     }
 
-    /// Ports `LayoutTests.anEmptyContentListStillProducesAPage`.
     #[test]
     fn wrap_many_with_no_contents_still_produces_the_wrapper() {
         let page = Minimal.wrap_many(vec![]);

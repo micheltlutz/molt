@@ -1,6 +1,5 @@
 //! HTML attributes.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/core/Attribute.swift`.
 
 use std::borrow::Cow;
 
@@ -109,9 +108,7 @@ impl Attribute {
     /// The URL policy still runs on the stored value, so a raw `javascript:` URL in `href`
     /// is rendered as `#`; only [`Self::trusted_url`] skips that.
     ///
-    /// Winged-Swift used it for `Meta`'s `name`, `property`, `charset` and `http-equiv`.
-    /// The `meta_*` helpers here no longer do: they are `pub` and take `&str`, so they
-    /// escape.
+    /// The `meta_*` helpers do not use it: they are `pub` and take `&str`, so they escape.
     ///
     /// # Examples
     /// ```
@@ -172,7 +169,7 @@ impl Attribute {
     /// ancestor (`noscript`, `iframe`, `xmp`, `script`, `style`, …).
     ///
     /// Attribute escaping leaves `<` and `>` alone because neither can end a quoted value —
-    /// and Winged-Swift's fixtures depend on that. Under a raw-text ancestor, though, the
+    /// and the golden fixtures depend on that. Under a raw-text ancestor, though, the
     /// parser is not reading attributes at all: a `</noscript>` inside `alt="…"` ends the
     /// ancestor and what follows is markup. So there, and only there, `<` and `>` are
     /// written as references. The stored value never contained a `<` reference, so this
@@ -233,7 +230,6 @@ mod tests {
         assert_eq!(attr.value(), "a &quot;quoted&quot; &amp; <tagged> value");
     }
 
-    /// Ports the boolean-attribute cases in `HTML14FeaturesTests`.
     #[test]
     fn boolean_attributes_render_as_a_bare_key() {
         assert_eq!(Attribute::boolean("required").to_string(), " required");

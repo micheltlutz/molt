@@ -1,19 +1,13 @@
 //! Rendering options and the [`Render`] trait.
 //!
-//! Ports `core/RenderOptions.swift` and the render half of `core/HTMLTag.swift`.
-//!
-//! `docs/history/MOLT_SPEC.md` §2 claims Winged-Swift has a `protocol HTMLRenderable`. It does
-//! not — the only protocol in that library is `Layout`. The real design is a class
-//! hierarchy whose single overridable primitive is
-//! `write(into:options:indentLevel:)`, and that is what [`Render::write_into`] ports.
-//! Everything else is a provided method on top of it, so the whole tree renders into one
-//! buffer with one allocation.
+//! [`Render::write_into`] is the single primitive: everything else is a provided method on top
+//! of it, so the whole tree renders into one buffer with one allocation.
 
 /// How a node tree is turned into markup.
 ///
 /// A value passed into the render call, never global state — two threads can render the
-/// same tree with different settings at the same time. Winged-Swift's deprecated
-/// process-wide `HTMLTag.xhtmlSelfClosing` switch is deliberately not ported.
+/// same tree with different settings at the same time. There is deliberately no process-wide
+/// switch.
 ///
 /// # Examples
 /// ```
@@ -198,7 +192,7 @@ pub trait Render {
     /// Renders as a single line of markup.
     ///
     /// Note the asymmetry with [`crate::Document::render`], which defaults to *pretty*.
-    /// That difference is in the Swift original and the golden fixtures depend on it.
+    /// The golden fixtures depend on that difference.
     fn render(&self) -> String {
         self.render_with(&RenderOptions::compact())
     }
@@ -311,7 +305,6 @@ mod tests {
     use super::*;
     use crate::elements::{div, img, p};
 
-    /// Ports `RenderOptionsTests.compactIsTheDefault`.
     #[test]
     fn compact_is_the_default() {
         let options = RenderOptions::default();
@@ -320,7 +313,6 @@ mod tests {
         assert!(!options.xhtml_self_closing);
     }
 
-    /// Ports `RenderOptionsTests.indentIsConfigurable`.
     #[test]
     fn the_indent_string_is_configurable() {
         let options = RenderOptions::pretty().with_indent("    ");
@@ -329,8 +321,7 @@ mod tests {
         assert_eq!(out, "        ");
     }
 
-    /// Ports `RenderOptionsTests.optionsAreValues`. Options are a value: changing a
-    /// copy must not affect the original.
+    /// Options are a value: changing a copy must not affect the original.
     #[test]
     fn options_have_value_semantics() {
         let base = RenderOptions::compact();
@@ -339,7 +330,6 @@ mod tests {
         assert!(derived.xhtml_self_closing);
     }
 
-    /// Ports `RenderOptionsTests.prettyIndentsChildren`.
     #[test]
     fn pretty_indents_children_by_two_spaces() {
         let tree = div().child(p().text("Hi"));
@@ -347,11 +337,8 @@ mod tests {
         assert_eq!(tree.render_pretty(), "<div>\n  <p>Hi</p>\n</div>");
     }
 
-    /// Ports `RenderOptionsTests.xhtmlSelfClosingIsPerCall`.
-    ///
-    /// Winged-Swift used to carry this on a process-wide `HTMLTag.xhtmlSelfClosing` switch
-    /// and is removing it. Here it was never anything but a field on the options value, so
-    /// a render cannot leak into the next one.
+    /// XHTML-style closing is a field on the options value, never a process-wide switch, so a
+    /// render cannot leak into the next one.
     #[test]
     fn xhtml_self_closing_is_per_call() {
         let tag = img().attr("src", "a.png");
@@ -364,7 +351,6 @@ mod tests {
         assert_eq!(tag.render(), r#"<img src="a.png">"#);
     }
 
-    /// Ports `RenderOptionsTests.writeAppendsToAnExistingBuffer`.
     #[test]
     fn write_into_appends_rather_than_replacing() {
         let mut buffer = String::from("<!-- header -->");
@@ -375,11 +361,8 @@ mod tests {
         assert_eq!(buffer, "<!-- header --><div>x</div>");
     }
 
-    /// Ports `RenderOptionsTests.concurrentRendersDoNotShareState`.
-    ///
-    /// The Swift suite needs this because its tree is reference-typed and its options used
-    /// to be global. Here the tree is `Send + Sync` and the options are a value, so the
-    /// test is a guard against ever reintroducing shared state.
+    /// The tree is `Send + Sync` and the options are a value, so this is a guard against ever
+    /// reintroducing shared state.
     #[test]
     fn concurrent_renders_do_not_share_state() {
         let results: Vec<(usize, String)> = std::thread::scope(|scope| {

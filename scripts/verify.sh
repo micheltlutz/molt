@@ -2,10 +2,9 @@
 #
 # One command that is a superset of CI. Run it before reporting that a change is done.
 #
-# Ported from Winged-Swift/Scripts/verify.sh, including its two best ideas: accumulate
-# failures instead of stopping at the first one, so a single run reports every problem;
-# and finish with an end-to-end smoke test that builds a throwaway crate against this
-# checkout, proving the library is actually consumable.
+# Two ideas make it useful: it accumulates failures instead of stopping at the first one, so
+# a single run reports every problem; and it includes an end-to-end smoke test that builds a
+# throwaway crate against this checkout, proving the library is actually consumable.
 
 set -uo pipefail
 
@@ -32,12 +31,12 @@ run() {
 
 cd "$(dirname "$0")/.."
 
-step "1/8  Build"
+step "1/7  Build"
 run "cargo build --all-features" cargo build --all-features
 run "cargo build --no-default-features" cargo build --no-default-features
 run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
-step "2/8  Test"
+step "2/7  Test"
 run "cargo test --all-features" cargo test --locked --all-features
 # What the CI WebAssembly job runs. It also runs the doc tests for the wasm32 target, where
 # `molt::ssg` does not exist: a guide that uses it broke `develop` once and only CI saw it.
@@ -47,7 +46,7 @@ else
   printf '  skip  wasm-pack test (wasm-pack is not installed; CI runs it)\n'
 fi
 
-step "3/8  Lint"
+step "3/7  Lint"
 run "cargo fmt --check" cargo fmt --all --check
 run "cargo clippy" cargo clippy --locked --all-targets --all-features -- -D warnings
 if command -v cargo-deny >/dev/null 2>&1; then
@@ -56,22 +55,25 @@ else
   fail "cargo-deny is not installed (cargo install cargo-deny, or the CI install-action)"
 fi
 
-step "4/8  Tag catalog freshness"
+step "4/7  Tag catalog freshness"
 if [ -x scripts/generate-tag-catalog.sh ]; then
   run "tag catalog is current" ./scripts/generate-tag-catalog.sh --check
 else
   fail "scripts/generate-tag-catalog.sh is missing or not executable"
 fi
 
-step "5/8  Golden fixtures"
+step "5/7  Golden fixtures"
 run "fixtures reproduce byte-for-byte" cargo test --test golden
 
-step "6/8  End-to-end smoke test"
+step "6/7  End-to-end smoke test"
 # A throwaway crate that depends on this checkout by path. This is what catches a library
 # that compiles in-tree but cannot actually be consumed — a broken feature gate, a type
 # that is not public, a doc example that only works with dev-dependencies in scope.
 SMOKE_DIR="$(mktemp -d)"
-trap 'rm -rf "$SMOKE_DIR"' EXIT
+SMOKE_LOG="$SMOKE_DIR/smoke.log"
+# One trap for both temporaries: a second `trap ... EXIT` replaces the first, which is how the
+# main log file used to be left behind.
+trap 'rm -f "$LOG"; rm -rf "$SMOKE_DIR"' EXIT
 
 mkdir -p "$SMOKE_DIR/src"
 cat > "$SMOKE_DIR/Cargo.toml" <<TOML
@@ -98,7 +100,7 @@ fn main() {
 }
 RS
 
-if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>/tmp/molt-smoke.log); then
+if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>"$SMOKE_LOG"); then
   SMOKE_OUT="$SMOKE_DIR/output.html"
   for expected in '<!DOCTYPE html>' '<h1>It renders</h1>' '&lt;ok&gt;'; do
     if grep -qF -- "$expected" "$SMOKE_OUT"; then
@@ -110,23 +112,10 @@ if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>/tmp/molt-smoke.log); t
   done
 else
   fail "the smoke crate did not build"
-  sed 's/^/      /' /tmp/molt-smoke.log | tail -40
+  sed 's/^/      /' "$SMOKE_LOG" | tail -40
 fi
 
-step "7/8  Winged-Swift cross-references"
-
-# Skips itself when the sibling checkout is absent, which is why it can sit in the gate:
-# CI never has Winged-Swift, and a contributor who does gets told when a `Ports` comment
-# names a test that no longer exists.
-if PARITY=$(./scripts/check-swift-parity.sh 2>&1); then
-  printf '%s\n' "$PARITY" | tail -3 | sed 's/^/      /'
-  ok "cross-references resolve"
-else
-  fail "a Ports comment names a Swift test that does not exist"
-  printf '%s\n' "$PARITY" | grep stale | sed 's/^/      /'
-fi
-
-step "8/8  Agent knowledge base"
+step "7/7  Agent knowledge base"
 # Every lesson in .claude/skills/molt names the tests or files that guard it. A guard that
 # was renamed or deleted is a claim nothing checks any more.
 if [ -x scripts/check-knowledge-base.sh ]; then

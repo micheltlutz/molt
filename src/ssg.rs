@@ -1,6 +1,5 @@
 //! Static site generation.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/static/StaticSiteGenerator.swift`.
 //!
 //! Compiled out on `wasm32` regardless of the `ssg` feature — there is no filesystem
 //! there.
@@ -157,7 +156,7 @@ impl StaticSiteGenerator {
     /// Renders several documents.
     ///
     /// With the `parallel` feature the pages are rendered concurrently — sound because the
-    /// node tree is `Send + Sync`, which Winged-Swift's reference-typed tree is not.
+    /// node tree is `Send + Sync`.
     ///
     /// **Every** failure is reported, not just the first: a bulk build that names one of
     /// twelve broken pages is worse than useless.
@@ -234,8 +233,8 @@ impl StaticSiteGenerator {
     /// # Errors
     /// Returns an error if the output directory is unsafe to delete — empty, a filesystem
     /// root, a top-level directory, the home directory, the working directory or one of its
-    /// ancestors, or containing a `..` component. Winged-Swift's version has no such guard
-    /// and will happily recurse through whatever it is pointed at.
+    /// ancestors, or containing a `..` component, because removing it recursively would delete
+    /// whatever it points at.
     pub fn clean(&self, create_directory: bool) -> Result<()> {
         guard_destructive_path(&self.output_directory)?;
 
@@ -341,7 +340,7 @@ impl StaticSiteGenerator {
 /// A sibling of `destination` that no other writer will pick.
 ///
 /// `with_extension` was the wrong tool: it *replaces* the extension, so `index.html` and
-/// `index.xml` both became `index.winged-tmp` and two pages written in parallel shared one
+/// `index.xml` both became `index.tmp` and two pages written in parallel shared one
 /// file. The full file name, the process id and a counter make the name unique.
 fn temporary_path(destination: &Path) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -471,7 +470,6 @@ mod tests {
             .body_children([h1().text(text)])
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateWritesADocument`.
     #[test]
     fn generate_writes_a_rendered_document() {
         let dir = TempDir::new("generate");
@@ -484,8 +482,7 @@ mod tests {
         assert!(written.contains("<h1>Home</h1>"));
     }
 
-    /// Ports `ThreeZeroTests.generatorStreamsDocuments` and
-    /// `ThreeZeroTests.replacesAnExistingFileAndReportsFailures`.
+    /// A generated file is the streamed render, replaces an existing one, and reports failures.
     #[test]
     fn generate_replaces_a_file_with_the_rendered_bytes() {
         let dir = TempDir::new("stream");
@@ -505,7 +502,6 @@ mod tests {
         assert!(only_files_named(&dir.0, &["index.html"]));
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateCreatesNestedDirectories`.
     #[test]
     fn nested_paths_create_their_parent_directories() {
         let dir = TempDir::new("nested");
@@ -519,7 +515,6 @@ mod tests {
         assert!(dir.0.join("blog/2026/post.html").exists());
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateCanSkipDoctype`.
     #[test]
     fn a_bare_page_can_be_written_without_a_doctype() {
         let dir = TempDir::new("doctype");
@@ -543,7 +538,6 @@ mod tests {
         );
     }
 
-    /// Ports `StaticSiteGeneratorTests.writeFileAndCopyAsset`.
     #[test]
     fn copy_asset_replaces_an_existing_destination() {
         let dir = TempDir::new("assets");
@@ -559,7 +553,6 @@ mod tests {
         assert_eq!(copied, "body{color:red}");
     }
 
-    /// Ports `StaticSiteGeneratorTests.cleanRemovesPreviousOutput`.
     #[test]
     fn clean_empties_the_output_directory() {
         let dir = TempDir::new("clean");
@@ -571,7 +564,7 @@ mod tests {
         assert!(!dir.0.join("out/a.html").exists());
     }
 
-    /// The guard Winged-Swift does not have.
+    /// `clean` refuses a directory that would be dangerous to remove.
     #[test]
     fn clean_refuses_an_unsafe_output_directory() {
         for unsafe_path in ["", "/"] {
@@ -612,7 +605,7 @@ mod tests {
             .expect("named")
             .to_string_lossy()
             .into_owned();
-        assert!(!parent.join(format!("{name}.winged-tmp")).exists());
+        assert!(!parent.join(format!("{name}.tmp")).exists());
         assert!(only_files_named(&dir.0, &[]));
     }
 
@@ -634,7 +627,7 @@ mod tests {
         assert!(only_files_named(&outside, &[]));
     }
 
-    /// `with_extension` made `index.html` and `index.xml` share `index.winged-tmp`.
+    /// `with_extension` made `index.html` and `index.xml` share `index.tmp`.
     #[test]
     fn pages_with_the_same_stem_do_not_share_a_temporary_file() {
         let dir = TempDir::new("stem");
@@ -703,7 +696,6 @@ mod tests {
         assert!(guard_destructive_path(Path::new("dist")).is_ok());
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateMultipleWritesEveryPage`.
     #[test]
     fn generate_multiple_writes_every_page() {
         let dir = TempDir::new("multiple");
@@ -784,7 +776,6 @@ mod tests {
         );
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateWritesDoctypeAndMarkup`.
     #[test]
     fn a_page_is_written_with_its_doctype() {
         let directory = TempDir::new("doctype-and-markup");
@@ -804,7 +795,6 @@ mod tests {
         assert!(written.contains("<h1>Hello</h1>"));
     }
 
-    /// Ports `StaticSiteGeneratorTests.generateMultipleDocuments`.
     #[test]
     fn generate_multiple_writes_each_document_to_its_own_path() {
         let directory = TempDir::new("multiple-documents");

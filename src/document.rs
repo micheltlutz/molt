@@ -1,6 +1,5 @@
 //! Whole-page assembly.
 //!
-//! Ports `Winged-Swift/Sources/WingedSwift/core/Document.swift`.
 
 use std::io::{self, Write};
 
@@ -16,8 +15,8 @@ use crate::elements::{body, head, html_tag};
 /// # Rendering default
 ///
 /// **`Document::render` defaults to pretty, while [`Element::render`] defaults to
-/// compact.** That asymmetry is in the Swift original and the golden fixtures depend on it,
-/// so it is preserved rather than tidied up.
+/// compact.** The asymmetry is deliberate and the golden fixtures depend on it, so it is not
+/// tidied up.
 ///
 /// # Examples
 /// ```
@@ -120,7 +119,7 @@ impl Document {
         out
     }
 
-    /// Renders the document **pretty-printed** — the Swift default for a document.
+    /// Renders the document **pretty-printed**, which is the default for a document.
     #[must_use]
     pub fn render(&self) -> String {
         self.render_with(&RenderOptions::pretty())
@@ -283,7 +282,6 @@ mod tests {
     use crate::core::Node;
     use crate::elements::{body, h1, h2, head, img, meta, p, section, title};
 
-    /// Ports `DocumentTests.rendersDoctypeAndLanguage`.
     /// The borrowed-parts writer must produce what rendering a cloned `<html>` tree did.
     #[test]
     fn rendering_matches_the_cloned_root_tree_byte_for_byte() {
@@ -320,14 +318,12 @@ mod tests {
         );
     }
 
-    /// Ports `DocumentTests.languageIsOptional`.
     #[test]
     fn the_lang_attribute_is_omitted_when_absent() {
         let page = Document::new(None);
         assert!(page.render().starts_with("<!DOCTYPE html>\n<html>"));
     }
 
-    /// Ports `DocumentTests.rootExposesTheHTMLElementWithoutTheDoctype`.
     #[test]
     fn root_returns_the_tree_without_the_doctype() {
         let page = Document::new(Some("en"));
@@ -335,8 +331,7 @@ mod tests {
         assert!(page.root().render().starts_with("<html lang=\"en\">"));
     }
 
-    /// Ports `DocumentTests.prettyIsTheDefaultForDocuments`. The asymmetry with `Element::render`
-    /// is deliberate — see the type docs.
+    /// The asymmetry with `Element::render` is deliberate — see the type docs.
     #[test]
     fn a_document_renders_pretty_by_default_unlike_an_element() {
         let page = Document::new(Some("en")).head_children([title().text("T")]);
@@ -349,7 +344,6 @@ mod tests {
         );
     }
 
-    /// Ports `DocumentTests.acceptsAnExistingHeadAndBody`.
     #[test]
     fn head_and_body_children_land_in_the_right_place() {
         let page = Document::new(Some("en"))
@@ -361,7 +355,6 @@ mod tests {
         assert!(head_at < body_at);
     }
 
-    /// Ports `DocumentTests.documentIsAValue`.
     #[test]
     fn a_document_is_a_value_and_can_be_shared_across_threads() {
         fn assert_send_sync<T: Send + Sync>() {}
@@ -373,7 +366,6 @@ mod tests {
         assert!(copy.render().contains("changed"));
     }
 
-    /// Ports `DocumentTests.buildersSupportLoopsAndConditions`.
     #[test]
     fn body_children_accept_loops_and_conditions() {
         let show_banner = false;
@@ -389,8 +381,7 @@ mod tests {
         assert!(rendered.contains("<p>line 1</p><p>line 2</p>"));
     }
 
-    /// Ports `ThreeZeroTests.fileMatchesRender` and
-    /// `ThreeZeroTests.bodiesThatCannotStreamStillMatch`.
+    /// Streamed output matches `render_with`, including for bodies that cannot be streamed.
     #[test]
     fn render_to_matches_render_with() {
         let options = [
