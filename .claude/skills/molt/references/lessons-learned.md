@@ -70,7 +70,7 @@ W1–W2). Batch C = performance, measured (P0 onward). Batch D = the remaining s
 1. `Path::new(".").parent()` is `Some("")`, not `None`. A root check built on `parent()` let
    `clean(".")` delete the working directory.
 2. `Path::with_extension` **replaces** the extension. `index.html` and `index.xml` both became
-   `index.winged-tmp`, and two pages written in parallel shared one file.
+   `index.tmp`, and two pages written in parallel shared one file.
 3. A lexical check (`..`, absolute) does not see a symlink already inside the output directory.
 4. `C:foo` has no `..` and is not absolute on Unix-style checks, but `join` with a Windows
    prefix replaces the base.
@@ -502,3 +502,19 @@ only the three robustness findings as public issues. A public disclosure cannot 
 draft can be published in one click.
 
 - **Guard.** `docs/history/upstream-findings.md`
+
+### L35. A second `trap ... EXIT` replaces the first
+
+(`scripts/verify.sh`)
+
+`verify.sh` creates a temporary log near the top and, further down, a temporary crate for the
+smoke test. Each registered its own `trap '...' EXIT`; the second **replaced** the first, so the
+log file was never removed, and the smoke log had been left on a fixed `/tmp` path that the
+earlier "use `mktemp`" change had missed. Register one trap that removes everything
+(`trap 'rm -f "$LOG"; rm -rf "$SMOKE_DIR"' EXIT`), and count the files in the temp directory
+before and after a run to see that nothing is left behind (it was `0` and `0`). A security fix
+that leaves the same pattern one screen further down is half a fix: after changing a pattern,
+`grep` for its other uses.
+
+- **Guard.** `scripts/verify.sh`
+

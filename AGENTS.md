@@ -18,9 +18,7 @@ an entry in `CHANGELOG.md` (under *Security* or *Breaking*); and a row in `MIGRA
 
 Molt began as a port of a Swift library, Winged-Swift, which is to be discontinued after Molt
 1.0.0. What that history explains, and where each deliberate difference came from, is kept in
-[`docs/history`](docs/history). The one link left in the code is the `Ports …` comments on
-tests and the script that checks them (step 7 of `verify.sh`); both skip themselves when the
-original checkout is absent, and both are slated for removal.
+[`docs/history`](docs/history). Nothing in the code, the tests or the scripts refers to it.
 
 ## Knowledge base
 
@@ -43,7 +41,6 @@ fails when one disappears. When you learn something the hard way, add a lesson a
 | `cargo test --test golden` | the byte-for-byte parity gate |
 | `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change |
 | `./scripts/generate-tag-catalog.sh` | after adding or renaming an element |
-| `./scripts/check-swift-parity.sh` | after touching a `Ports …` comment on a test; skips itself when the original checkout is absent |
 | `cargo clippy --all-targets --all-features -- -D warnings` | lint |
 | `cargo bench` | render performance |
 
