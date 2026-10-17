@@ -17,9 +17,37 @@ const URL_ATTRIBUTES: &[&str] = &[
     "background",
     "xlink:href",
     "data",
+    "ping",
+    "manifest",
+    "longdesc",
 ];
 
+/// `srcset` is a URL attribute too, but its value is a comma-separated list of
+/// `url descriptor` candidates, so it is checked one candidate at a time.
+const SRCSET: &str = "srcset";
+
+/// `srcdoc` is not a URL: it is a whole HTML document the browser runs inside the `<iframe>`,
+/// scripts included, with the parent's origin unless the frame is sandboxed. It is blocked
+/// for any non-empty value unless the caller opts in with
+/// [`Attribute::trusted_url`](crate::core::Attribute::trusted_url).
+const SRCDOC: &str = "srcdoc";
+
 const BLOCKED_SCHEMES: &[&str] = &["javascript:", "vbscript:", "data:text/html"];
+
+/// Elements that load their `src`/`data` as a *document*, with a script-running origin of
+/// their own. A `data:` URL is harmless as an `<img>` source (images do not run script, SVG
+/// included) and a way to run script as any of these.
+const EMBEDDING_TAGS: &[&str] = &["iframe", "frame", "embed", "object"];
+
+/// The `data:` media types an embedding element may still load: raster images.
+const RASTER_DATA_PREFIXES: &[&str] = &[
+    "data:image/png",
+    "data:image/jpeg",
+    "data:image/gif",
+    "data:image/webp",
+    "data:image/avif",
+    "data:image/bmp",
+];
 
 /// Whether `url` is an absolute `http://` or `https://` URL.
 ///
@@ -51,6 +79,17 @@ pub fn is_http_url(url: &str) -> bool {
 /// The value written in place of a blocked URL.
 pub const REPLACEMENT: &str = "#";
 
+/// What to write for a blocked `key`: `#` for a URL, nothing for `srcdoc`, which is markup
+/// and for which `#` would be shown as the frame's content.
+#[must_use]
+pub fn replacement_for(key: &str) -> &'static str {
+    if eq_ignore_ascii_case(key, SRCDOC) {
+        ""
+    } else {
+        REPLACEMENT
+    }
+}
+
 /// Whether `value` would be replaced with [`REPLACEMENT`] when written as `key`.
 ///
 /// `value` is the string stored on the attribute. Boolean attributes never reach this
@@ -67,13 +106,69 @@ pub const REPLACEMENT: &str = "#";
 /// ```
 #[must_use]
 pub fn is_blocked(key: &str, value: &str) -> bool {
+    is_blocked_in("", key, value)
+}
+
+/// As [`is_blocked`], for an attribute on the element `tag`.
+///
+/// The tag matters for one rule: on `iframe`, `frame`, `embed` and `object`, a `src` or
+/// `data` that starts with `data:` is blocked unless it is a raster image. Those elements
+/// load a document, and `data:image/svg+xml`, `data:application/xhtml+xml` and the like run
+/// script in it. The same URL on an `<img>` is inert and is left alone.
+///
+/// # Examples
+/// ```
+/// use molt::core::url_policy::is_blocked_in;
+/// assert!(is_blocked_in("iframe", "src", "data:image/svg+xml,<svg onload=alert(1)>"));
+/// assert!(!is_blocked_in("img", "src", "data:image/svg+xml;base64,PHN2Zz4="));
+/// assert!(!is_blocked_in("iframe", "src", "data:image/png;base64,AAAA"));
+/// assert!(is_blocked_in("iframe", "srcdoc", "<script>alert(1)</script>"));
+/// ```
+#[must_use]
+pub fn is_blocked_in(tag: &str, key: &str, value: &str) -> bool {
+    if eq_ignore_ascii_case(key, SRCDOC) {
+        return !value.is_empty();
+    }
+    if eq_ignore_ascii_case(key, SRCSET) {
+        return srcset_candidates(value).any(is_script_url);
+    }
     if !is_url_attribute(key) {
         return false;
     }
     if value.bytes().any(|byte| byte == b'&' || byte <= b' ') {
-        return has_blocked_scheme(&normalize(value));
+        let normalized = normalize(value);
+        return has_blocked_scheme(&normalized) || blocked_for_embedding(tag, key, &normalized);
     }
-    has_blocked_scheme(value)
+    has_blocked_scheme(value) || blocked_for_embedding(tag, key, value)
+}
+
+/// The URL of each candidate in a `srcset`: the first whitespace-delimited token after a comma.
+fn srcset_candidates(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .split(',')
+        .filter_map(|candidate| candidate.split_whitespace().next())
+}
+
+fn is_script_url(url: &str) -> bool {
+    has_blocked_scheme(&normalize(url))
+}
+
+/// A `data:` document loaded by an element that runs documents, and not a raster image.
+fn blocked_for_embedding(tag: &str, key: &str, normalized: &str) -> bool {
+    EMBEDDING_TAGS
+        .iter()
+        .any(|name| eq_ignore_ascii_case(tag, name))
+        && (eq_ignore_ascii_case(key, "src") || eq_ignore_ascii_case(key, "data"))
+        && starts_with_ignore_case(normalized, "data:")
+        && !RASTER_DATA_PREFIXES
+            .iter()
+            .any(|prefix| starts_with_ignore_case(normalized, prefix))
+}
+
+fn starts_with_ignore_case(value: &str, prefix: &str) -> bool {
+    value.len() >= prefix.len()
+        && value.is_char_boundary(prefix.len())
+        && value[..prefix.len()].eq_ignore_ascii_case(prefix)
 }
 
 fn is_url_attribute(key: &str) -> bool {
@@ -189,6 +284,105 @@ fn named_reference(after: &str) -> Option<(char, usize)> {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::Element;
+    use crate::core::Render;
+    use crate::elements::{a, div, embed, iframe, img};
+
+    #[test]
+    fn data_documents_are_blocked_where_they_run_and_allowed_where_they_do_not() {
+        let svg = "data:image/svg+xml,<svg onload=alert(1)>";
+        let xhtml = "data:application/xhtml+xml,<script>alert(1)</script>";
+        assert_eq!(
+            iframe().attr("src", svg).render(),
+            r##"<iframe src="#"></iframe>"##
+        );
+        assert_eq!(
+            iframe().attr("src", xhtml).render(),
+            r##"<iframe src="#"></iframe>"##
+        );
+        assert_eq!(embed().attr("src", svg).render(), r##"<embed src="#">"##);
+        assert_eq!(
+            Element::new("object").attr("data", svg).render(),
+            r##"<object data="#"></object>"##
+        );
+        // Obfuscation does not change what the browser parses.
+        assert_eq!(
+            iframe().attr("src", "  DATA:image/svg+xml,x").render(),
+            r##"<iframe src="#"></iframe>"##
+        );
+        // A raster image is not a document, in any embedding element.
+        let png = "data:image/png;base64,AAAA";
+        assert_eq!(
+            iframe().attr("src", png).render(),
+            format!(r#"<iframe src="{png}"></iframe>"#)
+        );
+        // And the same SVG is inert as an image source.
+        let inline = "data:image/svg+xml;base64,PHN2Zz4=";
+        assert_eq!(
+            img().attr("src", inline).render(),
+            format!(r#"<img src="{inline}">"#)
+        );
+        assert_eq!(
+            a().attr("href", "/page").render(),
+            r#"<a href="/page"></a>"#
+        );
+    }
+
+    #[test]
+    fn srcdoc_is_blocked_unless_it_is_opted_into() {
+        let page = "<script>alert(1)</script>";
+        assert_eq!(
+            iframe().attr("srcdoc", page).render(),
+            r#"<iframe srcdoc=""></iframe>"#
+        );
+        assert_eq!(
+            iframe().attr("SRCDOC", page).render(),
+            r#"<iframe SRCDOC=""></iframe>"#
+        );
+        assert_eq!(
+            iframe().trusted_url("srcdoc", "<p>hi</p>").render(),
+            r#"<iframe srcdoc="<p>hi</p>"></iframe>"#
+        );
+        assert_eq!(
+            iframe().attr("srcdoc", "").render(),
+            r#"<iframe srcdoc=""></iframe>"#
+        );
+    }
+
+    #[test]
+    fn srcset_is_checked_one_candidate_at_a_time() {
+        assert_eq!(
+            img()
+                .attr("srcset", "/a.png 1x, javascript:alert(1) 2x")
+                .render(),
+            r##"<img srcset="#">"##
+        );
+        assert_eq!(
+            img().attr("srcset", "/a.png 1x, /b.png 2x").render(),
+            r#"<img srcset="/a.png 1x, /b.png 2x">"#
+        );
+        // A URL that merely contains the word is not a script URL.
+        assert_eq!(
+            img().attr("srcset", "/javascript:/a.png 1x").render(),
+            r#"<img srcset="/javascript:/a.png 1x">"#
+        );
+    }
+
+    #[test]
+    fn the_other_navigating_attributes_are_covered() {
+        for key in ["ping", "manifest", "longdesc"] {
+            assert_eq!(
+                div().attr(key, "javascript:alert(1)").render(),
+                format!(r##"<div {key}="#"></div>"##),
+                "{key}"
+            );
+        }
+        assert_eq!(
+            div().attr("ping", "https://e.com/p").render(),
+            r#"<div ping="https://e.com/p"></div>"#
+        );
+    }
+
     use crate::core::Attribute;
 
     fn tag(name: &str, attribute: &Attribute) -> String {

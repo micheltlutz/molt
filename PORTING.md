@@ -141,6 +141,12 @@ write time, and this crate follows 3.0.1: `href`, `src`, `action`, `formaction`,
 `javascript:`, `vbscript:` or `data:text/html` URL. `Attribute::raw` does not escape, but
 it does not skip the check. `trusted_url` does.
 
+This crate goes further than 3.0.1 in four places, all in `url_policy.rs`: `ping`, `manifest`
+and `longdesc` are checked; `srcset` is checked per candidate; `srcdoc` is blocked (written
+empty) unless `trusted_url` is used; and on `iframe`, `frame`, `embed` and `object` a
+`data:` URL is blocked unless it is a raster image. Winged-Swift blocks only `data:text/html`,
+which leaves `data:image/svg+xml` and `data:application/xhtml+xml` working in a frame.
+
 `escape_attribute` still does not escape `<` or `>`. The fixtures and the table above fix
 that escaper; widening it would change markup that is not a URL.
 

@@ -15,7 +15,8 @@ a new such place, add a row *and* a test.
 | --- | --- | --- | --- |
 | text content | `text()`, `Node::text`, `html!` `"…"`/`(expr)` | `escape_text` (`& < > " '`) on entry | `src/core/escape.rs` |
 | attribute value | `attr()`, `Attribute::new` | `escape_attribute` (`& " '`) on entry; `<` `>` escaped at write under raw-text ancestors | `escape.rs`, `attribute.rs`, `node.rs` |
-| URL attribute value | `href`, `src`, `action`, … | scheme policy at write time (`javascript:`, `vbscript:`, `data:text/html` → `#`), also on raw values | `src/core/url_policy.rs` |
+| URL attribute value | `href`, `src`, `action`, `ping`, `srcset`, … | scheme policy at write time (`javascript:`, `vbscript:`, `data:text/html` → `#`), also on raw values; on `iframe`/`frame`/`embed`/`object` only raster `data:` images pass | `src/core/url_policy.rs` |
+| `srcdoc` | `attr("srcdoc", …)` | blocked (written empty) unless `trusted_url` | `url_policy.rs` |
 | attribute **name** | `attr(key, …)` | omitted if it holds space, quote, `=`, `<`, `>`, `/`, control, or is empty | `attribute.rs` |
 | tag **name** | `Element::new`, `new WElement` | element dropped unless letter + `[A-Za-z0-9-_.:]*` | `tags::is_valid_tag_name` |
 | comment body | `Node::comment` | no adjacent hyphens, no trailing hyphen | `node.rs` |
@@ -62,6 +63,8 @@ Rules:
   there.
 - Event-handler attributes (`on*`) and `style` are accepted by `attr()`. Do not map untrusted
   *keys* into `attr()`.
+- A URL policy that ignores the element is wrong in both directions: `data:image/svg+xml` is
+  inert on an `<img>` and runs script in an `<iframe>`. Pass the tag (`is_blocked_in`).
 
 ## A04 Insecure Design → unrepresentable states
 
