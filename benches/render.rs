@@ -113,6 +113,9 @@ fn bench_escaping(c: &mut Criterion) {
     // Half the characters need escaping — the worst realistic case.
     let hostile: String = "a<b>c&d\"e'f".repeat(2_000);
     let plain: String = "abcdefghij".repeat(2_000);
+    // Prose: one character in two hundred needs escaping, the realistic case. The hostile
+    // string above is the adversarial one, where every other character does.
+    let sparse: String = format!("{}&", "abcdefghij".repeat(20)).repeat(100);
 
     let mut group = c.benchmark_group("escape");
     group.bench_function("hostile/20k", |b| {
@@ -120,6 +123,9 @@ fn bench_escaping(c: &mut Criterion) {
     });
     group.bench_function("plain/20k", |b| {
         b.iter(|| black_box(escape_text(&plain)));
+    });
+    group.bench_function("sparse/20k", |b| {
+        b.iter(|| black_box(escape_text(&sparse)));
     });
     group.finish();
 }
