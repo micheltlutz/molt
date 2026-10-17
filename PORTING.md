@@ -105,8 +105,8 @@ one here.
 ### 4. `Node::Comment` is new
 
 Winged-Swift has no comment node. `MOLT_SPEC.md` §3.1 asks for one, so it exists.
-Any `--` in the content is rewritten to `- -`, so a comment cannot be closed early and
-inject markup.
+A space is put between every two adjacent hyphens and after a trailing one (`--->` becomes
+`- - ->`), so a comment cannot be closed early and inject markup.
 
 ### 5. `clean()` refuses unsafe paths
 
@@ -148,6 +148,23 @@ that escaper; widening it would change markup that is not a URL.
 
 `Element::self_closing(true)` emits `>` or ` />` and drops children, including for a tag
 that is not in the void set. The default is `false`. Void tags are unchanged.
+
+### 12. Sitemap and feed output is checked
+
+Three differences from Winged-Swift, all in `sitemap.rs` and `feed.rs`:
+
+- **Characters XML 1.0 cannot hold are dropped.** `escape_xml` removes the control characters
+  U+0000–U+0008, U+000B, U+000C, U+000E–U+001F and U+FFFE/U+FFFF. Swift writes them, and one
+  such character makes the whole document ill-formed.
+- **Links must be absolute `http(s)` URLs.** A sitemap entry whose `loc` is not, and an RSS
+  `<link>` that is not, are left out; a feed reader shows the link as something to click.
+  `javascript:` there is as dangerous as in an `href`. A relative `loc` is not valid in a
+  sitemap in the first place.
+- **`isPermaLink` says the truth.** Swift always writes `isPermaLink="true"`. Here it is
+  `true` only when the guid is an `http(s)` URL; `urn:uuid:…` gets `false`. The RSS 2.0
+  specification makes `true` a promise that readers may open the guid.
+
+The fixtures use `https` links and a URL guid, so they are unaffected.
 
 ### 11. Rust has no default arguments
 

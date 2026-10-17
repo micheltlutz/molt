@@ -89,6 +89,16 @@ These are **not** vulnerabilities, because they are documented behaviour:
 - `Attribute::raw` not escaping. It exists for library-controlled keys. It does **not**
   skip the URL check below: a raw `href="javascript&#58;..."` is still rendered as `href="#"`.
 
+### Sitemap and feed output
+
+`escape_xml` drops the characters XML 1.0 cannot represent (U+0000–U+0008, U+000B, U+000C,
+U+000E–U+001F, U+FFFE, U+FFFF), because one of them makes the whole document ill-formed and a
+reader then rejects every entry. A sitemap `<loc>` and an RSS `<link>` that are not absolute
+`http(s)` URLs are left out, since feed readers and crawlers present them as something to
+open; `isPermaLink="true"` is written only for an `http(s)` guid. The sitemap protocol's
+50,000-URL and 50 MiB limits are exposed as `MAX_URLS`/`MAX_BYTES` with
+`SitemapGenerator::chunks`, not enforced silently. See `PORTING.md` §12.
+
 ### URL attributes are checked at write time
 
 `href`, `src`, `action`, `formaction`, `poster`, `cite`, `background`, `xlink:href` and

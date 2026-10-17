@@ -21,6 +21,33 @@ const URL_ATTRIBUTES: &[&str] = &[
 
 const BLOCKED_SCHEMES: &[&str] = &["javascript:", "vbscript:", "data:text/html"];
 
+/// Whether `url` is an absolute `http://` or `https://` URL.
+///
+/// What a sitemap `<loc>` and an RSS `<link>` must be: both specifications call for a full
+/// URL, and a feed reader renders the link as something to click, so `javascript:` there is
+/// as dangerous as in an `href`. The scheme is compared ASCII case-insensitively and a
+/// leading run of whitespace is ignored, as a browser does.
+///
+/// # Examples
+/// ```
+/// use molt::core::url_policy::is_http_url;
+/// assert!(is_http_url("https://example.com/a?b=1&c=2"));
+/// assert!(is_http_url("HTTP://example.com"));
+/// assert!(!is_http_url("javascript:alert(1)"));
+/// assert!(!is_http_url("/relative/path"));
+/// assert!(!is_http_url("ftp://example.com"));
+/// assert!(!is_http_url("https:"));
+/// ```
+#[must_use]
+pub fn is_http_url(url: &str) -> bool {
+    let url = url.trim_start();
+    ["http://", "https://"].iter().any(|scheme| {
+        url.len() > scheme.len()
+            && url.is_char_boundary(scheme.len())
+            && url[..scheme.len()].eq_ignore_ascii_case(scheme)
+    })
+}
+
 /// The value written in place of a blocked URL.
 pub const REPLACEMENT: &str = "#";
 

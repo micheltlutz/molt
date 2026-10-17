@@ -5,6 +5,7 @@
 use std::fmt::Write as _;
 
 use crate::core::escape::escape_xml;
+use crate::core::url_policy::is_http_url;
 
 /// One entry in a feed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,16 +165,23 @@ impl RssGenerator {
 
         let link = escape_xml(&self.link);
         let _ = writeln!(xml, "    <title>{}</title>", escape_xml(&self.title));
-        let _ = writeln!(xml, "    <link>{link}</link>");
+        // A feed reader shows the link as something to click, so only an absolute http(s)
+        // URL is written; the self link is built from it and goes with it.
+        let linkable = is_http_url(&self.link);
+        if linkable {
+            let _ = writeln!(xml, "    <link>{link}</link>");
+        }
         let _ = writeln!(
             xml,
             "    <description>{}</description>",
             escape_xml(&self.description)
         );
-        let _ = writeln!(
-            xml,
-            "    <atom:link href=\"{link}/feed.xml\" rel=\"self\" type=\"application/rss+xml\" />"
-        );
+        if linkable {
+            let _ = writeln!(
+                xml,
+                "    <atom:link href=\"{link}/feed.xml\" rel=\"self\" type=\"application/rss+xml\" />"
+            );
+        }
 
         write_optional(&mut xml, "language", self.language.as_deref());
         write_optional(&mut xml, "copyright", self.copyright.as_deref());
@@ -200,7 +208,9 @@ fn write_optional(xml: &mut String, tag: &str, value: Option<&str>) {
 fn write_item(xml: &mut String, item: &RssItem) {
     xml.push_str("    <item>\n");
     let _ = writeln!(xml, "      <title>{}</title>", escape_xml(&item.title));
-    let _ = writeln!(xml, "      <link>{}</link>", escape_xml(&item.link));
+    if is_http_url(&item.link) {
+        let _ = writeln!(xml, "      <link>{}</link>", escape_xml(&item.link));
+    }
     let _ = writeln!(
         xml,
         "      <description>{}</description>",
@@ -213,9 +223,12 @@ fn write_item(xml: &mut String, item: &RssItem) {
     );
 
     if let Some(guid) = &item.guid {
+        // `isPermaLink="true"` promises the guid is a URL a reader may open; for any other
+        // identifier it must say so.
         let _ = writeln!(
             xml,
-            "      <guid isPermaLink=\"true\">{}</guid>",
+            "      <guid isPermaLink=\"{}\">{}</guid>",
+            is_http_url(guid),
             escape_xml(guid)
         );
     }
@@ -349,7 +362,9 @@ mod tests {
         assert!(!xml.contains("<category>"));
     }
 
-    /// Ports `RSSGeneratorTests.testExplicitGuidWinsOverTheLink`.
+    /// Ports `RSSGeneratorTests.testExplicitGuidWinsOverTheLink`. Differs on one attribute:
+    /// Swift writes `isPermaLink="true"` for any guid, which promises readers they may open
+    /// `urn:uuid:1234`; here only a URL guid gets `true` (see `PORTING.md` §12).
     #[test]
     fn an_explicit_guid_wins_over_the_link() {
         let xml = channel().generate(&[RssItem::new(
@@ -360,7 +375,54 @@ mod tests {
         )
         .guid("urn:uuid:1234")]);
 
-        assert!(xml.contains(r#"<guid isPermaLink="true">urn:uuid:1234</guid>"#));
+        assert!(xml.contains(r#"<guid isPermaLink="false">urn:uuid:1234</guid>"#));
+        let url_guid = channel().generate(&[RssItem::new(
+            "T",
+            "https://e.com/p",
+            "D",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )
+        .guid("https://e.com/permalink")]);
+        assert!(url_guid.contains(r#"<guid isPermaLink="true">https://e.com/permalink</guid>"#));
+    }
+
+    #[test]
+    fn a_link_that_is_not_http_is_left_out_of_the_feed() {
+        let item = |link: &str| RssItem::new("T", link, "D", "Tue, 11 Aug 2026 10:00:00 +0000");
+        for bad in [
+            "javascript:alert(1)",
+            "/relative",
+            "ftp://e.com",
+            "data:text/html,x",
+        ] {
+            let xml = channel().generate(&[item(bad)]);
+            assert!(!xml.contains(&format!("<link>{bad}")), "{bad}: {xml}");
+            // The channel's own link is still there; only the item's is gone.
+            assert_eq!(xml.matches("<link>").count(), 1, "{bad}");
+        }
+        let bad_channel = RssGenerator::new("T", "javascript:x", "D").generate(&[]);
+        assert!(!bad_channel.contains("<link>"), "{bad_channel}");
+        assert!(!bad_channel.contains("atom:link"), "{bad_channel}");
+        assert_eq!(
+            channel()
+                .generate(&[item("https://e.com/p")])
+                .matches("<link>")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn characters_xml_cannot_hold_do_not_reach_the_feed() {
+        let xml = channel().generate(&[RssItem::new(
+            "a\u{0}b\u{1F}c\u{FFFE}d",
+            "https://e.com/p",
+            "ok\ttab",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )]);
+        assert!(xml.contains("<title>abcd</title>"));
+        assert!(xml.contains("ok\ttab"));
+        assert!(!xml.chars().any(|c| matches!(c, '\u{0}'..='\u{8}' | '\u{B}' | '\u{C}' | '\u{E}'..='\u{1F}' | '\u{FFFE}' | '\u{FFFF}')));
     }
 
     /// Ports `RSSGeneratorTests.testItemsAreRendered`.
