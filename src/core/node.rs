@@ -771,6 +771,89 @@ mod tests {
     }
 
     /// `replace("--", "- -")` turned `--->` into `- -->`, which still closed the comment.
+    /// `Element::new` takes any string, and the tag is written verbatim between `<` and `>`.
+    #[test]
+    fn an_unsafe_tag_name_renders_nothing() {
+        for hostile in [
+            "img src=x onerror=alert(1)",
+            "div><script>alert(1)</script><div",
+            "a\"b",
+            "",
+            "1div",
+            "p\n",
+        ] {
+            let tree = div()
+                .child(Element::new(hostile).text("kept?"))
+                .child(p().text("after"));
+            assert_eq!(tree.render(), "<div><p>after</p></div>", "{hostile:?}");
+            assert_eq!(
+                tree.render_pretty(),
+                "<div>\n  <p>after</p>\n</div>",
+                "{hostile:?} must leave no blank line in pretty mode"
+            );
+            assert_eq!(Element::new(hostile).render(), "", "{hostile:?}");
+        }
+    }
+
+    #[test]
+    fn custom_and_namespaced_tags_still_render() {
+        assert_eq!(
+            Element::new("my-card").text("x").render(),
+            "<my-card>x</my-card>"
+        );
+        assert_eq!(Element::new("svg:rect").render(), "<svg:rect></svg:rect>");
+    }
+
+    /// Inside `<noscript>` the parser reads raw text, so `</noscript>` in a descendant's
+    /// attribute value ends the element. Elsewhere `<` in a quoted value is inert, and the
+    /// Swift fixtures depend on it staying unescaped.
+    #[test]
+    fn angle_brackets_in_attributes_are_escaped_only_under_raw_text_parents() {
+        let hostile = "</noscript><img src=x onerror=alert(1)>";
+        let escaped = "&lt;/noscript&gt;&lt;img src=x onerror=alert(1)&gt;";
+
+        for parent in [
+            "noscript", "iframe", "xmp", "noembed", "noframes", "style", "script",
+        ] {
+            let tree = Element::new(parent).child(img().attr("alt", hostile));
+            assert_eq!(
+                tree.render(),
+                format!(r#"<{parent}><img alt="{escaped}"></{parent}>"#),
+                "{parent}"
+            );
+        }
+
+        assert_eq!(
+            div().child(img().attr("alt", hostile)).render(),
+            format!(r#"<div><img alt="{hostile}"></div>"#),
+            "ordinary parents keep byte parity with Winged-Swift"
+        );
+    }
+
+    #[test]
+    fn the_raw_text_escape_covers_deep_descendants_and_ends_with_the_parent() {
+        let hostile = "a<b>c";
+        let tree = div()
+            .child(
+                Element::new("noscript")
+                    .attr("title", hostile)
+                    .child(div().child(span().child(img().attr("alt", hostile)))),
+            )
+            .child(img().attr("alt", hostile));
+        // The noscript's own attribute is read before raw-text mode starts, so it keeps the
+        // plain form; its descendant is escaped; the sibling after it is plain again.
+        assert_eq!(
+            tree.render(),
+            concat!(
+                r#"<div><noscript title="a<b>c"><div><span>"#,
+                r#"<img alt="a&lt;b&gt;c"></span></div></noscript>"#,
+                r#"<img alt="a<b>c"></div>"#
+            )
+        );
+        assert_eq!(tree.render_pretty().matches("a&lt;b&gt;c").count(), 1);
+        assert_eq!(tree.render_pretty().matches("a<b>c").count(), 2);
+    }
+
     #[test]
     fn a_comment_survives_runs_of_hyphens_and_bang_closers() {
         for hostile in [
