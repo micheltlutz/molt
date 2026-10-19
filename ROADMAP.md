@@ -42,8 +42,8 @@ Reopen with a benchmark that shows the cost, not with "it should be faster".
 ## Beyond the HTML layer
 
 A `Site`/`Page` model, a Markdown parser, a command-line tool, an Atom feed and a `robots.txt`
-generator are out of scope for the core crate: Markdown has `pulldown-cmark` and a server has
-its own routing. If one of them is wanted, it would be a separate crate that depends on this
+generator are out of scope for the core crate, and so is any web-framework integration:
+Markdown has `pulldown-cmark`, and a server has its own routing and its own response types. If one of them is wanted, it would be a separate crate that depends on this
 one, not a feature of it.
 
 ## Deliberately not planned
@@ -54,3 +54,9 @@ one, not a feature of it.
   ([`design-patterns.md`](.claude/skills/molt/references/design-patterns.md))
 - **A global render switch**, **sorting attributes**, **a `Drop` on `Node`**.
 - **SIMD in the escaper**, a custom allocator, changing `panic = "abort"`.
+- **A cargo feature for a web framework** (`axum`, `actix`, `rocket`, …) or an async streaming
+  render. Either would tie the crate's release cycle to `tokio`/`http`/`bytes`. The output is a
+  `String`, `Html(page.render())` is the integration, and a newtype in the caller's crate gets
+  `IntoResponse` (see the README, *Serving the output*). A `molt-axum` crate is welcome as a
+  separate project. ([#92](https://github.com/micheltlutz/molt/issues/92),
+  [#95](https://github.com/micheltlutz/molt/issues/95))

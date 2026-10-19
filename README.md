@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.jpg" alt="Molt — High-Performance Rust Web Framework" width="520">
+  <img src="https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.jpg" alt="Molt" width="520">
 </p>
 
 # Molt
 
-> **High-Performance Rust Web Framework**
+> **A safe, dependency-free HTML DSL for Rust and WebAssembly.**
 
 [![crates.io](https://img.shields.io/crates/v/molt-framework.svg?logo=rust)](https://crates.io/crates/molt-framework)
 [![docs.rs](https://img.shields.io/docsrs/molt-framework?logo=docsdotrs)](https://docs.rs/molt-framework)
@@ -14,35 +14,17 @@
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
 [![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
-Fast, type-safe HTML generation for Rust — and for the browser, through WebAssembly.
+📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md)
 
-📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework)
+Molt is an embedded DSL: you describe the page in Rust, with a fluent builder or the `html!`
+macro, and the compiler checks it. The result is a tree of plain values rendered once as a
+**string**, compact or pretty. There is no DOM, no runtime, no template language and no
+reflection, so there is nothing to parse at run time and nothing to keep in sync.
 
-A tree of plain values, escaped by default, rendered compact or pretty. The output is checked
-byte for byte against golden fixtures.
-
-Today Molt is the HTML layer of the framework: the element tree, the renderer, static site
-generation and the WebAssembly build described below.
-
-## Philosophy and origins
-
-The name **Molt** comes from *ecdysis*, the process by which an animal sheds its
-exoskeleton. Molting is a critical stage in the life of crustaceans — a nod to **Ferris**,
-Rust's crab mascot. To grow, the organism sheds its old, restrictive shell and reveals a
-stronger, more adaptable one suited to the next stage.
-
-For this project, the name marks a shift in architecture and mindset:
-
-1. **Evolution from Swift.** Molt grew out of deep experience with the Swift ecosystem, a
-   language valued for its elegance and developer experience. Building scalable commercial
-   SaaS products on minimal cloud infrastructure called for a pragmatic move, and Molt is
-   that move to Rust and its backend efficiency.
-2. **A production-ready foundation.** The new exoskeleton is statically typed and
-   memory-safe, a base meant for medium-to-large multi-tenant web applications and webhooks
-   at scale.
-
-> *Molt is about honoring our origins, shedding unnecessary overhead, and embracing maximum
-> performance.*
+It is the HTML layer and only that: the element tree, the renderer, metadata, an
+accessibility audit, sitemaps, feeds, static site output and a WebAssembly build. Routing,
+servers and Markdown stay in the crates that already do them well, and plug in through a
+`String`.
 
 ```rust
 use molt::prelude::*;
@@ -67,7 +49,7 @@ let page = Document::new(Some("pt-BR"))
 println!("{}", page.render());
 ```
 
-Or with the `html!` macro:
+Or with the `html!` macro, which expands to the same builder calls, never a second code path:
 
 ```rust
 use molt::{html, prelude::*};
@@ -81,26 +63,56 @@ let markup = html! {
 };
 ```
 
-## Why
+## Why Molt
 
-**Escaping you cannot forget.** Text and attribute values are escaped when they enter the
-tree, not when it is rendered — so nothing is escaped twice and nothing is missed.
-`raw_text` is the one, obvious, greppable escape hatch.
+**Secure by construction.** The one guarantee is that text and attribute values you pass in
+cannot become markup, and it is enforced where the data enters, not where you remember to.
+
+- Text and attribute values are escaped once, on entry. There is no way to forget and no way
+  to double-escape.
+- Tag and attribute names are validated at write time. An invalid one is dropped, never
+  repaired.
+- URL attributes (`href`, `src`, `action`, `srcset`, …) that resolve to `javascript:`,
+  `vbscript:` or `data:text/html` are written as `#`, including through character references.
+  `srcdoc` is never written with a value you did not vouch for.
+- JSON inside `<script>` goes through its own escaper, so a `</script>` in a value cannot end
+  the element.
+- `raw_text`, `Node::raw`, `Attribute::raw` and `trusted_url` are the only ways around any of
+  this. They are named so an audit is one `grep`.
+- `unsafe_code = "forbid"`, `cargo deny` on the dependency graph, four fuzz targets, and
+  [`SECURITY.md`](SECURITY.md) maps every guarantee onto the OWASP Top 10.
 
 ```rust
 # use molt::prelude::*;
 assert_eq!(p().text("<script>alert(1)</script>").render(),
            "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>");
+assert_eq!(a().attr("href", "javascript:alert(1)").render(), r##"<a href="#"></a>"##);
 ```
 
-**No runtime, no DOM, no allocations you did not ask for.** The renderer writes the whole
-tree into one buffer. There is no template parsing step and no reflection.
+**Robust under hostile input.** Rendering, cloning, comparing, auditing and dropping a tree
+all walk an explicit stack, never the call stack, so nesting depth cannot be turned into a
+process abort. A 100,000-level tree renders in both modes in the test suite, and
+`RenderOptions::with_max_depth` bounds depth that comes from outside. Output is pinned
+byte for byte by golden fixtures: a change in markup is a failing test, never a surprise in
+production. The crate is 1.x, so what compiles today keeps compiling, and
+[`MIGRATION.md`](MIGRATION.md) shows every change that ever altered output.
 
-**It runs in the browser.** The same tree, the same renderer, compiled to
-`wasm32-unknown-unknown`.
+**Light.** Zero mandatory dependencies: `cargo tree` on the default features shows one crate,
+this one. `wasm-bindgen` and `rayon` are opt-in features. The WebAssembly build is about
+25 KB gzipped. The renderer writes the whole tree into one buffer, allocation counts are
+asserted in CI, and `Node` is `Send + Sync`, so bulk generation parallelises without
+ceremony.
 
-**The tree is `Send + Sync`.** `Node` is a value type, so bulk generation parallelises
-safely — that is what the `parallel` feature is built on.
+**Fast enough that it is not the bottleneck.** Measured on the development machine with
+`cargo bench --bench render` (Criterion, `opt-level = 3`):
+
+| bench | median |
+| --- | --- |
+| compact render, 10,000-item list | ≈ 400 µs |
+| full 50-card document, pretty / compact | ≈ 8 µs / 6.5 µs |
+
+Building the tree costs more than rendering it; both are far below the cost of the request
+that asked for the page.
 
 ## Install
 
@@ -128,6 +140,42 @@ Features:
 | `ssg` | ✓ | `StaticSiteGenerator` — writes pages and assets to disk |
 | `wasm` | | `wasm-bindgen` bindings for JavaScript |
 | `parallel` | | `rayon`-backed bulk page generation |
+
+### Serving the output
+
+Molt renders a `String`, and that is the whole integration contract with a web server: there
+is no `axum`, `actix` or `tokio` feature, and none is planned, so the core keeps zero
+mandatory dependencies. With [Axum](https://crates.io/crates/axum), `Html` already accepts a
+`String`:
+
+```rust,ignore
+use axum::response::Html;
+use molt::prelude::*;
+
+async fn home() -> Html<String> {
+    let page = Document::new(Some("en"))
+        .body_children([h1().text("Track every service")]);
+    Html(page.render())
+}
+```
+
+If you want your own type to be a response, wrap the document in a newtype in your crate and
+implement the framework's trait there; the orphan rule allows it because the newtype is yours:
+
+```rust,ignore
+use axum::response::{Html, IntoResponse, Response};
+
+struct Page(molt::Document);
+
+impl IntoResponse for Page {
+    fn into_response(self) -> Response {
+        Html(self.0.render()).into_response()
+    }
+}
+```
+
+The same pattern works for any framework. A framework-specific crate (`molt-axum`, say) is
+welcome as a separate project that depends on this one; see [`ROADMAP.md`](ROADMAP.md).
 
 ## What is in it
 
@@ -200,8 +248,8 @@ Molt is open source and contributions are welcome — a bug report with the inpu
 triggered it is as useful as a patch.
 
 - **Found a bug or want a feature?** [Open an issue](https://github.com/micheltlutz/molt/issues).
-  The [`1.0.0` milestone](https://github.com/micheltlutz/molt/milestone/1) lists what is
-  planned.
+  [`ROADMAP.md`](ROADMAP.md) says what is planned, what is a lead, and what is deliberately
+  not.
 - **Found a security problem?** Please do not open a public issue; use
   [a private security advisory](https://github.com/micheltlutz/molt/security/advisories/new).
   See [`SECURITY.md`](SECURITY.md).
@@ -217,6 +265,13 @@ triggered it is as useful as a patch.
 If Molt saves you time, you can help keep it maintained by
 **[sponsoring on GitHub](https://github.com/sponsors/micheltlutz)**. Starring the repository,
 sharing it, and telling me what you built with it help just as much.
+
+## The name
+
+*Molt* is the shedding of an exoskeleton, the way a crustacean grows: a nod to Ferris, and to
+where this project came from. It started as a port of a Swift HTML library, built to run
+commercial SaaS products on small cloud footprints, and moved to Rust for the efficiency and
+the guarantees. The shell it kept is the API; what it shed is the overhead.
 
 ## License
 
