@@ -11,6 +11,10 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-19
+
+A patch release: nothing in the public API or in rendered output changes.
+
 ### Security
 
 - The release workflow publishes through crates.io Trusted Publishing
