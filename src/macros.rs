@@ -15,6 +15,7 @@ use crate::core::{Element, Node};
 /// | `div { … }` | an element with children |
 /// | `div(class = "card", id = "x") { … }` | attributes, then children |
 /// | `input(type = "email", required)` | a bare name is a boolean attribute |
+/// | `div("data-id" = 7, "hx-post" = "/a")` | a string key, for hyphenated names and keywords |
 /// | `"text"` | escaped text |
 /// | `(expr)` | an escaped `Display` expression |
 /// | `raw(expr)` | unescaped markup |
@@ -315,6 +316,28 @@ mod tests {
     fn numbers_and_keyword_keys_still_work_as_attributes() {
         let image = crate::html! { img(width = 100, "type" = 'x', hidden) };
         assert_eq!(image.render(), r#"<img width="100" type="x" hidden>"#);
+    }
+
+    /// `data-*`, `aria-*` and `hx-*` are not Rust identifiers, so they take the string-key
+    /// form. It must produce the same tree the builder's `data_attr`/`aria_attr`/`attr` do.
+    #[test]
+    fn hyphenated_attribute_names_use_the_string_key_form() {
+        let id = 7;
+        let el = crate::html! {
+            button("data-id" = id, "aria-label" = "Save", "hx-post" = "/save", "hx-swap") {
+                "Save"
+            }
+        };
+        let expected =
+            r#"<button data-id="7" aria-label="Save" hx-post="/save" hx-swap>Save</button>"#;
+        assert_eq!(el.render(), expected);
+        let built = crate::elements::button()
+            .data_attr("id", "7")
+            .aria_attr("label", "Save")
+            .attr("hx-post", "/save")
+            .bool_attr("hx-swap")
+            .text("Save");
+        assert_eq!(el.render(), Node::from(built).render());
     }
 
     #[test]

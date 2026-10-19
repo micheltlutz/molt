@@ -14,11 +14,6 @@ unsafe is a security fix and goes in a patch release.
 
 ## Likely next
 
-- **Trusted Publishing on crates.io**, and required reviewers on the `release` environment.
-  Both are repository settings; the release workflow keeps working with the token until then.
-  ([#77](https://github.com/micheltlutz/molt/issues/77))
-- **The sitemap and the feed in the WebAssembly bindings**, and an optional panic hook.
-  ([#78](https://github.com/micheltlutz/molt/issues/78))
 - **An iterative `Debug`** for `Node` and `Element`. `Clone`, `PartialEq`, `Hash` and `Drop`
   are iterative; `Debug` is the one derive left, so `{:?}` on a very deep tree still aborts.
   ([#79](https://github.com/micheltlutz/molt/issues/79))
@@ -42,8 +37,8 @@ Reopen with a benchmark that shows the cost, not with "it should be faster".
 ## Beyond the HTML layer
 
 A `Site`/`Page` model, a Markdown parser, a command-line tool, an Atom feed and a `robots.txt`
-generator are out of scope for the core crate: Markdown has `pulldown-cmark` and a server has
-its own routing. If one of them is wanted, it would be a separate crate that depends on this
+generator are out of scope for the core crate, and so is any web-framework integration:
+Markdown has `pulldown-cmark`, and a server has its own routing and its own response types. If one of them is wanted, it would be a separate crate that depends on this
 one, not a feature of it.
 
 ## Deliberately not planned
@@ -54,3 +49,13 @@ one, not a feature of it.
   ([`design-patterns.md`](.claude/skills/molt/references/design-patterns.md))
 - **A global render switch**, **sorting attributes**, **a `Drop` on `Node`**.
 - **SIMD in the escaper**, a custom allocator, changing `panic = "abort"`.
+- **`console_error_panic_hook`, or any other dependency in the WebAssembly build** beyond
+  `wasm-bindgen`. With `panic = "abort"` a panic is a trap without a message, which is
+  acceptable for a library that must not panic on valid input. Sitemap and feed bindings
+  wait for a JavaScript user who needs them. ([#78](https://github.com/micheltlutz/molt/issues/78))
+- **A cargo feature for a web framework** (`axum`, `actix`, `rocket`, …) or an async streaming
+  render. Either would tie the crate's release cycle to `tokio`/`http`/`bytes`. The output is a
+  `String`, `Html(page.render())` is the integration, and a newtype in the caller's crate gets
+  `IntoResponse` (see the README, *Serving the output*). A `molt-axum` crate is welcome as a
+  separate project. ([#92](https://github.com/micheltlutz/molt/issues/92),
+  [#95](https://github.com/micheltlutz/molt/issues/95))

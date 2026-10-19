@@ -11,6 +11,26 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-19
+
+A patch release: nothing in the public API or in rendered output changes.
+
+### Security
+
+- The release workflow publishes through crates.io Trusted Publishing
+  (`rust-lang/crates-io-auth-action`, OIDC, `id-token: write` on the publish job only). The
+  token exists for one job and is revoked at its end; the long-lived `CARGO_REGISTRY_TOKEN`
+  repository secret is no longer read and is being retired (#77).
+
+### Documentation
+
+- The `html!` syntax table shows the string-key form for hyphenated attribute names
+  (`"data-id" = x`, `"hx-post" = …`), which the macro already accepted; a test pins its parity
+  with the builder (#93).
+- README gains *Serving the output*: how to return a page from Axum or any other framework
+  without a feature or a dependency in the crate. `ROADMAP.md` records that framework
+  integrations and async streaming are deliberately not planned (#92, #95).
+
 ## [1.0.0] - 2026-10-17
 
 The 1.0.0 hardening release. Everything under **Breaking** needs a change in code that
