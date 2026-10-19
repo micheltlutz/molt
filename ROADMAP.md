@@ -14,8 +14,6 @@ unsafe is a security fix and goes in a patch release.
 
 ## Likely next
 
-- **The sitemap and the feed in the WebAssembly bindings**, and an optional panic hook.
-  ([#78](https://github.com/micheltlutz/molt/issues/78))
 - **An iterative `Debug`** for `Node` and `Element`. `Clone`, `PartialEq`, `Hash` and `Drop`
   are iterative; `Debug` is the one derive left, so `{:?}` on a very deep tree still aborts.
   ([#79](https://github.com/micheltlutz/molt/issues/79))
@@ -51,6 +49,10 @@ one, not a feature of it.
   ([`design-patterns.md`](.claude/skills/molt/references/design-patterns.md))
 - **A global render switch**, **sorting attributes**, **a `Drop` on `Node`**.
 - **SIMD in the escaper**, a custom allocator, changing `panic = "abort"`.
+- **`console_error_panic_hook`, or any other dependency in the WebAssembly build** beyond
+  `wasm-bindgen`. With `panic = "abort"` a panic is a trap without a message, which is
+  acceptable for a library that must not panic on valid input. Sitemap and feed bindings
+  wait for a JavaScript user who needs them. ([#78](https://github.com/micheltlutz/molt/issues/78))
 - **A cargo feature for a web framework** (`axum`, `actix`, `rocket`, …) or an async streaming
   render. Either would tie the crate's release cycle to `tokio`/`http`/`bytes`. The output is a
   `String`, `Html(page.render())` is the integration, and a newtype in the caller's crate gets
