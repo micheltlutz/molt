@@ -4,7 +4,7 @@
 
 # Molt
 
-> **Safe, dependency-free HTML generation for Rust and WebAssembly.**
+> **A safe, dependency-free HTML DSL for Rust and WebAssembly.**
 
 [![crates.io](https://img.shields.io/crates/v/molt-framework.svg?logo=rust)](https://crates.io/crates/molt-framework)
 [![docs.rs](https://img.shields.io/docsrs/molt-framework?logo=docsdotrs)](https://docs.rs/molt-framework)
@@ -16,9 +16,10 @@
 
 📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md)
 
-Molt is a Rust library that builds HTML as a **string**. You assemble a tree of plain values
-and render it once, compact or pretty. There is no DOM, no runtime, no template language and
-no reflection, so there is nothing to parse at run time and nothing to keep in sync.
+Molt is an embedded DSL: you describe the page in Rust, with a fluent builder or the `html!`
+macro, and the compiler checks it. The result is a tree of plain values rendered once as a
+**string**, compact or pretty. There is no DOM, no runtime, no template language and no
+reflection, so there is nothing to parse at run time and nothing to keep in sync.
 
 It is the HTML layer and only that: the element tree, the renderer, metadata, an
 accessibility audit, sitemaps, feeds, static site output and a WebAssembly build. Routing,
