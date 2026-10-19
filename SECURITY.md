@@ -168,10 +168,12 @@ What the workflows do, and what only the repository owner can switch on.
   long-lived registry token is stored anywhere.
 - `scripts/verify.sh` writes its log to a `mktemp` file, not a fixed path in `/tmp`.
 
-**Owner steps, not code:** required reviewers on the `release` environment are a repository
-setting, and they are a manual gate rather than a second pair of eyes when the maintainer is
-one person. The `CARGO_REGISTRY_TOKEN` secret is no longer read by any workflow and is to be
-deleted from the repository settings once a release has gone through the new path.
+**Repository and registry settings, not code:** crates.io is set to *require* Trusted
+Publishing for new versions of `molt-framework`, so an API token cannot publish it, and the
+repository holds no registry secret (`CARGO_REGISTRY_TOKEN` was deleted after 1.0.1, the first
+release through this path). The `release` environment has no required reviewers: with one
+maintainer that gate was a click, not a review, and the protection is the tag gate above plus
+Trusted Publishing.
 
 ## For users
 
