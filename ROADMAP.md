@@ -14,9 +14,6 @@ unsafe is a security fix and goes in a patch release.
 
 ## Likely next
 
-- **Trusted Publishing on crates.io**, and required reviewers on the `release` environment.
-  Both are repository settings; the release workflow keeps working with the token until then.
-  ([#77](https://github.com/micheltlutz/molt/issues/77))
 - **An iterative `Debug`** for `Node` and `Element`. `Clone`, `PartialEq`, `Hash` and `Drop`
   are iterative; `Debug` is the one derive left, so `{:?}` on a very deep tree still aborts.
   ([#79](https://github.com/micheltlutz/molt/issues/79))

@@ -41,7 +41,8 @@ ancestors, `$HOME` and top-level directories. Document the race you do not close
 
 ## A02 Cryptographic Failures — not applicable
 
-No cryptography, secrets or tokens in the library. Do not add any. The release workflow handles
+No cryptography, secrets or tokens in the library. Do not add any. The release workflow mints
+a short-lived crates.io token (Trusted Publishing) and passes it to one step as
 `CARGO_REGISTRY_TOKEN`; keep it out of logs and out of any file you write.
 
 ## A03 Injection → XSS, the whole point

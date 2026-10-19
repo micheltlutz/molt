@@ -115,10 +115,13 @@ port found, and where it was reported, is in `docs/history/`. *Examples:* `isPer
 - **`RenderOptions::indent` is private; `max_depth` is opt-in** (S10). *Why:* the indent is
   written on every line; a depth bound is what limits O(depth²) output. The depth counter
   exists only in the `LIMITED` monomorphisation (zero cost otherwise).
-- **Actions pinned by SHA; the release gates on `main` and green CI; Trusted Publishing is
-  not switched on** (S11). *Why not:* it needs a crates.io setting only the owner can make, and
-  switching the workflow first would break releases. *Owner's steps:* required reviewers on the
-  `release` environment; register the Trusted Publisher; then retire `CARGO_REGISTRY_TOKEN`.
+- **Actions pinned by SHA; the release gates on `main` and green CI; publishing uses
+  Trusted Publishing** (S11). *Why:* a long-lived registry token in a repository secret can
+  publish any version from anywhere it leaks to; an OIDC exchange yields a token bound to this
+  repository, workflow file and environment, alive for one job. The crates.io registration
+  (owner-only) had to exist before the workflow changed, or the next release would have failed;
+  it was done first, then the workflow (#77). The old secret is deleted after the first release
+  through the new path.
 
 ## Open decisions (not taken yet)
 
