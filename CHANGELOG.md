@@ -11,6 +11,13 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Security
+
+- The release workflow publishes through crates.io Trusted Publishing
+  (`rust-lang/crates-io-auth-action`, OIDC, `id-token: write` on the publish job only). The
+  token exists for one job and is revoked at its end; the long-lived `CARGO_REGISTRY_TOKEN`
+  repository secret is no longer read and is being retired (#77).
+
 ### Documentation
 
 - The `html!` syntax table shows the string-key form for hyphenated attribute names

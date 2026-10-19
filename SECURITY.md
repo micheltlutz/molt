@@ -161,12 +161,17 @@ What the workflows do, and what only the repository owner can switch on.
   `persist-credentials: false`, so the token is not left in `.git/config` for later steps.
 - The release workflow refuses a tag whose commit is not on `main`, or on which the CI
   workflow has not already succeeded. The publish job names the `release` environment.
+- Publishing uses crates.io **Trusted Publishing**: the publish job requests an OIDC token
+  from GitHub (`id-token: write`), and `rust-lang/crates-io-auth-action` exchanges it for a
+  crates.io token that is valid for that job only and revoked when it ends. crates.io accepts
+  it only from this repository, this workflow file and the `release` environment. No
+  long-lived registry token is stored anywhere.
 - `scripts/verify.sh` writes its log to a `mktemp` file, not a fixed path in `/tmp`.
 
-**Owner steps, not code:** in the repository settings, add required reviewers to the
-`release` environment; and register `molt-framework` as a Trusted Publisher on crates.io so
-the long-lived `CARGO_REGISTRY_TOKEN` secret can be retired (the workflow still uses the
-token until then, so a release keeps working).
+**Owner steps, not code:** required reviewers on the `release` environment are a repository
+setting, and they are a manual gate rather than a second pair of eyes when the maintainer is
+one person. The `CARGO_REGISTRY_TOKEN` secret is no longer read by any workflow and is to be
+deleted from the repository settings once a release has gone through the new path.
 
 ## For users
 

@@ -59,8 +59,9 @@ something adjacent.
   working directory (L5).
 - Pushing publishes. Cache and mirrors may keep it even if deleted. Push only what you would
   be content to see indexed.
-- Secrets: the release job holds `CARGO_REGISTRY_TOKEN`. Never echo it, never write it down,
-  never put it in a test.
+- Secrets: the release job mints a short-lived crates.io token through Trusted Publishing and
+  exposes it as `CARGO_REGISTRY_TOKEN` to one step. Never echo it, never write it down, never
+  put it in a test, and never add a long-lived registry secret back.
 - Do not mention user email or names of people in commits, docs or issues beyond what the
   project already records (`CODEOWNERS`, `authors`).
 
