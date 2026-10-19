@@ -11,6 +11,12 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Security
+
+- crates.io now requires Trusted Publishing for every new version of `molt-framework`, and the
+  `CARGO_REGISTRY_TOKEN` repository secret is deleted. 1.0.1 was the first release published
+  through the OIDC path (#77).
+
 ## [1.0.1] - 2026-10-19
 
 A patch release: nothing in the public API or in rendered output changes.

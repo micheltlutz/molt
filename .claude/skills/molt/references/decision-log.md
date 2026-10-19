@@ -120,8 +120,10 @@ port found, and where it was reported, is in `docs/history/`. *Examples:* `isPer
   publish any version from anywhere it leaks to; an OIDC exchange yields a token bound to this
   repository, workflow file and environment, alive for one job. The crates.io registration
   (owner-only) had to exist before the workflow changed, or the next release would have failed;
-  it was done first, then the workflow (#77). The old secret is deleted after the first release
-  through the new path.
+  it was done first, then the workflow (#77). 1.0.1 was the first release through that path;
+  the old secret was then deleted and crates.io set to require Trusted Publishing. Required
+  reviewers on the `release` environment were tried on 1.0.1 and removed: a solo maintainer
+  approving their own deployment is a click, not a review.
 
 ## Open decisions (not taken yet)
 
