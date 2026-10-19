@@ -11,6 +11,15 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Documentation
+
+- The `html!` syntax table shows the string-key form for hyphenated attribute names
+  (`"data-id" = x`, `"hx-post" = …`), which the macro already accepted; a test pins its parity
+  with the builder (#93).
+- README gains *Serving the output*: how to return a page from Axum or any other framework
+  without a feature or a dependency in the crate. `ROADMAP.md` records that framework
+  integrations and async streaming are deliberately not planned (#92, #95).
+
 ## [1.0.0] - 2026-10-17
 
 The 1.0.0 hardening release. Everything under **Breaking** needs a change in code that
