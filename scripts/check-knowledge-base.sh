@@ -5,8 +5,9 @@
 # Every lesson in .claude/skills/molt/references/lessons-learned.md ends with a "Guard" line
 # naming the tests or files that enforce it. A lesson whose guard was renamed or deleted is
 # a claim nothing checks any more, so this script turns that into a failure instead of
-# letting the knowledge rot quietly. It also checks that every reference SKILL.md links to
-# exists.
+# letting the knowledge rot quietly. It also checks that every relative link under .claude/
+# resolves, that every rule's `paths:` glob still matches a tracked file, and that AGENTS.md
+# lists every rule, command and agent, so none of them can go stale unnoticed.
 #
 # Run by scripts/verify.sh. Usage: ./scripts/check-knowledge-base.sh
 
@@ -23,6 +24,17 @@ fail() { printf '  missing: %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 [ -f "$KB/SKILL.md" ] || { echo "no knowledge base at $KB"; exit 1; }
 [ -f "$LESSONS" ] || { echo "missing $LESSONS"; exit 1; }
 
+# Relative markdown links in one file, resolved against its own directory. Absolute URLs and
+# in-page anchors are skipped.
+check_links() {
+  local file="$1" dir target
+  dir=$(dirname "$file")
+  for target in $(grep -o '](\([^)#]*\)' "$file" | sed 's/^](//; s/)$//' | grep -v '^https\?://' | grep -v '^$' | sort -u); do
+    CHECKED=$((CHECKED + 1))
+    [ -e "$dir/$target" ] || fail "$dir/$target (linked from $file)"
+  done
+}
+
 # 1. Every reference linked from SKILL.md exists.
 for ref in $(grep -o '(references/[A-Za-z0-9_.-]*\.md)' "$KB/SKILL.md" | tr -d '()' | sort -u); do
   CHECKED=$((CHECKED + 1))
@@ -30,13 +42,51 @@ for ref in $(grep -o '(references/[A-Za-z0-9_.-]*\.md)' "$KB/SKILL.md" | tr -d '
 done
 
 # 1b. Every relative link in any skill's SKILL.md resolves, so a moved file cannot leave a
-#     skill pointing at nothing. Absolute URLs and in-page anchors are skipped.
+#     skill pointing at nothing.
 for skill in .claude/skills/*/SKILL.md; do
-  dir=$(dirname "$skill")
-  for target in $(grep -o '](\([^)#]*\)' "$skill" | sed 's/^](//; s/)$//' | grep -v '^https\?://' | grep -v '^$' | sort -u); do
+  check_links "$skill"
+done
+
+# 1c. The same for every rule, command and agent, which link into the skill's references.
+for file in .claude/rules/*.md .claude/commands/*.md .claude/agents/*.md; do
+  [ -f "$file" ] || continue
+  check_links "$file"
+done
+
+# 1d. Every `paths:` glob in a rule matches at least one tracked file. A rule scoped to a path
+#     that no longer exists never loads again, which is the quiet way for a rule to die.
+#     Only the block-list form is read (one `  - "glob"` per line), which is the form the
+#     rules use; git's own glob matching stands in for Claude Code's, `**` included.
+for rule in .claude/rules/*.md; do
+  [ -f "$rule" ] || continue
+  # Read line by line: an unquoted `$(…)` would word-split the output and then expand each
+  # glob against the working tree, so `.claude/**` would turn into a list of directories
+  # and a glob matching nothing would never be seen (L39).
+  while IFS= read -r glob; do
+    [ -n "$glob" ] || continue
     CHECKED=$((CHECKED + 1))
-    [ -e "$dir/$target" ] || fail "$dir/$target (linked from $skill)"
-  done
+    if [ -z "$(git ls-files -- ":(glob)$glob" | head -n 1)" ]; then
+      fail "$glob (paths: glob in $rule matches no tracked file)"
+    fi
+  done < <(awk '
+    NR == 1 && $0 != "---" { exit }
+    NR > 1 && $0 == "---" { exit }
+    /^paths:/ { on = 1; next }
+    on && /^  - / { sub(/^  - /, ""); gsub(/"/, ""); print; next }
+    on { on = 0 }
+  ' "$rule")
+done
+
+# 1e. AGENTS.md is the map an agent reads first; a rule, command or agent it does not list
+#     is one nobody is told about.
+for file in .claude/rules/*.md .claude/commands/*.md .claude/agents/*.md; do
+  [ -f "$file" ] || continue
+  CHECKED=$((CHECKED + 1))
+  case "$file" in
+    .claude/commands/*) name="/$(basename "$file" .md)" ;;
+    *) name="$file" ;;
+  esac
+  grep -qF -- "$name" AGENTS.md || fail "$name (not listed in AGENTS.md)"
 done
 
 # 2. Every identifier or path named by a Guard line exists. A Guard runs from the line holding

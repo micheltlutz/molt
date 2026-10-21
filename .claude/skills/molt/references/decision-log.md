@@ -125,6 +125,28 @@ port found, and where it was reported, is in `docs/history/`. *Examples:* `isPer
   reviewers on the `release` environment were tried on 1.0.1 and removed: a solo maintainer
   approving their own deployment is a click, not a review.
 
+## Repository layout for agents (2026-10-20)
+
+- **`AGENTS.md` is the map; the rules live in `.claude/rules/`, one file per topic, scoped
+  with `paths:`.** *Why:* `AGENTS.md` loads in every session, so everything in it costs
+  context whether or not the task needs it, while a rule scoped to `src/wasm.rs` is read only
+  when that file is touched. The twelve one-line rules stay in `AGENTS.md`, numbered as
+  before, because the lessons, `src/macros.rs` and the governance notes cite them by number.
+  *Rejected:* the full text in both places (it would drift) and dropping the numbered list
+  (it would orphan every "rule 11" reference). *Changes if:* Claude Code stops loading
+  `.claude/rules/`; the files then move back under `AGENTS.md` headings.
+- **Commands are thin procedures over the rules; agents are read-only reviewers.** `/verify`,
+  `/add-element`, `/fix-bug`, `/review`, `/security-audit`, `/golden`, `/lesson` and
+  `/release` encode recipes that used to be prose in `AGENTS.md`, and none performs an
+  outward-facing action: `/release` stops before the tag, `/golden` never regenerates. The
+  three agents (`code-reviewer`, `security-auditor`, `api-reviewer`) cannot write, so a
+  finding is always relayed and verified, never applied unseen. *Why:* the autonomy table in
+  [`agent-governance.md`](agent-governance.md) says those actions need a yes each time.
+- **`check-knowledge-base.sh` guards the layout too:** links under `.claude/`, every rule's
+  `paths:` against `git ls-files`, and the tables in `AGENTS.md`. *Why:* a rule whose glob
+  matches nothing never loads, and a command missing from the map is one nobody is told
+  about. Both are the quiet rot the guard lines already prevent for lessons.
+
 ## Open decisions (not taken yet)
 
 - Whether `Box<Element>` inside `Node` is worth a visible change to the public enum (needs a
