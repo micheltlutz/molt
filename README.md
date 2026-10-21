@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.jpg" alt="Molt" width="520">
+  <img src="https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.png" alt="Molt" width="220">
 </p>
 
 # Molt

@@ -26,6 +26,9 @@ and are a different version line.
   `/security-audit`, `/golden`, `/lesson`, `/release`); three read-only reviewers live in
   `.claude/agents/`. `scripts/check-knowledge-base.sh` also checks the links, the `paths:`
   globs and the tables in `AGENTS.md`. Nothing in the crate changes.
+- A new logo: an isometric paper stack shedding its top sheet, with the feather, on the
+  paper tile of the design system (`molt-logo.png`). It replaces `molt-logo.jpg` in the
+  README and is now the rustdoc logo and favicon (`html_logo_url`, `html_favicon_url`).
 
 ## [1.0.1] - 2026-10-19
 

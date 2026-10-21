@@ -56,6 +56,10 @@
 //! `MIGRATION.md` lists what changed between releases.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// The logo and favicon shown by rustdoc (docs.rs and the Pages build). The file lives at the
+// repository root and is excluded from the package, so the URL has to be absolute.
+#![doc(html_logo_url = "https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.png")]
+#![doc(html_favicon_url = "https://raw.githubusercontent.com/micheltlutz/molt/main/molt-logo.png")]
 
 pub mod accessibility;
 pub mod core;

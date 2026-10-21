@@ -32,7 +32,7 @@ exclude = [
     "/fuzz",
     "/docs/plans",
     "/docs/history",
-    "molt-logo.jpg",
+    "molt-logo.png",
     "*.code-workspace",
 ]
 
