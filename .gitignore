@@ -25,3 +25,6 @@ lcov.info
 .DS_Store
 dist/
 /examples/node/dist/
+
+# graphify knowledge-graph output (local tool, never shipped)
+/graphify-out/
