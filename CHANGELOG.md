@@ -11,6 +11,40 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-21
+
+A minor release: new form helpers. Nothing in the existing public API or in rendered output
+changes.
+
+### Added
+
+- Form helpers, the low-level shapes for form-heavy pages: `select_named`, `select_from`,
+  `select_multiple_from`, `options_from` (one `<option>` per `(value, label)` pair from any
+  iterator, with the selected value marked), `option_valued`, `optgroup_labeled`,
+  `textarea_named`, `checkbox_named`, `radio_named`, `hidden_input` (the shape of a CSRF
+  field, with whatever name the framework expects) and `fieldset_legend`. Values and labels
+  are escaped on entry like everything else.
+  ([#94](https://github.com/micheltlutz/molt/issues/94))
+
+### Security
+
+- crates.io now requires Trusted Publishing for every new version of `molt-framework`, and the
+  `CARGO_REGISTRY_TOKEN` repository secret is deleted. 1.0.1 was the first release published
+  through the OIDC path (#77).
+
+### Documentation
+
+- The repository is organised as a Claude Code project. `AGENTS.md` is the map; the rules
+  live in `.claude/rules/`, one file per topic and scoped to the files they govern, with
+  `code-style.md` and `git-workflow.md` loaded in every session; the recipes are slash
+  commands in `.claude/commands/` (`/verify`, `/add-element`, `/fix-bug`, `/review`,
+  `/security-audit`, `/golden`, `/lesson`, `/release`); three read-only reviewers live in
+  `.claude/agents/`. `scripts/check-knowledge-base.sh` also checks the links, the `paths:`
+  globs and the tables in `AGENTS.md`. Nothing in the crate changes.
+- A new logo: an isometric paper stack shedding its top sheet, with the feather, on the
+  paper tile of the design system (`molt-logo.png`). It replaces `molt-logo.jpg` in the
+  README and is now the rustdoc logo and favicon (`html_logo_url`, `html_favicon_url`).
+
 ## [1.0.1] - 2026-10-19
 
 A patch release: nothing in the public API or in rendered output changes.

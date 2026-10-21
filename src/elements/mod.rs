@@ -318,6 +318,262 @@ pub fn iframe_titled(src: impl AsRef<str>, title_text: impl AsRef<str>) -> Eleme
         .attr("loading", "lazy")
 }
 
+// MARK: - Form helpers
+//
+// Low-level shapes for form-heavy pages (#94). Options arrive as `(value, label)` pairs from
+// any iterator, so a literal array and the rows of a query feed the same function. The CSRF
+// field is `hidden_input` with whatever name the application's framework expects; Molt fixes
+// none. Higher-level form builders stay out of core.
+
+/// A `<select name="…">`.
+///
+/// Fill it with [`options_from`] through [`Element::children_from`], or with
+/// [`optgroup_labeled`] groups. [`select_from`] does the ungrouped case in one call.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let options = options_from([("poa", "Porto Alegre")], None);
+/// let south = optgroup_labeled("Sul").children_from(options);
+/// let select = select_named("city").child(south);
+/// assert_eq!(
+///     select.render(),
+///     concat!(
+///         r#"<select name="city"><optgroup label="Sul">"#,
+///         r#"<option value="poa">Porto Alegre</option></optgroup></select>"#,
+///     )
+/// );
+/// ```
+#[must_use]
+pub fn select_named(name: impl AsRef<str>) -> Element {
+    select().attr("name", name)
+}
+
+/// A `<select name="…">` holding one `<option>` per `(value, label)` pair.
+///
+/// The option whose value equals `selected` is marked `selected`; pass `None` when none is.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let countries = [("br", "Brasil"), ("ar", "Argentina")];
+/// assert_eq!(
+///     select_from("country", countries, Some("ar")).render(),
+///     concat!(
+///         r#"<select name="country"><option value="br">Brasil</option>"#,
+///         r#"<option value="ar" selected>Argentina</option></select>"#,
+///     )
+/// );
+/// ```
+#[must_use]
+pub fn select_from<K: AsRef<str>, V: AsRef<str>>(
+    name: impl AsRef<str>,
+    options: impl IntoIterator<Item = (K, V)>,
+    selected: Option<&str>,
+) -> Element {
+    select_named(name).children_from(options_from(options, selected))
+}
+
+/// One `<option value="…">label</option>` per `(value, label)` pair, for
+/// [`Element::children_from`].
+///
+/// The option whose value equals `selected` is marked `selected`; pass `None` when none is.
+/// Any iterator of pairs works, so a literal array and the rows of a query feed the same
+/// call. Values and labels are escaped on entry like every other attribute and text.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let rows = vec![("sp".to_string(), "São Paulo".to_string())];
+/// let select = select_named("city")
+///     .children_from(options_from(rows.iter().map(|r| (&r.0, &r.1)), Some("sp")));
+/// assert_eq!(
+///     select.render(),
+///     r#"<select name="city"><option value="sp" selected>São Paulo</option></select>"#
+/// );
+/// ```
+#[must_use]
+pub fn options_from<K: AsRef<str>, V: AsRef<str>>(
+    options: impl IntoIterator<Item = (K, V)>,
+    selected: Option<&str>,
+) -> Vec<Element> {
+    options_with(options, |value| selected == Some(value))
+}
+
+/// An `<option value="…">`. The label is its text.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     option_valued("br").text("Brasil").render(),
+///     r#"<option value="br">Brasil</option>"#
+/// );
+/// ```
+#[must_use]
+pub fn option_valued(value: impl AsRef<str>) -> Element {
+    option().attr("value", value)
+}
+
+/// An `<optgroup label="…">`. Fill it with [`options_from`] through
+/// [`Element::children_from`].
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let options = options_from([("poa", "Porto Alegre")], None);
+/// let south = optgroup_labeled("Sul").children_from(options);
+/// assert_eq!(
+///     south.render(),
+///     r#"<optgroup label="Sul"><option value="poa">Porto Alegre</option></optgroup>"#
+/// );
+/// ```
+#[must_use]
+pub fn optgroup_labeled(label_text: impl AsRef<str>) -> Element {
+    optgroup().attr("label", label_text)
+}
+
+/// A `<textarea name="…">`. Its value is its text.
+///
+/// The value is escaped on entry, so a `</textarea>` inside it cannot close the element,
+/// and the whitespace inside is rendered exactly as given.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     textarea_named("bio").text("Hi <b>").render(),
+///     r#"<textarea name="bio">Hi &lt;b&gt;</textarea>"#
+/// );
+/// ```
+#[must_use]
+pub fn textarea_named(name: impl AsRef<str>) -> Element {
+    textarea().attr("name", name)
+}
+
+/// An `<input type="hidden" name="…" value="…">`: the shape of a CSRF token field.
+///
+/// The field name is the application's (`_csrf`, `authenticity_token`,
+/// `csrfmiddlewaretoken`, …); Molt fixes none. The value is escaped like any attribute.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     hidden_input("_csrf", "t0ken").render(),
+///     r#"<input type="hidden" name="_csrf" value="t0ken">"#
+/// );
+/// ```
+#[must_use]
+pub fn hidden_input(name: impl AsRef<str>, value: impl AsRef<str>) -> Element {
+    input_named("hidden", name).attr("value", value)
+}
+
+/// A `<fieldset>` whose first child is `<legend>…</legend>`, where HTML requires the legend
+/// to be. The fields added afterwards follow it.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     fieldset_legend("Account").child(input_named("email", "email")).render(),
+///     r#"<fieldset><legend>Account</legend><input type="email" name="email"></fieldset>"#
+/// );
+/// ```
+#[must_use]
+pub fn fieldset_legend(legend_text: impl AsRef<str>) -> Element {
+    fieldset().child(legend().text(legend_text))
+}
+
+/// A `<select name="…" multiple>` holding one `<option>` per `(value, label)` pair, with
+/// every option whose value is in `selected` marked `selected`.
+///
+/// [`select_from`] is the single-choice form. This one exists because a multiple select
+/// needs a set of selected values, not an `Option`; pass `&[]` when none is.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let tags = [("rust", "Rust"), ("wasm", "WebAssembly")];
+/// assert_eq!(
+///     select_multiple_from("tags", tags, &["rust"]).render(),
+///     concat!(
+///         r#"<select name="tags" multiple><option value="rust" selected>Rust</option>"#,
+///         r#"<option value="wasm">WebAssembly</option></select>"#,
+///     )
+/// );
+/// ```
+#[must_use]
+pub fn select_multiple_from<K: AsRef<str>, V: AsRef<str>>(
+    name: impl AsRef<str>,
+    options: impl IntoIterator<Item = (K, V)>,
+    selected: &[&str],
+) -> Element {
+    select_named(name)
+        .bool_attr("multiple")
+        .children_from(options_with(options, |value| selected.contains(&value)))
+}
+
+/// An `<input type="checkbox" name="…" value="…">`, with `checked` when asked.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     checkbox_named("terms", "yes", true).render(),
+///     r#"<input type="checkbox" name="terms" value="yes" checked>"#
+/// );
+/// ```
+#[must_use]
+pub fn checkbox_named(name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    checkable("checkbox", name, value, checked)
+}
+
+/// An `<input type="radio" name="…" value="…">`, with `checked` when asked.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     radio_named("plan", "pro", false).render(),
+///     r#"<input type="radio" name="plan" value="pro">"#
+/// );
+/// ```
+#[must_use]
+pub fn radio_named(name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    checkable("radio", name, value, checked)
+}
+
+/// Checkbox and radio differ only in `type`; `checked` is a boolean attribute, so it is either
+/// present as a bare key or absent, never `checked="false"`.
+fn checkable(kind: &str, name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    let input = input_named(kind, name).attr("value", value);
+    if checked {
+        input.bool_attr("checked")
+    } else {
+        input
+    }
+}
+
+/// The options of a select, with `is_selected` deciding which carry `selected`. One
+/// `<option>` per pair, in the iterator's order, values and labels escaped on entry.
+fn options_with<K: AsRef<str>, V: AsRef<str>>(
+    options: impl IntoIterator<Item = (K, V)>,
+    is_selected: impl Fn(&str) -> bool,
+) -> Vec<Element> {
+    options
+        .into_iter()
+        .map(|(value, label)| {
+            let option = option_valued(value.as_ref()).text(label);
+            if is_selected(value.as_ref()) {
+                option.bool_attr("selected")
+            } else {
+                option
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -997,6 +1253,195 @@ mod tests {
         assert_eq!(
             section().child(p().text("This is a section.")).render(),
             "<section><p>This is a section.</p></section>"
+        );
+    }
+
+    // MARK: - Form helpers (#94)
+
+    #[test]
+    fn select_named_renders_its_name() {
+        assert_eq!(
+            select_named("country").render(),
+            r#"<select name="country"></select>"#
+        );
+    }
+
+    #[test]
+    fn options_from_renders_each_value_and_label_pair() {
+        let select = select_named("country")
+            .children_from(options_from([("br", "Brasil"), ("ar", "Argentina")], None));
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                r#"<select name="country"><option value="br">Brasil</option>"#,
+                r#"<option value="ar">Argentina</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn options_from_marks_the_selected_value() {
+        let select = select_named("country").children_from(options_from(
+            [("br", "Brasil"), ("ar", "Argentina")],
+            Some("ar"),
+        ));
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                r#"<select name="country"><option value="br">Brasil</option>"#,
+                r#"<option value="ar" selected>Argentina</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn options_from_accepts_owned_pairs_such_as_database_rows() {
+        let rows: Vec<(String, String)> = vec![
+            ("sp".to_string(), "S\u{e3}o Paulo".to_string()),
+            ("rj".to_string(), "Rio".to_string()),
+        ];
+        let select = select_named("city")
+            .children_from(options_from(rows.iter().map(|r| (&r.0, &r.1)), None));
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                "<select name=\"city\"><option value=\"sp\">S\u{e3}o Paulo</option>",
+                r#"<option value="rj">Rio</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn options_from_escapes_values_and_labels() {
+        let select = select_named("q").children_from(options_from([("a\"b", "a&b")], None));
+
+        assert_eq!(
+            select.render(),
+            r#"<select name="q"><option value="a&quot;b">a&amp;b</option></select>"#
+        );
+    }
+
+    #[test]
+    fn select_from_builds_the_select_with_its_options() {
+        assert_eq!(
+            select_from(
+                "country",
+                [("br", "Brasil"), ("ar", "Argentina")],
+                Some("br")
+            )
+            .render(),
+            concat!(
+                r#"<select name="country"><option value="br" selected>Brasil</option>"#,
+                r#"<option value="ar">Argentina</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn option_valued_renders_its_value() {
+        assert_eq!(
+            option_valued("br").text("Brasil").render(),
+            r#"<option value="br">Brasil</option>"#
+        );
+    }
+
+    #[test]
+    fn optgroup_labeled_groups_its_options() {
+        let select = select_named("city").child(
+            optgroup_labeled("Sul").children_from(options_from([("poa", "Porto Alegre")], None)),
+        );
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                r#"<select name="city"><optgroup label="Sul">"#,
+                r#"<option value="poa">Porto Alegre</option></optgroup></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn textarea_named_escapes_its_value() {
+        assert_eq!(
+            textarea_named("bio").text("</textarea><b>").render(),
+            r#"<textarea name="bio">&lt;/textarea&gt;&lt;b&gt;</textarea>"#
+        );
+    }
+
+    #[test]
+    fn hidden_input_renders_its_name_and_escaped_value() {
+        assert_eq!(
+            hidden_input("_csrf", "t0k\"en&").render(),
+            r#"<input type="hidden" name="_csrf" value="t0k&quot;en&amp;">"#
+        );
+    }
+
+    #[test]
+    fn fieldset_legend_puts_the_legend_before_the_fields() {
+        let fieldset = fieldset_legend("Endere\u{e7}o").child(input_named("text", "street"));
+
+        assert_eq!(
+            fieldset.render(),
+            concat!(
+                "<fieldset><legend>Endere\u{e7}o</legend>",
+                r#"<input type="text" name="street"></fieldset>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn checkbox_named_renders_checked_when_asked() {
+        assert_eq!(
+            checkbox_named("terms", "yes", true).render(),
+            r#"<input type="checkbox" name="terms" value="yes" checked>"#
+        );
+    }
+
+    #[test]
+    fn checkbox_named_omits_checked_when_not_asked() {
+        assert_eq!(
+            checkbox_named("terms", "yes", false).render(),
+            r#"<input type="checkbox" name="terms" value="yes">"#
+        );
+    }
+
+    #[test]
+    fn radio_named_renders_checked_when_asked() {
+        assert_eq!(
+            radio_named("plan", "pro", true).render(),
+            r#"<input type="radio" name="plan" value="pro" checked>"#
+        );
+    }
+
+    #[test]
+    fn radio_named_omits_checked_when_not_asked() {
+        assert_eq!(
+            radio_named("plan", "free", false).render(),
+            r#"<input type="radio" name="plan" value="free">"#
+        );
+    }
+
+    #[test]
+    fn select_multiple_from_marks_every_selected_value() {
+        let tags = [("a", "A"), ("b", "B"), ("c", "C")];
+
+        assert_eq!(
+            select_multiple_from("tags", tags, &["a", "c"]).render(),
+            concat!(
+                r#"<select name="tags" multiple><option value="a" selected>A</option>"#,
+                r#"<option value="b">B</option><option value="c" selected>C</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn select_multiple_from_with_nothing_selected_marks_no_option() {
+        assert_eq!(
+            select_multiple_from("tags", [("a", "A")], &[]).render(),
+            r#"<select name="tags" multiple><option value="a">A</option></select>"#
         );
     }
 }
