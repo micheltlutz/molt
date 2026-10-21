@@ -11,6 +11,11 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-21
+
+A minor release: new form helpers. Nothing in the existing public API or in rendered output
+changes.
+
 ### Added
 
 - Form helpers, the low-level shapes for form-heavy pages: `select_named`, `select_from`,
