@@ -7,8 +7,8 @@ description: Build HTML with the Molt Rust library (molt-framework on crates.io)
 
 Molt builds an HTML **string**. You assemble a tree of values and serialize it once. There is
 no DOM, no runtime, no reactivity. Four golden fixtures pin its output byte for byte.
-`AGENTS.md` at the repo root is the rulebook; this skill is the reasoning behind it and the
-lessons that produced it.
+`AGENTS.md` at the repo root is the map and `.claude/rules/` the rulebook; this skill is the
+reasoning behind them and the lessons that produced it.
 
 ```rust
 use molt::prelude::*;

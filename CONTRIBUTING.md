@@ -58,6 +58,9 @@ Reference issues in the body (`Refs #12`, `Fixes #12`), not the subject.
 - Comments explain *why*. The code already says what.
 - `cargo fmt` is the arbiter of layout; `clippy -D warnings` of everything else.
 - Prefer a test over a comment asserting something is true.
+- The house style beyond what the tools enforce (naming, signatures, errors, docs, shell) is
+  in [`.claude/rules/code-style.md`](.claude/rules/code-style.md). Claude Code loads it in every
+  session; it applies to a human contributor just the same.
 
 ## Tests
 
@@ -91,8 +94,8 @@ the only place a markup change is visible to a reviewer.
 
 ## Adding an element
 
-See the five-step contract in [`AGENTS.md`](AGENTS.md#adding-an-element). Skipping any step
-fails `verify.sh`.
+See the five-step contract in [`.claude/rules/elements.md`](.claude/rules/elements.md). Skipping
+any step fails `verify.sh`.
 
 ## What gets a pull request merged
 

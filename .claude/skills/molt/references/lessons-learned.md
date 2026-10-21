@@ -614,3 +614,18 @@ claim was true all along; the CI simply had never tested it.
 
 - **Guard.** `.github/workflows/ci.yml`
 
+### L39. An unquoted `$(…)` expands the globs it prints
+
+`check-knowledge-base.sh` read each rule's `paths:` globs with `for glob in $(awk …)`. The
+shell word-split the output and then **pathname-expanded** every word: `.claude/**` became the
+directories under `.claude/` (bash 3.2 treats `**` as `*`), three of which were not yet
+tracked, so the check failed on paths that were never in the file. With tracked paths the bug
+is worse because it is invisible: `src/**/*.rs` expands to real files, and a glob that matches
+nothing would be reported as fine.
+
+- **Rule.** Never iterate an unquoted `$(…)` whose lines may contain `*`, `?` or `[`. Read
+  line by line (`while IFS= read -r line; do …; done < <(…)`), or `set -f` around the loop.
+- **Rule.** A guard that passes on the committed tree can still be wrong. Run it once with an
+  input that must fail (a glob that matches nothing, a file the map does not list) and see
+  the failure before trusting the green.
+- **Guard.** `scripts/check-knowledge-base.sh`

@@ -256,9 +256,11 @@ triggered it is as useful as a patch.
 - **Sending code?** Branch from `develop`, add a test that asserts on the rendered markup, and
   run `./scripts/verify.sh` before you open the pull request. The rules and the reasons behind
   them are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
-- **Using an AI agent?** Point it at [`AGENTS.md`](AGENTS.md) and the knowledge base in
-  [`.claude/skills/molt`](.claude/skills/molt/SKILL.md): security rules, Rust practices and the
-  lessons learned getting to 1.0.
+- **Using an AI agent?** Point it at [`AGENTS.md`](AGENTS.md), the map over the rules in
+  [`.claude/rules`](.claude/rules), the slash commands, the review agents and the knowledge base
+  in [`.claude/skills/molt`](.claude/skills/molt/SKILL.md): security rules, Rust practices and
+  the lessons learned getting to 1.0. The code style every contributor follows is
+  [`.claude/rules/code-style.md`](.claude/rules/code-style.md).
 
 ### Support the project
 

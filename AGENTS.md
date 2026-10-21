@@ -20,17 +20,77 @@ Molt began as a port of a Swift library, Winged-Swift, which is to be discontinu
 1.0.0. What that history explains, and where each deliberate difference came from, is kept in
 [`docs/history`](docs/history). Nothing in the code, the tests or the scripts refers to it.
 
-## Knowledge base
+## The twelve rules
 
-`.claude/skills/molt/` holds the reasoning behind these rules and what the 1.0 hardening
-batches taught: security (OWASP Top 10 mapped onto this code), stack-safety, semver, errors,
-wasm-bindgen, benchmarking, design patterns to use and to refuse, and a decision log. Start
-at `SKILL.md`; its table says which reference to read for your task. The most useful single
-file is `references/lessons-learned.md`: every entry is a bug that already happened, with the
-test that now guards it.
+The contract in one screen. The rule files below say why and how; the lessons cite these
+numbers.
+
+1. Escaping happens once, when content enters the tree. Never pre-escape a value.
+2. `raw_text` and `Node::Raw` are the only escape hatches, and they are greppable on purpose.
+3. Three escapers, not one: `escape_text`, `escape_attribute`, `escape_xml`.
+   `escape_json_script` is a fourth, different thing.
+4. Void elements take no children.
+5. `<pre>`, `<code>` and `<textarea>` are never indented inside.
+6. Empty children leave no blank line.
+7. `Document::render` is pretty; `Element::render` is compact.
+8. `set_id`, `set_style` and `set_role` replace. Everything else appends.
+9. `html!` is sugar over the builder, never a second code path.
+10. Rendering is configured by a value, never globally.
+11. Tests assert on rendered strings, not tree shape.
+12. Every `pub` item needs a rustdoc comment with an example.
+
+## Where the rules live
+
+This file is the map. The rules are in `.claude/`, one file per topic, so a session loads
+only what the files it touches need. A rule without `paths:` loads in every session.
+
+| rule | holds | loads when touching |
+| --- | --- | --- |
+| `.claude/rules/code-style.md` | how Rust and shell are written here: toolchain, lints, naming, signatures, errors, docs | always |
+| `.claude/rules/git-workflow.md` | branches, commit prefixes, what a PR says, what needs a yes | always |
+| `.claude/rules/rendering.md` | rules 1 to 10 with their reasons | `src/core/`, `macros.rs`, `document.rs`, `layout.rs` |
+| `.claude/rules/tree-walking.md` | explicit stacks, no derives on recursive types, the 100,000-level test | the same files |
+| `.claude/rules/elements.md` | the five steps that add an element | `src/elements/`, `tags.rs`, the tag catalog |
+| `.claude/rules/testing.md` | rule 11, and the test-first bug recipe | `src/`, `tests/`, `benches/`, `fuzz/` |
+| `.claude/rules/golden-fixtures.md` | never hand-edit; what a deliberate output change needs | `tests/fixtures/`, the writers |
+| `.claude/rules/public-api.md` | the semver checklist, hygiene for a `pub` item, downstream output changes | `src/`, `MIGRATION.md`, `CHANGELOG.md` |
+| `.claude/rules/security.md` | safe at write time, drop not repair, the four escape hatches, the filesystem | `src/`, `SECURITY.md`, `fuzz/` |
+| `.claude/rules/wasm.md` | by-value arguments, feature gating, `wasm-pack test` | `src/wasm.rs`, the wasm examples |
+| `.claude/rules/performance.md` | a claim needs a number; what was refused on purpose | `benches/`, the allocation tests, the hot paths |
+| `.claude/rules/docs.md` | run what you document; lessons and their guards; the decision log | `docs/`, `.claude/`, the root `*.md` |
+
+The repeatable workflows are slash commands in `.claude/commands/`:
+
+| command | does |
+| --- | --- |
+| `/verify` | runs `./scripts/verify.sh` and reports every failure |
+| `/add-element <constructor> <tag> [void] [whitespace]` | the five-step element contract |
+| `/fix-bug <issue or description>` | a test-first fix, with the proof that the test can fail |
+| `/review [base]` | the `code-reviewer` agent on the branch's diff, plus `api-reviewer` and `security-auditor` when the diff warrants them |
+| `/security-audit [area]` | the `security-auditor` agent on the output surface |
+| `/golden` | runs the golden test and explains a diff; never regenerates |
+| `/lesson <title>` | adds a lesson with its guard to the knowledge base |
+| `/release <version>` | prepares a release locally; never tags or publishes |
+
+The reviewers run in their own context, in `.claude/agents/`, and are read-only:
+
+| agent | role |
+| --- | --- |
+| `.claude/agents/code-reviewer.md` | BLOCK, WARN or APPROVE against the Rust guidelines and the rendering contract |
+| `.claude/agents/security-auditor.md` | the OWASP surface table, row by row, with hostile inputs |
+| `.claude/agents/api-reviewer.md` | semver, rustdoc, `CHANGELOG.md` and `MIGRATION.md` for a `pub` or output change |
+
+The knowledge base is in `.claude/skills/`:
+
+| skill | when |
+| --- | --- |
+| `.claude/skills/molt/` | the reasoning behind the rules and what the 1.0 hardening batches taught: security (OWASP Top 10 mapped onto this code), stack-safety, semver, errors, wasm-bindgen, benchmarking, design patterns to use and to refuse, a decision log. Start at `SKILL.md`; the most useful single file is `references/lessons-learned.md`, where every entry is a bug that already happened, with the test that now guards it |
+| `.claude/skills/molt-migrate/` | upgrading a project that depends on `molt-framework` and proving its output did not change by accident |
 
 Each lesson names its guard, and `./scripts/check-knowledge-base.sh` (part of `verify.sh`)
-fails when one disappears. When you learn something the hard way, add a lesson and its guard.
+fails when a guard disappears, when a link in `.claude/` breaks, when a rule's `paths:`
+matches no tracked file, or when a rule, command or agent is missing from the tables above.
+When you learn something the hard way, add a lesson and its guard (`/lesson`).
 
 ## Commands
 
@@ -39,7 +99,7 @@ fails when one disappears. When you learn something the hard way, add a lesson a
 | `./scripts/verify.sh` | **before reporting any change as done** — superset of CI |
 | `cargo test` | unit, integration and doc tests |
 | `cargo test --test golden` | the byte-for-byte parity gate |
-| `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change |
+| `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change, and only when asked |
 | `./scripts/generate-tag-catalog.sh` | after adding or renaming an element |
 | `cargo clippy --all-targets --all-features -- -D warnings` | lint |
 | `cargo bench` | render performance |
@@ -51,7 +111,7 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
 
 | path | contents |
 | --- | --- |
-| `src/core/` | node tree, renderer, escaping, attribute, tag sets |
+| `src/core/` | node tree, renderer, escaping, attribute, tag sets, URL policy |
 | `src/elements/` | the `define_elements!` table — all 93 tags |
 | `src/macros.rs` | the `html!` macro and its two token munchers |
 | `src/document.rs`, `src/layout.rs` | page assembly |
@@ -60,108 +120,7 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
 | `src/ssg.rs` | filesystem output, `feature = "ssg"`, off on wasm32 |
 | `src/wasm.rs` | `wasm-bindgen` surface, `feature = "wasm"` |
 | `tests/fixtures/` | the golden files, compared byte for byte — **never hand-edit** |
-
-## Rules
-
-1. **Escaping happens once, when content enters the tree.** `text()` and `Attribute::new`
-   escape; the renderer never does. Never pre-escape a value before passing it in — you
-   will get `&amp;amp;`.
-2. **`raw_text` and `Node::Raw` are the only escape hatches.** They are greppable on
-   purpose. If you reach for one, say why in a comment.
-3. **Three escapers, not one.** `escape_text` (`& < > " '`), `escape_attribute`
-   (`& " '` — *not* `<` `>`), `escape_xml` (`'` → `&apos;`). The fixtures depend on the
-   differences. (The original spec, `docs/history/MOLT_SPEC.md` §3.3, shows only one; it is wrong.)
-   `escape_json_script` is a fourth, different thing: it makes JSON safe inside `<script>`
-   with `\uXXXX` escapes and is not HTML escaping. Do not use one in place of another.
-4. **Void elements take no children.** The writer emits `>` and returns. Adding a child to
-   an `img()` is silently dropped; that is the contract.
-5. **`<pre>`, `<code>` and `<textarea>` are never indented inside.** Their whitespace is
-   what the browser displays.
-6. **Empty children leave no blank line.** The pretty writer renders each child into a
-   scratch buffer and skips it if empty. Do not "optimise" that away — it is what keeps an
-   empty `Fragment` from leaving a gap.
-7. **`Document::render` is pretty; `Element::render` is compact.** Asymmetric on purpose,
-   and the fixtures encode it.
-8. **`set_id`, `set_style` and `set_role` replace. Everything else appends.** Also
-   load-bearing.
-9. **`html!` is sugar over the builder, never a second code path.** Any form it accepts
-   must expand to the same tree the builder produces. There is a test asserting exactly
-   that — keep it passing.
-10. **Rendering is configured by a value, never globally.** `RenderOptions` is passed in.
-    Do not add a global switch.
-11. **Tests assert on rendered strings, not tree shape.** A test that reads
-    `element.children()[0].attributes()[1]` locks in an implementation. A test that asserts
-    the markup locks in the contract, which is what lets the internals be rewritten without
-    touching the tests.
-12. **Every `pub` item needs a rustdoc comment with an example.** `missing_docs` is denied.
-    Comments explain *why*; the code already says what.
-
-## Adding an element
-
-Five steps. Skipping any of them fails `./scripts/verify.sh`.
-
-1. Add the entry to the `define_elements!` table in `src/elements/mod.rs`, with a doc
-   comment naming the tag.
-2. If it is a void element, add it to `VOID_TAGS` in `src/core/tags.rs` — **keep the slice
-   sorted**, `is_void` binary-searches it. It is a `&[&str]`, so there is no length to update.
-3. If its whitespace is significant, add it to `WHITESPACE_SENSITIVE_TAGS`.
-4. Run `./scripts/generate-tag-catalog.sh` and commit the regenerated
-   `docs/tag-catalog.md`.
-5. Add a render assertion to the tests in `src/elements/mod.rs`.
-
-## Changing markup
-
-If a change alters rendered output, `cargo test --test golden` fails. That is the system
-working. Either the change is wrong, or the fixtures need regenerating — and if they do,
-say so explicitly in the pull request, because a fixture diff is the only place a markup
-change is visible to a reviewer.
-
-## Recipes
-
-**Fix a bug.** Reproduce it with the hostile or failing input as a test that asserts on the
-rendered string, watch it fail, fix it, then switch the fix off by hand and watch the test
-fail again (see lesson L21 in the knowledge base). Check the test count rose and that the
-test is listed by name.
-
-**Fix a security problem.** Start from the surface table in
-`.claude/skills/molt/references/security-owasp.md`: find the place where a caller's string
-reaches the output, make it safe at *write time* so no construction path bypasses it, drop
-rather than repair, and add the row for any new place. Update `SECURITY.md`, and if the
-output changes for some input, `CHANGELOG.md` and `MIGRATION.md`'s *Output changes* table.
-
-**Change a `pub` item.** It is semver. Check: a new variant or field on an exhaustive item,
-an array length in a type, a changed return type or bound, a renamed method, a name that
-collides with a trait method. If any applies it is `breaking`: say so in the PR, add it to
-`CHANGELOG.md` under *Breaking* and to `MIGRATION.md` with a compiled before/after.
-
-**Walk a tree.** Use an explicit stack, never recursion, and never `derive` `Clone`,
-`PartialEq`, `Hash` or `Drop` on a recursive type. Add a 100,000-level test. In it, compare
-with `assert!(a == b)`; `assert_eq!` formats the trees with the recursive `Debug`.
-
-**Make something faster.** A claim needs a before/after number from `cargo bench --bench
-render` and, for allocations, `tests/allocations.rs`. Put the regressions in the PR too. See
-`references/performance.md`.
-
-**Touch the WASM bindings.** Arguments are by value (they consume the JS handle). Run
-`wasm-pack test --node -- --features wasm`; `cargo check` is not a test.
-
-## What a reviewer blocks
-
-Verdicts follow `references/rust-guidelines.md`: **block** for an injection path, an
-abort on input, `unsafe`, a swallowed error, a `pub` item you cannot take back, or a claim
-with no measurement; **warn** for an avoidable clone or a missing `#[must_use]`. In practice:
-`unwrap`/`expect` in library code, an unexplained use of `raw_text`/`Node::raw`/
-`Attribute::raw`/`trusted_url`, recursion over the tree, a derive on a recursive type, a new
-public trait with one implementer, a fixture edited by hand, and a doc that says what nobody
-ran.
-
-## Public API and downstream sites
-
-Anything that changes what a site built on Molt emits is a downstream change, even if no
-signature moves: a tag now dropped, a URL now `#`, a feed link now omitted. It belongs in the
-*Output changes* table of `MIGRATION.md` as well as the changelog. The `molt-migrate` skill
-tells a user how to find these in their own output; if you add a row, the procedure still
-holds.
+| `.claude/` | rules, commands, agents and skills, as mapped above; not shipped in the crate |
 
 ## Before you say you are done
 
@@ -172,11 +131,3 @@ holds.
 4. You reported what you did **not** verify (workflows cannot be run locally; a stacked PR
    gets no CI until its base is `main` or `develop`).
 5. Nothing outward-facing happened that the user did not ask for.
-
-## Style
-
-- Four-space indent, `max_width = 100`, `cargo fmt` is the arbiter.
-- Commit prefixes: `Add:`, `Fix:`, `Change:`,
-  `Update:`, `Docs:`, `Test:`, `Refactor:`, `Perf:`.
-- Branch from `develop`, pull request against `develop`.
-- **Run `./scripts/verify.sh` before you report that a change is done.**
