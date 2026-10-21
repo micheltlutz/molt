@@ -14,10 +14,11 @@ and are a different version line.
 ### Added
 
 - Form helpers, the low-level shapes for form-heavy pages: `select_named`, `select_from`,
-  `options_from` (one `<option>` per `(value, label)` pair from any iterator, with the
-  selected value marked), `option_valued`, `optgroup_labeled`, `textarea_named`,
-  `hidden_input` (the shape of a CSRF field, with whatever name the framework expects) and
-  `fieldset_legend`. Values and labels are escaped on entry like everything else.
+  `select_multiple_from`, `options_from` (one `<option>` per `(value, label)` pair from any
+  iterator, with the selected value marked), `option_valued`, `optgroup_labeled`,
+  `textarea_named`, `checkbox_named`, `radio_named`, `hidden_input` (the shape of a CSRF
+  field, with whatever name the framework expects) and `fieldset_legend`. Values and labels
+  are escaped on entry like everything else.
   ([#94](https://github.com/micheltlutz/molt/issues/94))
 
 ### Security

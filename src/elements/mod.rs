@@ -397,17 +397,7 @@ pub fn options_from<K: AsRef<str>, V: AsRef<str>>(
     options: impl IntoIterator<Item = (K, V)>,
     selected: Option<&str>,
 ) -> Vec<Element> {
-    options
-        .into_iter()
-        .map(|(value, label)| {
-            let option = option_valued(value.as_ref()).text(label);
-            if selected == Some(value.as_ref()) {
-                option.bool_attr("selected")
-            } else {
-                option
-            }
-        })
-        .collect()
+    options_with(options, |value| selected == Some(value))
 }
 
 /// An `<option value="…">`. The label is its text.
@@ -493,6 +483,95 @@ pub fn hidden_input(name: impl AsRef<str>, value: impl AsRef<str>) -> Element {
 #[must_use]
 pub fn fieldset_legend(legend_text: impl AsRef<str>) -> Element {
     fieldset().child(legend().text(legend_text))
+}
+
+/// A `<select name="…" multiple>` holding one `<option>` per `(value, label)` pair, with
+/// every option whose value is in `selected` marked `selected`.
+///
+/// [`select_from`] is the single-choice form. This one exists because a multiple select
+/// needs a set of selected values, not an `Option`; pass `&[]` when none is.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// let tags = [("rust", "Rust"), ("wasm", "WebAssembly")];
+/// assert_eq!(
+///     select_multiple_from("tags", tags, &["rust"]).render(),
+///     concat!(
+///         r#"<select name="tags" multiple><option value="rust" selected>Rust</option>"#,
+///         r#"<option value="wasm">WebAssembly</option></select>"#,
+///     )
+/// );
+/// ```
+#[must_use]
+pub fn select_multiple_from<K: AsRef<str>, V: AsRef<str>>(
+    name: impl AsRef<str>,
+    options: impl IntoIterator<Item = (K, V)>,
+    selected: &[&str],
+) -> Element {
+    select_named(name)
+        .bool_attr("multiple")
+        .children_from(options_with(options, |value| selected.contains(&value)))
+}
+
+/// An `<input type="checkbox" name="…" value="…">`, with `checked` when asked.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     checkbox_named("terms", "yes", true).render(),
+///     r#"<input type="checkbox" name="terms" value="yes" checked>"#
+/// );
+/// ```
+#[must_use]
+pub fn checkbox_named(name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    checkable("checkbox", name, value, checked)
+}
+
+/// An `<input type="radio" name="…" value="…">`, with `checked` when asked.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(
+///     radio_named("plan", "pro", false).render(),
+///     r#"<input type="radio" name="plan" value="pro">"#
+/// );
+/// ```
+#[must_use]
+pub fn radio_named(name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    checkable("radio", name, value, checked)
+}
+
+/// Checkbox and radio differ only in `type`; `checked` is a boolean attribute, so it is either
+/// present as a bare key or absent, never `checked="false"`.
+fn checkable(kind: &str, name: impl AsRef<str>, value: impl AsRef<str>, checked: bool) -> Element {
+    let input = input_named(kind, name).attr("value", value);
+    if checked {
+        input.bool_attr("checked")
+    } else {
+        input
+    }
+}
+
+/// The options of a select, with `is_selected` deciding which carry `selected`. One
+/// `<option>` per pair, in the iterator's order, values and labels escaped on entry.
+fn options_with<K: AsRef<str>, V: AsRef<str>>(
+    options: impl IntoIterator<Item = (K, V)>,
+    is_selected: impl Fn(&str) -> bool,
+) -> Vec<Element> {
+    options
+        .into_iter()
+        .map(|(value, label)| {
+            let option = option_valued(value.as_ref()).text(label);
+            if is_selected(value.as_ref()) {
+                option.bool_attr("selected")
+            } else {
+                option
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1310,6 +1389,59 @@ mod tests {
                 "<fieldset><legend>Endere\u{e7}o</legend>",
                 r#"<input type="text" name="street"></fieldset>"#,
             )
+        );
+    }
+
+    #[test]
+    fn checkbox_named_renders_checked_when_asked() {
+        assert_eq!(
+            checkbox_named("terms", "yes", true).render(),
+            r#"<input type="checkbox" name="terms" value="yes" checked>"#
+        );
+    }
+
+    #[test]
+    fn checkbox_named_omits_checked_when_not_asked() {
+        assert_eq!(
+            checkbox_named("terms", "yes", false).render(),
+            r#"<input type="checkbox" name="terms" value="yes">"#
+        );
+    }
+
+    #[test]
+    fn radio_named_renders_checked_when_asked() {
+        assert_eq!(
+            radio_named("plan", "pro", true).render(),
+            r#"<input type="radio" name="plan" value="pro" checked>"#
+        );
+    }
+
+    #[test]
+    fn radio_named_omits_checked_when_not_asked() {
+        assert_eq!(
+            radio_named("plan", "free", false).render(),
+            r#"<input type="radio" name="plan" value="free">"#
+        );
+    }
+
+    #[test]
+    fn select_multiple_from_marks_every_selected_value() {
+        let tags = [("a", "A"), ("b", "B"), ("c", "C")];
+
+        assert_eq!(
+            select_multiple_from("tags", tags, &["a", "c"]).render(),
+            concat!(
+                r#"<select name="tags" multiple><option value="a" selected>A</option>"#,
+                r#"<option value="b">B</option><option value="c" selected>C</option></select>"#,
+            )
+        );
+    }
+
+    #[test]
+    fn select_multiple_from_with_nothing_selected_marks_no_option() {
+        assert_eq!(
+            select_multiple_from("tags", [("a", "A")], &[]).render(),
+            r#"<select name="tags" multiple><option value="a">A</option></select>"#
         );
     }
 }
