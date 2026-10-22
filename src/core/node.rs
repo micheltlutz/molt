@@ -375,6 +375,7 @@ pub(crate) fn write_element_tree(
 /// `push_compact_element`/`push_pretty_element` would for an `<html>` with two children.
 pub(crate) fn write_document_root(
     lang: Option<&str>,
+    attributes: &[Attribute],
     head: &Element,
     body: &Element,
     out: &mut String,
@@ -383,11 +384,7 @@ pub(crate) fn write_document_root(
     if options.pretty {
         options.write_indent(out, 0);
     }
-    out.push_str("<html");
-    if let Some(lang) = lang {
-        Attribute::new_static("lang", lang).write_into(out);
-    }
-    out.push('>');
+    write_html_open_tag(lang, attributes, out);
 
     // The stack is a LIFO: the last step pushed runs first.
     let steps = if options.pretty {
@@ -411,6 +408,18 @@ pub(crate) fn write_document_root(
     };
     // `<html>` is written above by hand, so head and body already sit one level down.
     run_steps(steps, out, options, 1);
+}
+
+/// Writes `<html lang="…" …>`: the one place the root's opening tag is written, so the whole
+/// render and the streamed render cannot drift. The attributes are checked as they would be on
+/// an `<html>` element in a tree.
+pub(crate) fn write_html_open_tag(lang: Option<&str>, attributes: &[Attribute], out: &mut String) {
+    out.push_str("<html");
+    if let Some(lang) = lang {
+        Attribute::new_static("lang", lang).write_into_in(out, false, "html");
+    }
+    write_attributes(attributes, out, false, "html");
+    out.push('>');
 }
 
 /// One unit of work for the writer.
@@ -1029,6 +1038,46 @@ mod tests {
     fn content_goes_on_its_own_line_before_children() {
         let tree = div().text("lead").child(p().text("body"));
         assert_eq!(tree.render_pretty(), "<div>\n  lead\n  <p>body</p>\n</div>");
+    }
+
+    /// The site's contact block: a label child, then the value as text. It rendered the value
+    /// first because `text` filled a slot that the renderer always emits before the children.
+    #[test]
+    fn child_then_text_keeps_call_order() {
+        let tree = p().child(i().text("Owner: ")).text("Ada");
+        assert_eq!(tree.render(), "<p><i>Owner: </i>Ada</p>");
+        assert_eq!(tree.render_pretty(), "<p>\n  <i>Owner: </i>\n  Ada\n</p>");
+    }
+
+    #[test]
+    fn text_then_child_then_text_keeps_call_order() {
+        let tree = p().text("a ").child(span().text("b")).text(" c");
+        assert_eq!(tree.render(), "<p>a <span>b</span> c</p>");
+    }
+
+    #[test]
+    fn two_text_calls_append() {
+        assert_eq!(p().text("a").text("b").render(), "<p>ab</p>");
+        assert_eq!(p().text("a<").text("<b").render(), "<p>a&lt;&lt;b</p>");
+    }
+
+    #[test]
+    fn raw_text_follows_the_same_order_and_text_after_it_is_still_escaped() {
+        // The raw string is trusted markup written in the test.
+        let tree = p().raw_text("<i>").child(span()).raw_text("</i>").text("<");
+        assert_eq!(tree.render(), "<p><i><span></span></i>&lt;</p>");
+    }
+
+    #[test]
+    fn a_code_window_line_ends_with_its_newline() {
+        let line = span()
+            .child(span().text("1"))
+            .child(span().text(" let x = 1;"))
+            .text("\n");
+        assert_eq!(
+            line.render(),
+            "<span><span>1</span><span> let x = 1;</span>\n</span>"
+        );
     }
 
     #[test]

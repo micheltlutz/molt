@@ -417,31 +417,65 @@ impl Element {
 
     // MARK: - Content
 
-    /// Sets the text content, escaping it.
+    /// Appends text, escaping it, at the position of the call.
     ///
-    /// Replaces any content already set.
+    /// Text added before any child lands in the element's **content**, which is the cheap
+    /// shape for a leaf (`p().text("x")` allocates no child list). Once the element has a
+    /// child, text becomes a text child instead, so the order of the calls is the order in the
+    /// markup: `p().child(strong()).text("after")` renders the text after the `<strong>`.
+    /// Calling it twice appends twice; it never replaces.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// let line = p()
+    ///     .text("Owner: ")
+    ///     .child(strong().text("Ada"))
+    ///     .text(" (admin)");
+    /// assert_eq!(line.render(), "<p>Owner: <strong>Ada</strong> (admin)</p>");
+    /// ```
     #[must_use]
     pub fn text(mut self, content: impl AsRef<str>) -> Self {
         let raw = content.as_ref();
-        let mut escaped = String::with_capacity(raw.len());
-        write_escaped_text(&mut escaped, raw, false);
-        self.content = Some(escaped);
+        if self.children.is_empty() {
+            let slot = self
+                .content
+                .get_or_insert_with(|| String::with_capacity(raw.len()));
+            write_escaped_text(slot, raw, false);
+        } else {
+            self.children.push(Node::text(raw));
+        }
         self
     }
 
-    /// Sets the text content **without** escaping it.
+    /// Appends text **without** escaping it, at the position of the call.
     ///
     /// The documented escape hatch for markup you already trust. `<script>` and `<style>`
-    /// use this by default.
+    /// use this by default. Position follows [`Self::text`]: content before the first child,
+    /// a raw child after it.
     ///
     /// **Do not put untrusted data in a `<script>` or `<style>` through this.** The element
     /// ends at the first `</script` (or `</style`) wherever it appears, including inside a
     /// JSON string. For JSON data use [`seo::json_ld`](crate::seo::json_ld) or
     /// [`seo::script_json`](crate::seo::script_json), which escape it; there is no safe way to
     /// embed untrusted text in script code.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// // The string is trusted markup written right here.
+    /// assert_eq!(p().raw_text("a &amp; b").render(), "<p>a &amp; b</p>");
+    /// ```
     #[must_use]
     pub fn raw_text(mut self, content: impl Into<String>) -> Self {
-        self.content = Some(content.into());
+        let content = content.into();
+        if !self.children.is_empty() {
+            self.children.push(Node::raw(content));
+        } else if let Some(slot) = &mut self.content {
+            slot.push_str(&content);
+        } else {
+            self.content = Some(content);
+        }
         self
     }
 
