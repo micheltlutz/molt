@@ -94,4 +94,7 @@ mod guides {
 
     #[doc = include_str!("../MIGRATION.md")]
     mod migration {}
+
+    #[doc = include_str!("../docs/pt-BR/GETTING_STARTED.md")]
+    mod getting_started_pt_br {}
 }
