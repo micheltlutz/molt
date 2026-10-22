@@ -11,6 +11,12 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Added
+
+- `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
+  directory, atomically per file, with a name filter. Symbolic links in the source are skipped
+  and the output directory is never copied into itself. Returns the number of files (#113).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the

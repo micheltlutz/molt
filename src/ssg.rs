@@ -4,6 +4,7 @@
 //! Compiled out on `wasm32` regardless of the `ssg` feature — there is no filesystem
 //! there.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
@@ -226,6 +227,124 @@ impl StaticSiteGenerator {
             return Err(io_error(&destination)(error));
         }
         Ok(())
+    }
+
+    /// Copies a directory tree into the output directory, replacing files that already exist.
+    ///
+    /// `to` names the destination directory under the output directory; `""` or `"."` copies
+    /// into the output directory itself. Returns how many files were copied. Every file goes
+    /// through [`copy_asset`](Self::copy_asset), so each copy is atomic.
+    ///
+    /// Symbolic links in `from` are **not followed**: a link to a file or a directory is
+    /// skipped, because what it points at may lie outside the tree you meant to publish. The
+    /// output directory is skipped too if it sits inside `from`, so copying `.` cannot copy
+    /// the site into itself. Use [`copy_dir_where`](Self::copy_dir_where) to leave out names
+    /// such as `.DS_Store`.
+    ///
+    /// # Errors
+    /// Returns an error if `from` cannot be read, if `to` is unsafe (see
+    /// [`copy_asset`](Self::copy_asset)), if a name under `from` is not valid UTF-8, or if a
+    /// copy fails.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::ssg::StaticSiteGenerator;
+    ///
+    /// let base = std::env::temp_dir().join(format!("molt-copy-dir-{}", std::process::id()));
+    /// std::fs::create_dir_all(base.join("static/img"))?;
+    /// std::fs::write(base.join("static/app.css"), "a{}")?;
+    /// std::fs::write(base.join("static/img/logo.svg"), "<svg/>")?;
+    ///
+    /// let site = StaticSiteGenerator::new(base.join("dist"));
+    /// assert_eq!(site.copy_dir(base.join("static"), "assets")?, 2);
+    /// assert!(base.join("dist/assets/img/logo.svg").is_file());
+    /// # std::fs::remove_dir_all(&base)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn copy_dir(&self, from: impl AsRef<Path>, to: &str) -> Result<usize> {
+        self.copy_dir_where(from, to, |_| true)
+    }
+
+    /// As [`copy_dir`](Self::copy_dir), copying only the entries `keep` accepts.
+    ///
+    /// `keep` sees each file or directory *name* (not the path). A directory it rejects is
+    /// skipped with everything under it.
+    ///
+    /// # Errors
+    /// The same as [`copy_dir`](Self::copy_dir).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::ssg::StaticSiteGenerator;
+    ///
+    /// let base = std::env::temp_dir().join(format!("molt-copy-where-{}", std::process::id()));
+    /// std::fs::create_dir_all(base.join("static"))?;
+    /// std::fs::write(base.join("static/app.css"), "a{}")?;
+    /// std::fs::write(base.join("static/.DS_Store"), "junk")?;
+    ///
+    /// let site = StaticSiteGenerator::new(base.join("dist"));
+    /// let copied = site.copy_dir_where(base.join("static"), "", |name| name != ".DS_Store")?;
+    /// assert_eq!(copied, 1);
+    /// assert!(!base.join("dist/.DS_Store").exists());
+    /// # std::fs::remove_dir_all(&base)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn copy_dir_where(
+        &self,
+        from: impl AsRef<Path>,
+        to: &str,
+        keep: impl Fn(&OsStr) -> bool,
+    ) -> Result<usize> {
+        // Checked before anything is read, so an unsafe `to` copies nothing.
+        // Only a trailing slash is forgiven: a leading one is a root, which `resolve` refuses,
+        // and trimming it would turn `/etc` into the relative `etc`.
+        if to.starts_with(['/', '\\']) {
+            self.resolve(to)?;
+        }
+        let prefix = to.trim_end_matches(['/', '\\']);
+        let prefix = if prefix == "." { "" } else { prefix };
+        if !prefix.is_empty() {
+            self.resolve(prefix)?;
+        }
+        let output = fs::canonicalize(&self.output_directory).ok();
+
+        let mut copied = 0;
+        // An explicit stack, like the tree walkers: the depth of a directory is not ours to
+        // bound, and recursion would make it a stack limit.
+        let mut pending = vec![(from.as_ref().to_path_buf(), prefix.to_owned())];
+        while let Some((directory, relative)) = pending.pop() {
+            for entry in fs::read_dir(&directory).map_err(io_error(&directory))? {
+                let entry = entry.map_err(io_error(&directory))?;
+                let name = entry.file_name();
+                if !keep(&name) {
+                    continue;
+                }
+                let path = entry.path();
+                let Some(name) = name.to_str() else {
+                    return Err(SsgError::InvalidPath {
+                        path: path.to_string_lossy().into_owned(),
+                        reason: "is not valid UTF-8",
+                    });
+                };
+                let target = if relative.is_empty() {
+                    name.to_owned()
+                } else {
+                    format!("{relative}/{name}")
+                };
+                // `file_type` does not follow links, which is what makes skipping them safe.
+                let kind = entry.file_type().map_err(io_error(&path))?;
+                if kind.is_dir() {
+                    if output.is_some() && fs::canonicalize(&path).ok() == output {
+                        continue;
+                    }
+                    pending.push((path, target));
+                } else if kind.is_file() {
+                    self.copy_asset(&path, &target)?;
+                    copied += 1;
+                }
+            }
+        }
+        Ok(copied)
     }
 
     /// Removes the output directory, optionally recreating it empty.
@@ -673,6 +792,123 @@ mod tests {
             "old"
         );
         assert!(only_files_named(&dir.0.join("out"), &["style.css"]));
+    }
+
+    /// Builds `static/` with a nested file, a junk file and a hidden directory.
+    fn static_tree(base: &Path) -> PathBuf {
+        let root = base.join("static");
+        fs::create_dir_all(root.join("img")).expect("created");
+        fs::create_dir_all(root.join(".cache")).expect("created");
+        fs::write(root.join("app.css"), "a{}").expect("written");
+        fs::write(root.join("img/logo.svg"), "<svg/>").expect("written");
+        fs::write(root.join(".DS_Store"), "junk").expect("written");
+        fs::write(root.join(".cache/x"), "x").expect("written");
+        root
+    }
+
+    #[test]
+    fn copy_dir_copies_a_nested_tree_and_counts_the_files() {
+        let dir = TempDir::new("copy-dir");
+        let source = static_tree(&dir.0);
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+
+        assert_eq!(site.copy_dir(&source, "assets").expect("copied"), 4);
+        let out = dir.0.join("out/assets");
+        assert_eq!(fs::read_to_string(out.join("app.css")).expect("css"), "a{}");
+        assert_eq!(
+            fs::read_to_string(out.join("img/logo.svg")).expect("svg"),
+            "<svg/>"
+        );
+        assert!(out.join(".DS_Store").is_file());
+    }
+
+    #[test]
+    fn copy_dir_where_leaves_out_the_names_it_rejects_with_what_is_under_them() {
+        let dir = TempDir::new("copy-dir-where");
+        let source = static_tree(&dir.0);
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+
+        let copied = site
+            .copy_dir_where(&source, "", |name| name != ".DS_Store" && name != ".cache")
+            .expect("copied");
+
+        assert_eq!(copied, 2);
+        let out = dir.0.join("out");
+        assert!(out.join("app.css").is_file() && out.join("img/logo.svg").is_file());
+        assert!(!out.join(".DS_Store").exists() && !out.join(".cache").exists());
+    }
+
+    #[test]
+    fn copy_dir_replaces_existing_files_and_leaves_no_temporary_file() {
+        let dir = TempDir::new("copy-dir-replace");
+        let source = static_tree(&dir.0);
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        site.write_file("old", "assets/app.css").expect("written");
+
+        site.copy_dir_where(&source, "assets", |name| name == "app.css")
+            .expect("copied");
+
+        let out = dir.0.join("out/assets");
+        assert_eq!(fs::read_to_string(out.join("app.css")).expect("css"), "a{}");
+        assert!(only_files_named(&out, &["app.css"]));
+    }
+
+    #[test]
+    fn copy_dir_refuses_a_destination_that_escapes_before_copying_anything() {
+        let dir = TempDir::new("copy-dir-escape");
+        let source = static_tree(&dir.0);
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+
+        for to in ["../escape", "/abs", "/", "a/../../b"] {
+            let error = site.copy_dir(&source, to).expect_err("refused");
+            assert!(
+                matches!(error, SsgError::InvalidPath { .. }),
+                "{to}: {error}"
+            );
+        }
+        assert!(!dir.0.join("out").exists());
+        assert!(!dir.0.join("escape").exists());
+    }
+
+    #[test]
+    fn copy_dir_reports_a_missing_source() {
+        let dir = TempDir::new("copy-dir-missing");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        let error = site
+            .copy_dir(dir.0.join("nope"), "assets")
+            .expect_err("fails");
+        assert!(matches!(error, SsgError::Io { .. }), "{error}");
+    }
+
+    #[test]
+    fn copy_dir_does_not_copy_the_output_directory_into_itself() {
+        let dir = TempDir::new("copy-dir-self");
+        let source = dir.0.join("project");
+        fs::create_dir_all(source.join("dist")).expect("created");
+        fs::write(source.join("a.txt"), "a").expect("written");
+        fs::write(source.join("dist/old.html"), "old").expect("written");
+        let site = StaticSiteGenerator::new(source.join("dist"));
+
+        assert_eq!(site.copy_dir(&source, "copy").expect("copied"), 1);
+        assert!(source.join("dist/copy/a.txt").is_file());
+        assert!(!source.join("dist/copy/dist").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_dir_skips_a_symlink_to_a_file_or_a_directory() {
+        let dir = TempDir::new("copy-dir-links");
+        let source = static_tree(&dir.0);
+        let secret = dir.0.join("secret");
+        fs::create_dir_all(&secret).expect("created");
+        fs::write(secret.join("key"), "k").expect("written");
+        std::os::unix::fs::symlink(secret.join("key"), source.join("link-file")).expect("linked");
+        std::os::unix::fs::symlink(&secret, source.join("link-dir")).expect("linked");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+
+        assert_eq!(site.copy_dir(&source, "assets").expect("copied"), 4);
+        let out = dir.0.join("out/assets");
+        assert!(!out.join("link-file").exists() && !out.join("link-dir").exists());
     }
 
     /// `Path::new(".").parent()` is `Some("")`, so the old guard let `clean(".")` through.
