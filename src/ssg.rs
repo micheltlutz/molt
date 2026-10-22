@@ -100,6 +100,25 @@ impl From<SsgError> for io::Error {
 /// Result alias for this module's operations.
 type Result<T> = std::result::Result<T, SsgError>;
 
+/// The name of the file a [`StaticSiteGenerator`] leaves in its output directory.
+///
+/// [`StaticSiteGenerator::clean`] deletes a directory only if it is missing, empty, or holds
+/// this file, so a relative output path that happens to name someone else's directory (the
+/// process may run from another project) is refused instead of emptied. Writing a page or
+/// an asset creates it. To let `clean` empty a directory Molt did not create, create the file
+/// yourself. It is an ordinary dotfile and is uploaded with the rest of the site; its
+/// contents are one line of text.
+///
+/// # Examples
+/// ```
+/// assert_eq!(molt::ssg::OUTPUT_MARKER, ".molt-output");
+/// ```
+pub const OUTPUT_MARKER: &str = ".molt-output";
+
+/// What the marker says, for whoever finds it in a deployed site.
+const MARKER_TEXT: &str = "Created by molt-framework. StaticSiteGenerator::clean() only empties \
+a directory that is missing, empty, or has this file.\n";
+
 /// Attaches the path an I/O operation was working on.
 fn io_error(path: &Path) -> impl FnOnce(io::Error) -> SsgError + '_ {
     move |source| SsgError::Io {
@@ -215,6 +234,7 @@ impl StaticSiteGenerator {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).map_err(io_error(parent))?;
         }
+        self.mark_output()?;
         // Copy beside the destination and rename over it, so a failed copy leaves the old
         // file in place instead of the delete-then-copy gap this used to have.
         let temporary = temporary_path(&destination);
@@ -349,13 +369,41 @@ impl StaticSiteGenerator {
 
     /// Removes the output directory, optionally recreating it empty.
     ///
+    /// Only a directory Molt can show is its own is emptied: one that does not exist, is
+    /// empty, or holds the [`OUTPUT_MARKER`] file that writing a page or an asset leaves
+    /// there. A relative path such as `"dist"` is resolved against the **current directory of
+    /// the process**, so the same code run from another project would otherwise empty that
+    /// project's `dist`.
+    ///
     /// # Errors
     /// Returns an error if the output directory is unsafe to delete — empty, a filesystem
     /// root, a top-level directory, the home directory, the working directory or one of its
     /// ancestors, or containing a `..` component, because removing it recursively would delete
-    /// whatever it points at.
+    /// whatever it points at. It also refuses a symbolic link, and a directory that has
+    /// contents but no [`OUTPUT_MARKER`]; for one made before the marker existed, remove it by
+    /// hand once or create the file.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::ssg::StaticSiteGenerator;
+    ///
+    /// let base = std::env::temp_dir().join(format!("molt-clean-{}", std::process::id()));
+    /// let site = StaticSiteGenerator::new(base.join("dist"));
+    /// site.write_file("<p>old</p>", "old.html")?; // leaves the marker behind
+    /// site.clean(true)?;
+    /// assert!(!base.join("dist/old.html").exists());
+    ///
+    /// // A directory the generator did not make is left alone.
+    /// std::fs::write(base.join("dist/keep.txt"), "mine")?;
+    /// std::fs::remove_file(base.join("dist").join(molt::ssg::OUTPUT_MARKER))?;
+    /// assert!(site.clean(true).is_err());
+    /// assert!(base.join("dist/keep.txt").exists());
+    /// # std::fs::remove_dir_all(&base)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn clean(&self, create_directory: bool) -> Result<()> {
         guard_destructive_path(&self.output_directory)?;
+        guard_ownership(&self.output_directory)?;
 
         let directory = &self.output_directory;
         if directory.exists() {
@@ -363,8 +411,27 @@ impl StaticSiteGenerator {
         }
         if create_directory {
             fs::create_dir_all(directory).map_err(io_error(directory))?;
+            self.mark_output()?;
         }
         Ok(())
+    }
+
+    /// Leaves [`OUTPUT_MARKER`] in the output directory, which must exist. An existing marker
+    /// is kept as it is.
+    fn mark_output(&self) -> Result<()> {
+        let marker = self.output_directory.join(OUTPUT_MARKER);
+        // `create_new` refuses an existing path, a planted symlink included.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker)
+        {
+            Ok(mut file) => file
+                .write_all(MARKER_TEXT.as_bytes())
+                .map_err(io_error(&marker)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+            Err(error) => Err(io_error(&marker)(error)),
+        }
     }
 
     /// Writes UTF-8 `content` to `path`, creating parent directories.
@@ -391,6 +458,7 @@ impl StaticSiteGenerator {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).map_err(io_error(parent))?;
         }
+        self.mark_output()?;
 
         let temporary = temporary_path(&destination);
         // `create_new` refuses an existing path, symlinks included, so the temporary file
@@ -517,6 +585,38 @@ fn guard_destructive_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Refuses to empty a directory that Molt cannot show is its own: a symbolic link, or one that
+/// has contents but no [`OUTPUT_MARKER`]. A missing or empty directory is fine, since there is
+/// nothing to lose. Like [`guard_destructive_path`] it only reads the filesystem, so it can be
+/// tested directly, without changing the working directory.
+fn guard_ownership(path: &Path) -> Result<()> {
+    let reject = |reason: &'static str| {
+        Err(SsgError::UnsafeCleanTarget {
+            path: path.to_path_buf(),
+            reason,
+        })
+    };
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return Ok(());
+    };
+    if metadata.file_type().is_symlink() {
+        return reject("the output directory is a symbolic link");
+    }
+    if !metadata.is_dir() || path.join(OUTPUT_MARKER).symlink_metadata().is_ok() {
+        return Ok(());
+    }
+    let is_empty = fs::read_dir(path).map_err(io_error(path))?.next().is_none();
+    if is_empty {
+        Ok(())
+    } else {
+        reject(
+            "the output directory has contents but no `.molt-output` marker, so Molt did not \
+             make it; remove it yourself once, or create the marker file to hand it over",
+        )
+    }
+}
+
 /// `path` made absolute and, when it exists, with symlinks resolved.
 fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     if let Ok(canonical) = fs::canonicalize(path) {
@@ -573,11 +673,13 @@ mod tests {
         }
     }
 
-    /// Whether `dir` holds exactly these entries, i.e. no temporary file was left behind.
+    /// Whether `dir` holds exactly these entries, i.e. no temporary file was left behind. The
+    /// marker is not one of them: it is meant to be there.
     fn only_files_named(dir: &Path, names: &[&str]) -> bool {
         let mut found: Vec<String> = fs::read_dir(dir)
             .expect("readable")
             .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .filter(|name| name != OUTPUT_MARKER)
             .collect();
         found.sort();
         found == names
@@ -681,6 +783,102 @@ mod tests {
         site.clean(true).expect("cleaned");
         assert!(dir.0.join("out").exists());
         assert!(!dir.0.join("out/a.html").exists());
+    }
+
+    /// The report behind #115: `"dist"` is resolved against the current directory of the
+    /// process, so code run from another project pointed at that project's `dist`. A directory
+    /// with contents and no marker is not Molt's to empty, however the path was spelled.
+    #[test]
+    fn clean_refuses_a_directory_it_did_not_make() {
+        let dir = TempDir::new("clean-foreign");
+        let foreign = dir.0.join("other-project/dist");
+        fs::create_dir_all(&foreign).expect("created");
+        fs::write(foreign.join("precious.txt"), "mine").expect("written");
+
+        let error = StaticSiteGenerator::new(&foreign)
+            .clean(true)
+            .expect_err("refused");
+        assert!(
+            matches!(error, SsgError::UnsafeCleanTarget { .. }),
+            "{error}"
+        );
+        assert!(error.to_string().contains(OUTPUT_MARKER), "{error}");
+        assert_eq!(
+            fs::read_to_string(foreign.join("precious.txt")).expect("kept"),
+            "mine"
+        );
+    }
+
+    #[test]
+    fn clean_empties_a_directory_that_has_the_marker() {
+        let dir = TempDir::new("clean-marked");
+        let out = dir.0.join("out");
+        fs::create_dir_all(&out).expect("created");
+        fs::write(out.join(OUTPUT_MARKER), "").expect("marker");
+        fs::write(out.join("old.html"), "old").expect("written");
+
+        StaticSiteGenerator::new(&out).clean(true).expect("cleaned");
+
+        assert!(!out.join("old.html").exists());
+        assert!(out.join(OUTPUT_MARKER).is_file(), "the marker is kept");
+    }
+
+    #[test]
+    fn clean_accepts_a_missing_or_an_empty_directory() {
+        let dir = TempDir::new("clean-empty");
+        let missing = StaticSiteGenerator::new(dir.0.join("missing"));
+        missing.clean(false).expect("nothing to remove");
+        assert!(!dir.0.join("missing").exists());
+        missing.clean(true).expect("created");
+        assert!(dir.0.join("missing").join(OUTPUT_MARKER).is_file());
+
+        fs::create_dir_all(dir.0.join("empty")).expect("created");
+        StaticSiteGenerator::new(dir.0.join("empty"))
+            .clean(true)
+            .expect("an empty directory has nothing to lose");
+    }
+
+    #[test]
+    fn writing_a_page_or_an_asset_leaves_the_marker_and_keeps_it() {
+        let dir = TempDir::new("marker-written");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        site.write_file("a", "a.html").expect("written");
+        let marker = dir.0.join("out").join(OUTPUT_MARKER);
+        assert!(
+            fs::read_to_string(&marker)
+                .expect("marker")
+                .starts_with("Created by molt")
+        );
+
+        fs::write(&marker, "adopted by hand").expect("edited");
+        let source = dir.0.join("s.css");
+        fs::write(&source, "b").expect("written");
+        site.copy_asset(&source, "s.css").expect("copied");
+        assert_eq!(
+            fs::read_to_string(&marker).expect("kept"),
+            "adopted by hand"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clean_refuses_an_output_directory_that_is_a_symlink() {
+        let dir = TempDir::new("clean-link");
+        let target = dir.0.join("target");
+        fs::create_dir_all(&target).expect("created");
+        fs::write(target.join(OUTPUT_MARKER), "").expect("marker");
+        fs::write(target.join("x"), "x").expect("written");
+        let link = dir.0.join("out");
+        std::os::unix::fs::symlink(&target, &link).expect("linked");
+
+        let error = StaticSiteGenerator::new(&link)
+            .clean(true)
+            .expect_err("refused");
+        assert!(
+            matches!(error, SsgError::UnsafeCleanTarget { .. }),
+            "{error}"
+        );
+        assert!(target.join("x").is_file());
     }
 
     /// `clean` refuses a directory that would be dangerous to remove.
