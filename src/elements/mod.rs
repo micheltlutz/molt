@@ -286,6 +286,51 @@ pub fn stylesheet(href: impl AsRef<str>) -> Element {
     link().attr("href", href).attr("rel", "stylesheet")
 }
 
+/// A font preload: `<link rel="preload" as="font" type="…" href="…" crossorigin>`.
+///
+/// Fonts are fetched in anonymous CORS mode even from the same origin, so a font preload
+/// without `crossorigin` does not match the request the page makes later and the browser
+/// downloads the file twice. That is how the web platform behaves; this crate's tests check
+/// the markup, not the browser. The helper always writes the attribute, so it cannot be
+/// forgotten.
+///
+/// `type` is taken from the extension of `href`, ignoring a query string or fragment:
+/// `woff2`, `woff`, `ttf` or `otf`. Any other extension, or none, leaves `type` out. The
+/// `href` goes through the URL policy like any other.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+///
+/// assert_eq!(
+///     preload_font("/fonts/inter.woff2").render(),
+///     r#"<link rel="preload" as="font" type="font/woff2" href="/fonts/inter.woff2" crossorigin>"#
+/// );
+/// ```
+#[must_use]
+pub fn preload_font(href: impl AsRef<str>) -> Element {
+    let href = href.as_ref();
+    let path = href.split(['?', '#']).next().unwrap_or_default();
+    let extension = path
+        .rsplit('/')
+        .next()
+        .and_then(|name| name.rsplit_once('.'))
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    let font_type = match extension.as_deref() {
+        Some("woff2") => Some("font/woff2"),
+        Some("woff") => Some("font/woff"),
+        Some("ttf") => Some("font/ttf"),
+        Some("otf") => Some("font/otf"),
+        _ => None,
+    };
+
+    let mut tag = link().attr("rel", "preload").attr("as", "font");
+    if let Some(font_type) = font_type {
+        tag = tag.attr("type", font_type);
+    }
+    tag.attr("href", href).bool_attr("crossorigin")
+}
+
 /// A `<button type="…">`.
 #[must_use]
 pub fn button_typed(button_type: impl AsRef<str>) -> Element {
@@ -578,6 +623,40 @@ fn options_with<K: AsRef<str>, V: AsRef<str>>(
 mod tests {
     use super::*;
     use crate::core::{Render, RenderOptions};
+
+    #[test]
+    fn preload_font_always_writes_crossorigin_and_the_type_of_the_extension() {
+        for (href, font_type) in [
+            ("/f/a.woff2", Some("font/woff2")),
+            ("/f/a.WOFF", Some("font/woff")),
+            ("/f/a.ttf", Some("font/ttf")),
+            ("/f/a.otf?v=3#x", Some("font/otf")),
+            ("/f/a.eot", None),
+            ("/f/a", None),
+            ("/v1.2/a", None),
+        ] {
+            let expected = match font_type {
+                Some(t) => format!(
+                    r#"<link rel="preload" as="font" type="{t}" href="{href}" crossorigin>"#
+                ),
+                None => format!(r#"<link rel="preload" as="font" href="{href}" crossorigin>"#),
+            };
+            assert_eq!(preload_font(href).render(), expected);
+        }
+    }
+
+    #[test]
+    fn preload_font_checks_its_url_and_escapes_it() {
+        assert_eq!(
+            preload_font("javascript:alert(1)").render(),
+            r##"<link rel="preload" as="font" href="#" crossorigin>"##
+        );
+        assert!(
+            preload_font("/f/\"><x.woff2")
+                .render()
+                .contains("href=\"/f/&quot;><x.woff2\"")
+        );
+    }
 
     #[test]
     fn the_catalog_covers_every_generated_tag() {

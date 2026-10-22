@@ -55,6 +55,11 @@ and are a different version line.
 - The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`, so crates.io shows it),
   the READMEs, the getting-started guides and the crate documentation (#117).
 
+### Added
+
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
