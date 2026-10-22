@@ -76,6 +76,11 @@ and are a different version line.
 
 ### Documentation
 
+- The official Claude Code skill, `using-molt-framework`, is documented in the README (and its
+  pt-BR copy), `docs/agents.md` and `llms.txt`: its repository is
+  [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill), installed with
+  `/plugin marketplace add` and `/plugin install`, or with `npx skills add`. It is submitted to
+  Anthropic's plugin directory and waiting for review.
 - The README, its pt-BR copy, the getting-started guides, `SECURITY.md`, `CONTRIBUTING.md`
   and `ROADMAP.md` describe 2.0: install lines say `"2.0"`, the feature lists name the new
   APIs, 1.x stops receiving fixes, and the roadmap is the 2.x line. `MIGRATION.md` has one

@@ -23,7 +23,8 @@ Paths below are relative to this file. The published crate and the repository ha
 
 ## Optional
 
-- [docs/agents.md](docs/agents.md): a block to paste into a project's `AGENTS.md`
+- [docs/agents.md](docs/agents.md): a block to paste into a project's `AGENTS.md`, and how to install the official skill
+- [molt-framework-skill](https://github.com/micheltlutz/molt-framework-skill): the official Claude Code skill, as a plugin
 - [docs/new-to-rust.md](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it
 - [ROADMAP.md](ROADMAP.md): what is likely next
 - [API reference on docs.rs](https://docs.rs/molt-framework)

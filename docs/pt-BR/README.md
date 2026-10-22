@@ -270,6 +270,27 @@ recursão), mas vale conhecer esse tamanho quando a profundidade vem de uma entr
 confiável. Veja o [`SECURITY.md`](../../SECURITY.md#rendering-depth-is-no-longer-bounded-by-the-stack)
 (em inglês).
 
+## Usando o Molt com um agente de IA
+
+A skill oficial do Claude Code, [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill),
+diz a um agente quais APIs existem na versão que o projeto tem, e a correção para os sintomas
+mais comuns, antes de ele procurar no código-fonte. Ela foi enviada ao diretório de plugins da
+Anthropic e aguarda revisão; até lá, instale-a pelo repositório.
+
+```text
+/plugin marketplace add micheltlutz/molt-framework-skill
+/plugin install molt-framework@molt
+```
+
+Ou, pelo terminal, com o instalador [`skills`](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add micheltlutz/molt-framework-skill --skill using-molt-framework -a claude-code
+```
+
+Sem a skill, o [`agents.md`](../agents.md) (em inglês) traz um bloco para colar no `AGENTS.md`
+de um projeto, e o [`llms.txt`](../../llms.txt) é o índice.
+
 ## Documentação
 
 - [`new-to-rust.md`](new-to-rust.md): nunca usou Rust? Instale, crie um projeto, adicione o

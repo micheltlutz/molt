@@ -25,11 +25,13 @@ marker, a bounded `Debug`); a breaking change after it would be a 3.0.0.
   needs a nightly toolchain), as a semver guard and as the source of the version column in
   [`docs/capabilities.md`](docs/capabilities.md). It was left out of 2.0.0 because the tool
   was not available where the release was prepared.
-- **The consumer skill in the repository.** What an agent in a project that *uses* Molt needs
-  ships in the crate (`llms.txt`, `docs/capabilities.md`, `docs/pitfalls.md`,
-  `docs/agents.md`). Splitting `.claude/skills/molt` into a skill for users and one for
-  contributors, and distributing the first as a Claude Code plugin, is open
-  ([#135](https://github.com/micheltlutz/molt/issues/135)).
+- **The official skill, once the directory lists it.** What an agent in a project that *uses*
+  Molt needs ships in the crate (`llms.txt`, `docs/capabilities.md`, `docs/pitfalls.md`,
+  `docs/agents.md`), and the Claude Code plugin that bundles it is its own repository,
+  [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill), submitted to
+  Anthropic's plugin directory and waiting for review. What is left here is to point at the
+  directory entry when it exists, and to keep the plugin's bundled copies of
+  `docs/capabilities.md` and `docs/pitfalls.md` in step with this repository on each release.
 - **A `CspBuilder`** that takes the hashes from `Element::csp_hash` and writes the header, if a
   site asks for it. `csp_hash` alone covers the case that was reported.
 - **Keep the pins current.** Dependabot proposes SHA bumps for the actions; each needs a

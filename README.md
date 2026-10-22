@@ -255,6 +255,27 @@ depth limit — the writer walks an explicit stack rather than recursing — but
 worth knowing about when depth comes from untrusted input. See
 [`SECURITY.md`](SECURITY.md#rendering-depth-is-no-longer-bounded-by-the-stack).
 
+## Using Molt with an AI agent
+
+The official Claude Code skill, [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill),
+tells an agent which APIs exist in the version a project has, and the fix for the usual
+symptoms, before it searches the source. It is submitted to Anthropic's plugin directory and
+waiting for review; until then, install it from the repository.
+
+```text
+/plugin marketplace add micheltlutz/molt-framework-skill
+/plugin install molt-framework@molt
+```
+
+Or, from a terminal, with the [`skills`](https://github.com/vercel-labs/skills) installer:
+
+```bash
+npx skills add micheltlutz/molt-framework-skill --skill using-molt-framework -a claude-code
+```
+
+Without the skill, [`docs/agents.md`](docs/agents.md) has a block to paste into a project's
+`AGENTS.md`, and [`llms.txt`](llms.txt) is the index.
+
 ## Documentation
 
 - [`docs/new-to-rust.md`](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it.
