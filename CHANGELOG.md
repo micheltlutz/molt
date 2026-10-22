@@ -44,6 +44,11 @@ and are a different version line.
 - `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
   versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
   is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
+- `Element::find`, `Element::find_all` and `Node::find`, `Node::find_all`: search a tree for
+  elements by tag, in document order, with an explicit stack and without cloning; and
+  `Element::attribute(name)`, the value as written into the markup. For asserting on a built
+  tree in a test. There is no `text_content`: text is stored escaped, so it would have to
+  return markup, and `find(..).render()` already says that (#116).
 
 ## [1.1.1] - 2026-10-22
 

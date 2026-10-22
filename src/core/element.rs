@@ -80,6 +80,38 @@ impl<N: Into<Node>> Extend<N> for Element {
     }
 }
 
+/// The elements below some children, in document order, found with an explicit stack. A
+/// fragment is transparent: its children count as if they stood where it does.
+pub(crate) struct Descendants<'a> {
+    pending: Vec<&'a Node>,
+}
+
+impl<'a> Descendants<'a> {
+    pub(crate) fn new(children: &'a [Node]) -> Self {
+        Self {
+            pending: children.iter().rev().collect(),
+        }
+    }
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = &'a Element;
+
+    fn next(&mut self) -> Option<&'a Element> {
+        while let Some(node) = self.pending.pop() {
+            match node {
+                Node::Element(element) => {
+                    self.pending.extend(element.children.iter().rev());
+                    return Some(element);
+                }
+                Node::Fragment(children) => self.pending.extend(children.iter().rev()),
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
 /// Feeds a tree to a hasher with an explicit stack, matching [`trees_equal`]: trees that
 /// compare equal hash equal, and a deep tree cannot overflow the stack on the way.
 pub(crate) fn hash_tree<H: std::hash::Hasher>(root: Source<'_>, state: &mut H) {
@@ -314,6 +346,73 @@ impl Element {
     #[must_use]
     pub fn is_self_closing(&self) -> bool {
         self.self_closing
+    }
+
+    // MARK: - Query
+
+    /// The first element below this one, in document order, with this tag.
+    ///
+    /// For asserting on a tree in a test without searching its rendered string. The search
+    /// uses an explicit stack, so a deep tree cannot overflow it, and it borrows: nothing is
+    /// cloned. This element itself is not a match, only what is inside it, and `tag` is
+    /// compared as written (`"div"`, not `"DIV"`).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let page = div()
+    ///     .child(nav().child(a().attr("href", "/docs").text("Docs")))
+    ///     .child(a().attr("href", "/blog").text("Blog"));
+    ///
+    /// let first = page.find("a").expect("a link");
+    /// assert_eq!(first.attribute("href"), Some("/docs"));
+    /// assert_eq!(first.render(), r#"<a href="/docs">Docs</a>"#);
+    /// assert!(page.find("table").is_none());
+    /// ```
+    #[must_use]
+    pub fn find(&self, tag: &str) -> Option<&Element> {
+        Descendants::new(&self.children).find(|element| element.tag() == tag)
+    }
+
+    /// Every element below this one with this tag, in document order. See [`Self::find`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let list = ul().children_from(["a", "b", "c"].map(|x| li().text(x)));
+    /// assert_eq!(list.find_all("li").count(), 3);
+    /// let last = list.find_all("li").last().expect("three items");
+    /// assert_eq!(last.render(), "<li>c</li>");
+    /// ```
+    pub fn find_all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Element> + 'a {
+        Descendants::new(&self.children).filter(move |element| element.tag() == tag)
+    }
+
+    /// The value of the first attribute with this name, **as it is written** into the markup.
+    ///
+    /// The value was escaped when it was set, so `attr("title", "a & b")` reads back as
+    /// `a &amp; b`. A boolean attribute reads as `""`; use [`Self::attributes`] and
+    /// [`Attribute::is_boolean`] to tell it from an empty value. The name is compared as
+    /// written. The URL policy is applied at render time, so a URL that will be written as
+    /// `#` still reads as it was set.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let link = a().attr("href", "/docs?x=1&y=2").bool_attr("download");
+    /// assert_eq!(link.attribute("href"), Some("/docs?x=1&amp;y=2"));
+    /// assert_eq!(link.attribute("download"), Some(""));
+    /// assert_eq!(link.attribute("target"), None);
+    /// ```
+    #[must_use]
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|attribute| attribute.key() == name)
+            .map(Attribute::value)
     }
 
     // MARK: - Content
