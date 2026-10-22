@@ -11,6 +11,14 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-22
+
+A major release. The public API only grows: no public item was removed or changed, and the
+new ones are listed under *Added*. The rendered output and the runtime behaviour change in
+three places, on purpose: `text()` and `raw_text()` append in call order, `clean()` needs the
+`.molt-output` marker, and `Debug` stops at 128 levels. Each is under *Breaking*, *Security* or
+*Fixed* below, with its row in [`MIGRATION.md`](MIGRATION.md) (1.x to 2.0.0).
+
 ### Breaking
 
 - `Element::text` and `Element::raw_text` append at the position of the call instead of

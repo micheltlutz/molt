@@ -457,7 +457,7 @@ because nothing compared the changelog with the code.
   it. When a script merges sections, treat a repeated heading as a list to extend, never as a
   key to overwrite.
 - **Rule.** Ask the code, not the history: every `pub` item added since the last tag has to be
-  named in `[Unreleased]` (`scripts/check-changelog.sh`, step 8 of `verify.sh`, run in CI with
+  named in `[Unreleased]` (or in the version section a release branch moves it to) (`scripts/check-changelog.sh`, step 8 of `verify.sh`, run in CI with
   the tags fetched).
 - **Guard.** `scripts/check-changelog.sh`
 

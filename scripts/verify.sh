@@ -128,7 +128,7 @@ step "8/8  Changelog covers the new public API"
 # A public item added since the last tag has to be named in [Unreleased]. Entries were lost in
 # conflict resolutions in the 2.0.0 cycle and nothing noticed (L42).
 if [ -x scripts/check-changelog.sh ]; then
-  run "new public items are in [Unreleased]" ./scripts/check-changelog.sh
+  run "new public items are in the unreleased changelog" ./scripts/check-changelog.sh
 else
   fail "scripts/check-changelog.sh is missing or not executable"
 fi
