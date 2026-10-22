@@ -18,7 +18,7 @@
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
 [![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
-📦 **[molt-framework no crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Primeiros passos](GETTING_STARTED.md)
+🌐 **[molt-framework.io](https://www.molt-framework.io)** · 📦 [crates.io](https://crates.io/crates/molt-framework) · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Primeiros passos](GETTING_STARTED.md)
 
 Molt é uma DSL embutida: você descreve a página em Rust, com um builder fluente ou com a macro
 `html!`, e o compilador a verifica. O resultado é uma árvore de valores simples, renderizada
@@ -272,6 +272,7 @@ confiável. Veja o [`SECURITY.md`](../../SECURITY.md#rendering-depth-is-no-longe
   problema.
 - [`ROADMAP.md`](../../ROADMAP.md) e [`CHANGELOG.md`](../../CHANGELOG.md) (inglês).
 - Referência da API no [docs.rs](https://docs.rs/molt-framework).
+- O site do projeto, feito com o próprio Molt: [www.molt-framework.io](https://www.molt-framework.io).
 
 ## Desenvolvimento
 

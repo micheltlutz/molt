@@ -61,8 +61,10 @@ These are vulnerabilities:
 - `StaticSiteGenerator` writing outside its output directory (a `..` component, a root or
   drive prefix, or an existing symbolic link on the way), or `clean()` deleting outside it.
   `clean()` refuses `.`, the working directory and its ancestors, the home directory, and
-  top-level directories such as `/usr`. A symlink created *while* a build runs is a race this
-  crate does not close.
+  top-level directories such as `/usr`. Since 2.0.0 it also refuses a symbolic link and any
+  directory that has contents but no `.molt-output` marker, because a relative output path is
+  resolved against the current directory of the process, which may belong to another project.
+  A symlink created *while* a build runs is a race this crate does not close.
 
 ### Rendering depth is no longer bounded by the stack
 

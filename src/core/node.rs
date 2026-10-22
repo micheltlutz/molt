@@ -6,7 +6,7 @@
 //! makes the `parallel` feature sound.
 
 use crate::core::attribute::Attribute;
-use crate::core::element::Element;
+use crate::core::element::{Descendants, Element};
 use crate::core::escape::write_escaped_text;
 use crate::core::render::{Render, RenderOptions};
 use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_sensitive};
@@ -112,6 +112,37 @@ impl PartialEq<&str> for Markup {
 }
 
 impl Node {
+    /// The first element below this node, in document order, with this tag.
+    ///
+    /// An element's own tag is not a match, only what is inside it; a fragment is transparent,
+    /// so the elements it holds count. See [`Element::find`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let nodes = Node::fragment([h1().text("Title").into(), p().text("Body").into()]);
+    /// assert_eq!(nodes.find("p").map(Render::render).as_deref(), Some("<p>Body</p>"));
+    /// ```
+    #[must_use]
+    pub fn find(&self, tag: &str) -> Option<&Element> {
+        Descendants::new(self.below()).find(|element| element.tag() == tag)
+    }
+
+    /// Every element below this node with this tag, in document order. See [`Node::find`].
+    pub fn find_all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Element> + 'a {
+        Descendants::new(self.below()).filter(move |element| element.tag() == tag)
+    }
+
+    /// What a search starts from: an element's children, a fragment's nodes, nothing for the rest.
+    fn below(&self) -> &[Node] {
+        match self {
+            Self::Element(element) => element.children(),
+            Self::Fragment(children) => children,
+            _ => &[],
+        }
+    }
+
     /// Creates a text node, escaping the content.
     #[must_use]
     pub fn text(content: impl AsRef<str>) -> Self {
@@ -344,6 +375,7 @@ pub(crate) fn write_element_tree(
 /// `push_compact_element`/`push_pretty_element` would for an `<html>` with two children.
 pub(crate) fn write_document_root(
     lang: Option<&str>,
+    attributes: &[Attribute],
     head: &Element,
     body: &Element,
     out: &mut String,
@@ -352,11 +384,7 @@ pub(crate) fn write_document_root(
     if options.pretty {
         options.write_indent(out, 0);
     }
-    out.push_str("<html");
-    if let Some(lang) = lang {
-        Attribute::new_static("lang", lang).write_into(out);
-    }
-    out.push('>');
+    write_html_open_tag(lang, attributes, out);
 
     // The stack is a LIFO: the last step pushed runs first.
     let steps = if options.pretty {
@@ -380,6 +408,18 @@ pub(crate) fn write_document_root(
     };
     // `<html>` is written above by hand, so head and body already sit one level down.
     run_steps(steps, out, options, 1);
+}
+
+/// Writes `<html lang="…" …>`: the one place the root's opening tag is written, so the whole
+/// render and the streamed render cannot drift. The attributes are checked as they would be on
+/// an `<html>` element in a tree.
+pub(crate) fn write_html_open_tag(lang: Option<&str>, attributes: &[Attribute], out: &mut String) {
+    out.push_str("<html");
+    if let Some(lang) = lang {
+        Attribute::new_static("lang", lang).write_into_in(out, false, "html");
+    }
+    write_attributes(attributes, out, false, "html");
+    out.push('>');
 }
 
 /// One unit of work for the writer.
@@ -1038,6 +1078,58 @@ mod tests {
             line.render(),
             "<span><span>1</span><span> let x = 1;</span>\n</span>"
         );
+    }
+
+    #[test]
+    fn find_returns_the_first_match_in_document_order_and_never_the_element_itself() {
+        let tree = div()
+            .child(p().child(span().text("inner")))
+            .child(span().text("outer"));
+        assert_eq!(
+            tree.find("span").map(Render::render).as_deref(),
+            Some("<span>inner</span>")
+        );
+        assert_eq!(tree.find_all("span").count(), 2);
+        assert!(tree.find("div").is_none(), "only what is inside counts");
+        assert!(tree.find("table").is_none());
+    }
+
+    #[test]
+    fn find_all_lists_matches_in_document_order() {
+        let tree = ul().children_from(["a", "b", "c"].map(|x| li().text(x)));
+        let texts: Vec<String> = tree.find_all("li").map(Render::render).collect();
+        assert_eq!(texts, ["<li>a</li>", "<li>b</li>", "<li>c</li>"]);
+    }
+
+    #[test]
+    fn a_fragment_is_transparent_to_a_search() {
+        let nodes = Node::fragment([
+            Node::text("x"),
+            Node::fragment([Node::from(h1().text("T"))]),
+            Node::from(p().child(h1().text("U"))),
+        ]);
+        assert_eq!(nodes.find_all("h1").count(), 2);
+        assert!(Node::text("x").find("p").is_none());
+        let wrapper = Node::from(div().child(p()));
+        assert!(wrapper.find("div").is_none());
+        assert!(wrapper.find("p").is_some());
+    }
+
+    #[test]
+    fn attribute_reads_the_value_as_written_and_the_first_of_a_repeated_name() {
+        let link = a_like();
+        assert_eq!(link.attribute("href"), Some("/x?a=1&amp;b=2"));
+        assert_eq!(link.attribute("hidden"), Some(""));
+        assert_eq!(link.attribute("title"), Some("first"));
+        assert_eq!(link.attribute("missing"), None);
+    }
+
+    fn a_like() -> Element {
+        Element::new("a")
+            .attr("href", "/x?a=1&b=2")
+            .attr("title", "first")
+            .attr("title", "second")
+            .bool_attr("hidden")
     }
 
     #[test]
