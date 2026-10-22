@@ -11,6 +11,11 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Documentation
+
+- The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`, so crates.io shows it),
+  the READMEs, the getting-started guides and the crate documentation (#117).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
