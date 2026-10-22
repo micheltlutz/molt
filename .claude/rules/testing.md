@@ -26,8 +26,8 @@ paths:
 - A test that must not run in parallel with others (the global allocator counter in
   `tests/allocations.rs`) is a single `#[test]` in its own file.
 - Property tests with hostile input live in `tests/invariants.rs`; the 100,000-level
-  nesting tests in `tests/performance.rs` compare with `assert!(a == b)`, never
-  `assert_eq!`.
+  nesting tests in `tests/performance.rs` compare with `assert!(a == b)`; `assert_eq!` no
+  longer aborts on a deep tree (#79) but formats it for nothing.
 - Keep the old implementation as an oracle while rewriting a path (L7).
 - Tests may `unwrap`/`expect` (`clippy.toml`); library code may not.
 - The golden fixtures are a test too: `cargo test --test golden`. See

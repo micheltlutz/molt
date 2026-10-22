@@ -32,8 +32,12 @@ lose.
   covers every path, and a `Result` constructor would be a JS-facing break for no extra safety.
 - **Symlink in a path component is refused, not followed** (S5). *Residual:* a link created
   during a build is a race this crate does not close; documented in `SECURITY.md`.
-- **`Debug` stays a recursive derive** (B4). *Why:* a deep `{:?}` is a diagnostic nobody reads;
-  `Clone`/`PartialEq`/`Hash`/`Display`/`Drop` are the ones that run in production paths.
+- **`Debug` is hand-written and bounded at 128 levels** (#79, 2.0.0; B4 had left it a recursive
+  derive because a deep `{:?}` is a diagnostic nobody reads). *Why:* `assert_eq!` formats both
+  trees when it fails, so a diagnostic is exactly where a deep tree arrives, and an abort there
+  hides the failure. Recursion is kept, not an explicit stack, because it is bounded by the
+  limit and prints the same text as the derive. *What would change it:* a need to see below
+  level 128.
 - **PR stacking over independent branches** (process). *Why:* two branches editing `node.rs` and
   `SECURITY.md` conflict; a chain tests every tip.
 
