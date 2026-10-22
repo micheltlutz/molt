@@ -251,6 +251,7 @@ worth knowing about when depth comes from untrusted input. See
 
 - [`docs/new-to-rust.md`](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it.
 - [`GETTING_STARTED.md`](GETTING_STARTED.md): a first page, escaping, `html!`, SEO, a site on disk.
+- [`docs/performance.md`](docs/performance.md): a checklist for shipping a fast site, and which Molt helper covers each item.
 - [`MIGRATION.md`](MIGRATION.md): from 0.1.0 to 1.0.0, change by change.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
 - [`ROADMAP.md`](ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).

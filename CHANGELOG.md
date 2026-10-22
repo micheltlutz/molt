@@ -30,48 +30,26 @@ and are a different version line.
 
 ### Added
 
+- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
+  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
+  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
+  or `url(...)`; the doc says how to work with that (#126).
 - `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
   (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
   and `root()`. `Document` gains the public field `html_attributes` (#111).
-- `SeoBuilder` setters `robots`, `viewport`, `canonical`, `alternate` (repeatable, `x-default`
-  included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
-  `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
-  a builder that does not call them renders what it did before (#112).
-- `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
-  directory, atomically per file, with a name filter. Symbolic links in the source are skipped
-  and the output directory is never copied into itself. Returns the number of files (#113).
-- `ssg::OUTPUT_MARKER`, the name of that file.
-- `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
-  versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
-  is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
-- `Element::find`, `Element::find_all` and `Node::find`, `Node::find_all`: search a tree for
-  elements by tag, in document order, with an explicit stack and without cloning; and
-  `Element::attribute(name)`, the value as written into the markup. For asserting on a built
-  tree in a test. There is no `text_content`: text is stored escaped, so it would have to
-  return markup, and `find(..).render()` already says that (#116).
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
+- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
+  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
+  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
 
 ### Documentation
 
 - The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`, so crates.io shows it),
   the READMEs, the getting-started guides and the crate documentation (#117).
-
-### Added
-
-- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
-  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
-
-### Added
-
-- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
-  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
-  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
-
-### Added
-
-- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
-  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
-  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
-  or `url(...)`; the doc says how to work with that (#126).
+- `docs/performance.md` (and `docs/pt-BR/performance.md`): a checklist for shipping a fast
+  site built with Molt. Each item says whether it was measured by the site's author, is
+  general web behaviour, or is run as a doc test here (#129).
 
 ## [1.1.1] - 2026-10-22
 
