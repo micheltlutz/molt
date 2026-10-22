@@ -77,6 +77,22 @@ for rule in .claude/rules/*.md; do
   ' "$rule")
 done
 
+# 1f. The pages a project that only *uses* Molt can read ship in the published crate, and their
+#     relative links resolve. `.claude/` is excluded from the package, so an agent in a consumer
+#     project never sees it; these files are what it gets instead (#135). Listing the package is
+#     offline and does not build anything.
+SHIPPED="llms.txt docs/capabilities.md docs/pitfalls.md docs/agents.md"
+for file in $SHIPPED; do
+  if [ -f "$file" ]; then check_links "$file"; else fail "$file (a page that must ship in the crate)"; fi
+done
+if command -v cargo >/dev/null 2>&1; then
+  listing=$(cargo package --list --allow-dirty 2>/dev/null || true)
+  for file in $SHIPPED; do
+    CHECKED=$((CHECKED + 1))
+    printf '%s\n' "$listing" | grep -qx -- "$file" || fail "$file (not in \`cargo package --list\`)"
+  done
+fi
+
 # 1e. AGENTS.md is the map an agent reads first; a rule, command or agent it does not list
 #     is one nobody is told about.
 for file in .claude/rules/*.md .claude/commands/*.md .claude/agents/*.md; do

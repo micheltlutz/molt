@@ -11,6 +11,10 @@ paths:
 - **Say in the docs only what you ran** (L8). A guide's code is compiled as a doctest or
   run by a script, and a claim about behaviour has a test behind it. `README.md` and
   `SECURITY.md` change in the same PR as the behaviour they describe.
+- The symptom-to-fix tables for people who *use* Molt live in `docs/pitfalls.md`, which ships in
+  the crate; the skill's `pitfalls.md` keeps only the contributor rows. Fix a row in one place.
+  `docs/capabilities.md` has a *Since* column: add a row, with its version, for every new
+  public API. `./scripts/check-knowledge-base.sh` fails if these pages leave the package (#135).
 - `docs/tag-catalog.md` is generated. Run `./scripts/generate-tag-catalog.sh`; never edit
   it.
 - `docs/history/` is where the Swift origin lives. Nothing in `src/`, `tests/` or `scripts/`

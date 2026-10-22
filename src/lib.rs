@@ -103,6 +103,9 @@ mod guides {
     #[doc = include_str!("../docs/performance.md")]
     mod performance {}
 
+    #[doc = include_str!("../docs/capabilities.md")]
+    mod capabilities {}
+
     #[doc = include_str!("../docs/pt-BR/performance.md")]
     mod performance_pt_br {}
 }

@@ -121,6 +121,7 @@ Rust lives at `/opt/homebrew/opt/rustup/bin` on this machine; it is not on the d
 | `src/ssg.rs` | filesystem output, `feature = "ssg"`, off on wasm32 |
 | `src/wasm.rs` | `wasm-bindgen` surface, `feature = "wasm"` |
 | `tests/fixtures/` | the golden files, compared byte for byte — **never hand-edit** |
+| `docs/capabilities.md`, `docs/pitfalls.md`, `docs/agents.md`, `llms.txt` | what a project that only *uses* Molt can read: the published crate has these, not `.claude/` |
 | `.claude/` | rules, commands, agents and skills, as mapped above; not shipped in the crate |
 
 ## Before you say you are done
