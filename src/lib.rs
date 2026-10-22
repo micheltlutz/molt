@@ -3,6 +3,8 @@
 //! A composite tree of plain values, escaped by default and rendered compact or pretty,
 //! compiled to native code or to `wasm32-unknown-unknown`.
 //!
+//! The project site, built with Molt itself, is <https://www.molt-framework.io>.
+//!
 //! # Getting started
 //!
 //! ```

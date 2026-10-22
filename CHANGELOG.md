@@ -17,9 +17,23 @@ and are a different version line.
   replacing a content slot that always rendered before the children. `p().child(x).text(y)`
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
+- `StaticSiteGenerator::clean` only empties a directory that is missing, empty, or holds the
+  `.molt-output` marker. Writing a page or an asset leaves the marker, so a site Molt built
+  keeps working; a `dist` made before 2.0.0, or by anything else, is refused once with
+  `SsgError::UnsafeCleanTarget` (#115). A row in `MIGRATION.md`.
+
+### Security
+
+- `clean()` with a relative path no longer empties the `./dist` of whatever directory the
+  process runs from: the output directory has to carry the marker. A symbolic link as the
+  output directory is refused too (#115).
 
 ### Added
 
+- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
+  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
+  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
+  or `url(...)`; the doc says how to work with that (#126).
 - `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
   (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
   and `root()`. `Document` gains the public field `html_attributes` (#111).
@@ -28,13 +42,11 @@ and are a different version line.
 - `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
   Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
   SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
-- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
-  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
-  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
-  or `url(...)`; the doc says how to work with that (#126).
 
 ### Documentation
 
+- The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`, so crates.io shows it),
+  the READMEs, the getting-started guides and the crate documentation (#117).
 - `docs/performance.md` (and `docs/pt-BR/performance.md`): a checklist for shipping a fast
   site built with Molt. Each item says whether it was measured by the site's author, is
   general web behaviour, or is run as a doc test here (#129).
