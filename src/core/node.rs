@@ -1000,6 +1000,46 @@ mod tests {
         assert_eq!(tree.render_pretty(), "<div>\n  lead\n  <p>body</p>\n</div>");
     }
 
+    /// The site's contact block: a label child, then the value as text. It rendered the value
+    /// first because `text` filled a slot that the renderer always emits before the children.
+    #[test]
+    fn child_then_text_keeps_call_order() {
+        let tree = p().child(i().text("Owner: ")).text("Ada");
+        assert_eq!(tree.render(), "<p><i>Owner: </i>Ada</p>");
+        assert_eq!(tree.render_pretty(), "<p>\n  <i>Owner: </i>\n  Ada\n</p>");
+    }
+
+    #[test]
+    fn text_then_child_then_text_keeps_call_order() {
+        let tree = p().text("a ").child(span().text("b")).text(" c");
+        assert_eq!(tree.render(), "<p>a <span>b</span> c</p>");
+    }
+
+    #[test]
+    fn two_text_calls_append() {
+        assert_eq!(p().text("a").text("b").render(), "<p>ab</p>");
+        assert_eq!(p().text("a<").text("<b").render(), "<p>a&lt;&lt;b</p>");
+    }
+
+    #[test]
+    fn raw_text_follows_the_same_order_and_text_after_it_is_still_escaped() {
+        // The raw string is trusted markup written in the test.
+        let tree = p().raw_text("<i>").child(span()).raw_text("</i>").text("<");
+        assert_eq!(tree.render(), "<p><i><span></span></i>&lt;</p>");
+    }
+
+    #[test]
+    fn a_code_window_line_ends_with_its_newline() {
+        let line = span()
+            .child(span().text("1"))
+            .child(span().text(" let x = 1;"))
+            .text("\n");
+        assert_eq!(
+            line.render(),
+            "<span><span>1</span><span> let x = 1;</span>\n</span>"
+        );
+    }
+
     #[test]
     fn an_element_with_content_and_no_children_stays_on_one_line() {
         assert_eq!(p().text("hi").render_pretty(), "<p>hi</p>");
