@@ -18,6 +18,12 @@ and are a different version line.
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
 
+### Added
+
+- `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
+  (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
+  and `root()`. `Document` gains the public field `html_attributes` (#111).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
