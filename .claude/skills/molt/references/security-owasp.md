@@ -21,6 +21,7 @@ a new such place, add a row *and* a test.
 | tag **name** | `Element::new`, `new WElement` | element dropped unless letter + `[A-Za-z0-9-_.:]*` | `tags::is_valid_tag_name` |
 | comment body | `Node::comment` | no adjacent hyphens, no trailing hyphen | `node.rs` |
 | `<meta>` name/value | `meta_name`, … | `Attribute::new` (escaped) | `src/seo.rs` |
+| `<link rel="canonical"/"alternate">` href and hreflang | `SeoBuilder::canonical`, `alternate` | `Attribute::new` (escaped); `href` goes through the URL policy, so `javascript:` is written as `#` | `src/seo.rs` |
 | XML text | sitemap, RSS | `escape_xml` (`'` → `&apos;`; XML-illegal characters dropped) | `sitemap.rs`, `feed.rs` |
 | sitemap `<loc>`, RSS `<link>` | `SitemapUrl`, `RssItem`, `RssGenerator` | omitted unless absolute `http(s)` (`url_policy::is_http_url`) | `sitemap.rs`, `feed.rs` |
 | output file path | `StaticSiteGenerator::*` | component whitelist, symlink refusal, atomic write | `src/ssg.rs` |
