@@ -11,8 +11,22 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Breaking
+
+- `Element::text` and `Element::raw_text` append at the position of the call instead of
+  replacing a content slot that always rendered before the children. `p().child(x).text(y)`
+  now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
+  `MIGRATION.md`'s *Output changes* table.
+
 ### Added
 
+- `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
+  (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
+  and `root()`. `Document` gains the public field `html_attributes` (#111).
+- `SeoBuilder` setters `robots`, `viewport`, `canonical`, `alternate` (repeatable, `x-default`
+  included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
+  `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
+  a builder that does not call them renders what it did before (#112).
 - `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
   directory, atomically per file, with a name filter. Symbolic links in the source are skipped
   and the output directory is never copied into itself. Returns the number of files (#113).
