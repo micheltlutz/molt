@@ -11,6 +11,13 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Breaking
+
+- `Element::text` and `Element::raw_text` append at the position of the call instead of
+  replacing a content slot that always rendered before the children. `p().child(x).text(y)`
+  now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
+  `MIGRATION.md`'s *Output changes* table.
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
