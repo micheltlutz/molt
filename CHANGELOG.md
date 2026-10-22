@@ -41,6 +41,9 @@ and are a different version line.
   directory, atomically per file, with a name filter. Symbolic links in the source are skipped
   and the output directory is never copied into itself. Returns the number of files (#113).
 - `ssg::OUTPUT_MARKER`, the name of that file.
+- `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
+  versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
+  is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
 
 ## [1.1.1] - 2026-10-22
 
