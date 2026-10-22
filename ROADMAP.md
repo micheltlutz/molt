@@ -14,12 +14,10 @@ unsafe is a security fix and goes in a patch release.
 
 ## Likely next
 
-- **An iterative `Debug`** for `Node` and `Element`. `Clone`, `PartialEq`, `Hash` and `Drop`
-  are iterative; `Debug` is the one derive left, so `{:?}` on a very deep tree still aborts.
-  ([#79](https://github.com/micheltlutz/molt/issues/79))
-- **Fuzzing in the nightly workflow.** The targets exist (`scripts/fuzz.sh`: both escapers,
-  the URL policy, the JSON-in-script escaper) but need nightly and are not in the pull-request
-  gate.
+- **A fuzz target for what 2.0 added.** `.github/workflows/fuzz.yml` runs the four targets
+  (`scripts/fuzz.sh`: both escapers, the URL policy, the JSON-in-script escaper) every night.
+  `Element::csp_hash`'s SHA-256, `copy_dir` and `SitemapUrl::alternate` take input from
+  outside and have none yet.
 - **Keep the pins current.** Dependabot proposes SHA bumps for the actions; each needs a
   look at the action's changelog.
 

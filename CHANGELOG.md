@@ -30,6 +30,10 @@ and are a different version line.
 
 ### Added
 
+- `.github/workflows/fuzz.yml`: the four fuzz targets run every night and on demand, on
+  nightly Rust with a pinned `cargo-fuzz`, with the corpus kept between runs and a crashing
+  input uploaded as an artifact. It is outside the pull-request gate, so a red run never blocks
+  a merge. `scripts/fuzz.sh` now runs every target even after one fails (#91).
 - `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
   (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
   without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
