@@ -1,0 +1,77 @@
+name: Fuzz
+
+# libFuzzer needs nightly, so this is not part of CI or of a pull request's gate: a red run
+# here never blocks a merge. It runs the targets under `fuzz/` for a short time every night
+# and on demand, and keeps the corpus between runs so each night starts where the last stopped.
+# GitHub runs a schedule only from the default branch, so the nightly runs begin when this file
+# reaches `main`; a manual run can start earlier from any branch that has the file.
+on:
+  schedule:
+    # Off the hour, when the runners are busiest.
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target
+        type: number
+        default: 60
+
+# Read-only, like CI. Nothing here writes to the repository; the corpus goes to the Actions
+# cache and a crashing input goes to a workflow artifact.
+permissions:
+  contents: read
+
+# One fuzz run at a time. A second would only compete for the same cache.
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz (nightly, libFuzzer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: fuzz
+          cache-on-failure: true
+      # Pinned: a new cargo-fuzz changes how the targets are built, and that is better seen in a
+      # pull request that bumps this number than in a night's run.
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-fuzz@0.13.2
+      # The corpus is restored from the newest earlier run and saved under this run's id, so it
+      # only grows. It is saved even when a target crashed, because the inputs that reached the
+      # crash are worth keeping.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      - name: Fuzz every target
+        env:
+          FUZZ_SECONDS: ${{ inputs.seconds || 60 }}
+        run: ./scripts/fuzz.sh
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: always()
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+      # The input that reproduces a crash: `cargo fuzz run <target> fuzz/artifacts/<target>/<file>`.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: fuzz-crashes
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 30
