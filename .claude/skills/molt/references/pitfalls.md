@@ -32,6 +32,7 @@ are load-bearing, and changing one is a breaking change.
 | `Element::render()` is one line, `Document::render()` is indented | asymmetric on purpose *(fixtures)* | `render_pretty()` / `render_compact()` / `RenderOptions` |
 | `<pre>`/`<code>`/`<textarea>` contents are not indented | their whitespace is displayed *(fixtures)* | — |
 | `set_id`/`set_style`/`set_role` replaced my value | those three replace; every other setter appends *(fixtures)* | call it once, or use `attr` |
+| `text("a").text("b")` renders `ab`, and `.child(x).text(y)` puts `y` after `x` | `text` and `raw_text` append in call order since 2.0 (L40); before 2.0 they replaced and always came first | build the string first if you meant to replace |
 | `add_class("a").add_class("b")` gives `class="a b"` | classes append, space-joined | — |
 | attributes are in insertion order | not sorted, on purpose | do not ask for sorting in the crate |
 | pretty output of a deep tree is enormous | one indent per level per line: O(depth²) | render compact, or `with_indent("")`, or bound depth |

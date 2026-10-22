@@ -5,7 +5,7 @@
 
 use crate::core::escape::escape_json_script;
 use crate::core::{Attribute, Element};
-use crate::elements::{meta, script, title};
+use crate::elements::{link, meta, script, title};
 
 /// A `<script type="application/ld+json">` carrying structured data for search engines.
 ///
@@ -240,6 +240,14 @@ pub struct SeoBuilder {
     twitter_creator: Option<String>,
     viewport: String,
     robots: String,
+    canonical: Option<String>,
+    alternates: Vec<(String, String)>,
+    locale: Option<String>,
+    locale_alternates: Vec<String>,
+    image_size: Option<(u32, u32)>,
+    image_alt: Option<String>,
+    theme_color: Option<String>,
+    color_scheme: Option<String>,
 }
 
 impl SeoBuilder {
@@ -258,6 +266,14 @@ impl SeoBuilder {
             twitter_creator: None,
             viewport: DEFAULT_VIEWPORT.to_string(),
             robots: DEFAULT_ROBOTS.to_string(),
+            canonical: None,
+            alternates: Vec::new(),
+            locale: None,
+            locale_alternates: Vec::new(),
+            image_size: None,
+            image_alt: None,
+            theme_color: None,
+            color_scheme: None,
         }
     }
 
@@ -268,7 +284,9 @@ impl SeoBuilder {
         self
     }
 
-    /// Sets the canonical page URL.
+    /// Sets the page URL, written as `og:url`.
+    ///
+    /// This is not `<link rel="canonical">`; for that, see [`SeoBuilder::canonical`].
     #[must_use]
     pub fn url(mut self, page_url: impl Into<String>) -> Self {
         self.url = Some(page_url.into());
@@ -317,9 +335,126 @@ impl SeoBuilder {
         self
     }
 
+    /// Overrides the `robots` directive (default [`DEFAULT_ROBOTS`]).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// use molt::seo::SeoBuilder;
+    /// let tags = SeoBuilder::new("T", "D")
+    ///     .robots("index, follow, max-image-preview:large")
+    ///     .build();
+    /// let html: String = tags.iter().map(Render::render).collect();
+    /// assert!(html.contains(r#"<meta name="robots" content="index, follow, max-image-preview:large">"#));
+    /// ```
+    #[must_use]
+    pub fn robots(mut self, robots: impl Into<String>) -> Self {
+        self.robots = robots.into();
+        self
+    }
+
+    /// Overrides the `viewport` directive (default [`DEFAULT_VIEWPORT`]).
+    #[must_use]
+    pub fn viewport(mut self, viewport: impl Into<String>) -> Self {
+        self.viewport = viewport.into();
+        self
+    }
+
+    /// Adds `<link rel="canonical" href="…">`. Omitted unless called.
+    ///
+    /// The `href` goes through the URL policy, like any `href`.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// use molt::seo::SeoBuilder;
+    /// let tags = SeoBuilder::new("T", "D").canonical("https://example.com/en/").build();
+    /// let html: String = tags.iter().map(Render::render).collect();
+    /// assert!(html.contains(r#"<link rel="canonical" href="https://example.com/en/">"#));
+    /// ```
+    #[must_use]
+    pub fn canonical(mut self, url: impl Into<String>) -> Self {
+        self.canonical = Some(url.into());
+        self
+    }
+
+    /// Adds `<link rel="alternate" hreflang="…" href="…">`, once per call, in call order.
+    ///
+    /// `hreflang` is a language tag or `x-default`.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// use molt::seo::SeoBuilder;
+    /// let tags = SeoBuilder::new("T", "D")
+    ///     .alternate("en", "https://example.com/en/")
+    ///     .alternate("x-default", "https://example.com/")
+    ///     .build();
+    /// let html: String = tags.iter().map(Render::render).collect();
+    /// assert!(html.contains(
+    ///     r#"<link rel="alternate" hreflang="x-default" href="https://example.com/">"#
+    /// ));
+    /// ```
+    #[must_use]
+    pub fn alternate(mut self, hreflang: impl Into<String>, url: impl Into<String>) -> Self {
+        self.alternates.push((hreflang.into(), url.into()));
+        self
+    }
+
+    /// Sets `og:locale`, such as `pt_BR`.
+    #[must_use]
+    pub fn locale(mut self, locale: impl Into<String>) -> Self {
+        self.locale = Some(locale.into());
+        self
+    }
+
+    /// Adds an `og:locale:alternate`, once per call, in call order.
+    #[must_use]
+    pub fn locale_alternate(mut self, locale: impl Into<String>) -> Self {
+        self.locale_alternates.push(locale.into());
+        self
+    }
+
+    /// Sets `og:image:width` and `og:image:height`, in pixels.
+    #[must_use]
+    pub fn image_size(mut self, width: u32, height: u32) -> Self {
+        self.image_size = Some((width, height));
+        self
+    }
+
+    /// Sets `og:image:alt` and `twitter:image:alt`.
+    #[must_use]
+    pub fn image_alt(mut self, alt: impl Into<String>) -> Self {
+        self.image_alt = Some(alt.into());
+        self
+    }
+
+    /// Adds `<meta name="theme-color">`. Omitted unless called.
+    #[must_use]
+    pub fn theme_color(mut self, color: impl Into<String>) -> Self {
+        self.theme_color = Some(color.into());
+        self
+    }
+
+    /// Adds `<meta name="color-scheme">`, such as `dark light`. Omitted unless called.
+    #[must_use]
+    pub fn color_scheme(mut self, scheme: impl Into<String>) -> Self {
+        self.color_scheme = Some(scheme.into());
+        self
+    }
+
     /// Builds the tags: the common block, then Open Graph, then Twitter Cards.
     ///
-    /// The order is fixed, and the golden fixture depends on it.
+    /// The order is fixed, and the golden fixture depends on it. A tag that needs a setter
+    /// (`canonical`, `alternate`, `theme_color`, `color_scheme`, the `og:locale` and
+    /// `og:image:*` tags, `twitter:image:alt`) is written only when that setter was called, so
+    /// a builder that never calls them produces what it always did:
+    ///
+    /// 1. the common block, ending in `<title>`;
+    /// 2. `canonical`, the `alternate` links, `theme-color`, `color-scheme`;
+    /// 3. Open Graph, then `og:image:width`, `og:image:height`, `og:image:alt`, `og:locale`,
+    ///    the `og:locale:alternate` tags;
+    /// 4. Twitter Cards, then `twitter:image:alt`.
     #[must_use]
     pub fn build(&self) -> Vec<Element> {
         let keywords: Vec<&str> = self.keywords.iter().map(String::as_str).collect();
@@ -332,6 +467,24 @@ impl SeoBuilder {
             &self.robots,
         );
 
+        if let Some(canonical) = &self.canonical {
+            tags.push(link().attr("rel", "canonical").attr("href", canonical));
+        }
+        for (hreflang, url) in &self.alternates {
+            tags.push(
+                link()
+                    .attr("rel", "alternate")
+                    .attr("hreflang", hreflang)
+                    .attr("href", url),
+            );
+        }
+        if let Some(color) = &self.theme_color {
+            tags.push(meta_name("theme-color", color));
+        }
+        if let Some(scheme) = &self.color_scheme {
+            tags.push(meta_name("color-scheme", scheme));
+        }
+
         let image = self.image.as_deref().unwrap_or_default();
         let url = self.url.as_deref().unwrap_or_default();
 
@@ -343,6 +496,19 @@ impl SeoBuilder {
             "website",
             self.site_name.as_deref(),
         ));
+        if let Some((width, height)) = self.image_size {
+            tags.push(meta_property("og:image:width", width.to_string()));
+            tags.push(meta_property("og:image:height", height.to_string()));
+        }
+        if let Some(alt) = &self.image_alt {
+            tags.push(meta_property("og:image:alt", alt));
+        }
+        if let Some(locale) = &self.locale {
+            tags.push(meta_property("og:locale", locale));
+        }
+        for locale in &self.locale_alternates {
+            tags.push(meta_property("og:locale:alternate", locale));
+        }
         tags.extend(twitter_card(
             &self.title,
             &self.description,
@@ -351,6 +517,9 @@ impl SeoBuilder {
             self.twitter_site.as_deref(),
             self.twitter_creator.as_deref(),
         ));
+        if let Some(alt) = &self.image_alt {
+            tags.push(meta_name("twitter:image:alt", alt));
+        }
         tags
     }
 }
@@ -399,6 +568,105 @@ mod tests {
 
     use super::*;
     use crate::core::Render;
+
+    fn built(builder: &SeoBuilder) -> String {
+        builder.build().iter().map(Render::render).collect()
+    }
+
+    #[test]
+    fn a_builder_that_calls_no_new_setter_writes_exactly_what_it_always_did() {
+        let html = built(&SeoBuilder::new("T", "D").image("https://x.example/i.png"));
+        for absent in [
+            "canonical",
+            "hreflang",
+            "theme-color",
+            "color-scheme",
+            "og:locale",
+            "og:image:width",
+            "og:image:height",
+            "og:image:alt",
+            "twitter:image:alt",
+        ] {
+            assert!(!html.contains(absent), "{absent} in {html}");
+        }
+    }
+
+    #[test]
+    fn robots_and_viewport_can_be_overridden() {
+        let html = built(
+            &SeoBuilder::new("T", "D")
+                .robots("noindex")
+                .viewport("width=device-width"),
+        );
+        assert!(html.contains(r#"<meta name="robots" content="noindex">"#));
+        assert!(html.contains(r#"<meta name="viewport" content="width=device-width">"#));
+    }
+
+    #[test]
+    fn a_bilingual_page_gets_its_links_and_locales_in_a_fixed_order() {
+        let html = built(
+            &SeoBuilder::new("T", "D")
+                .image("https://x.example/i.png")
+                .site_name("Molt")
+                .canonical("https://x.example/en/")
+                .alternate("en", "https://x.example/en/")
+                .alternate("pt-BR", "https://x.example/pt/")
+                .alternate("x-default", "https://x.example/")
+                .theme_color("#15140f")
+                .color_scheme("dark light")
+                .image_size(1200, 630)
+                .image_alt("A molting crab")
+                .locale("en_US")
+                .locale_alternate("pt_BR")
+                .twitter_site("@molt"),
+        );
+        let in_order = [
+            "<title>T</title>",
+            r#"<link rel="canonical" href="https://x.example/en/">"#,
+            r#"<link rel="alternate" hreflang="en" href="https://x.example/en/">"#,
+            r#"<link rel="alternate" hreflang="pt-BR" href="https://x.example/pt/">"#,
+            r#"<link rel="alternate" hreflang="x-default" href="https://x.example/">"#,
+            r##"<meta name="theme-color" content="#15140f">"##,
+            r#"<meta name="color-scheme" content="dark light">"#,
+            r#"<meta property="og:site_name" content="Molt">"#,
+            r#"<meta property="og:image:width" content="1200">"#,
+            r#"<meta property="og:image:height" content="630">"#,
+            r#"<meta property="og:image:alt" content="A molting crab">"#,
+            r#"<meta property="og:locale" content="en_US">"#,
+            r#"<meta property="og:locale:alternate" content="pt_BR">"#,
+            r#"<meta name="twitter:card" content="summary_large_image">"#,
+            r#"<meta name="twitter:site" content="@molt">"#,
+            r#"<meta name="twitter:image:alt" content="A molting crab">"#,
+        ];
+        let mut from = 0;
+        for tag in in_order {
+            let at = html[from..]
+                .find(tag)
+                .unwrap_or_else(|| panic!("{tag} missing or out of order in {html}"));
+            from += at + tag.len();
+        }
+    }
+
+    #[test]
+    fn hostile_values_in_the_new_setters_stay_inside_their_attribute() {
+        let html = built(
+            &SeoBuilder::new("T", "D")
+                .canonical("javascript:alert(1)")
+                .alternate("en\"><script>", "https://x.example/\"><script>")
+                .theme_color("\"><script>alert(1)</script>")
+                .image_alt("\"><img src=x onerror=alert(1)>")
+                .locale("\"><b>"),
+        );
+        assert!(
+            html.contains(r##"<link rel="canonical" href="#">"##),
+            "{html}"
+        );
+        // `<` and `>` stay as text inside a quoted value; what matters is that no raw quote
+        // lets the payload out of its attribute.
+        for payload in ["\"><script", "\"><img", "\"><b>"] {
+            assert!(!html.contains(payload), "{payload} in {html}");
+        }
+    }
 
     fn rendered(tags: &[Element]) -> String {
         tags.iter().map(Render::render).collect()
