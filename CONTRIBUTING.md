@@ -9,8 +9,9 @@ most of what matters, so you can find out you are wrong in seconds rather than i
 ./scripts/verify.sh
 ```
 
-Build, test, clippy, rustfmt, tag-catalog freshness, the golden fixtures, and an end-to-end
-smoke test that builds a throwaway crate against your checkout. It is a **superset** of CI,
+Build, test, clippy, rustfmt, tag-catalog freshness, the golden fixtures, an end-to-end smoke
+test that builds a throwaway crate against your checkout, the agent knowledge base and the
+pages that ship in the crate, and a check that the changelog names every new public item. It is a **superset** of CI,
 so if it passes locally, CI passes.
 
 It accumulates failures rather than stopping at the first, so one run tells you everything

@@ -53,7 +53,7 @@ This adds one line under `[dependencies]` in `Cargo.toml`. You could also write 
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 The package is called `molt-framework` (the name `molt` on crates.io belongs to an unrelated

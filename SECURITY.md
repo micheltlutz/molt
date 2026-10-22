@@ -15,9 +15,11 @@ patch release, and the advisory is published once users have had a chance to upg
 
 ## Supported versions
 
-The latest released version. There are no long-term support branches. When 1.0.0 ships, 0.1.x
-stops receiving fixes: [`MIGRATION.md`](MIGRATION.md) is the way forward, and several of the
-fixes below changed output, so they are not backported.
+The latest released version. There are no long-term support branches. When 2.0.0 ships, 1.x
+stops receiving fixes, as 0.1.x did at 1.0.0: [`MIGRATION.md`](MIGRATION.md) is the way
+forward, and several of the fixes below changed output or behaviour, so they are not
+backported. The 2.0.0 ones are the ownership check in `clean()` and a `Debug` that no longer
+aborts on a deep tree.
 
 ## How the guarantees map onto the OWASP Top 10 (2021)
 
@@ -27,7 +29,7 @@ and where each is enforced (the full table of inputs is in
 
 | category | in Molt | enforced by |
 | --- | --- | --- |
-| A01 Broken Access Control | path traversal and destructive operations in `StaticSiteGenerator` | component whitelist, symlink refusal, a pure `clean()` guard |
+| A01 Broken Access Control | path traversal and destructive operations in `StaticSiteGenerator` | component whitelist, symlink refusal, a pure `clean()` guard, and the `.molt-output` marker `clean()` requires |
 | A03 Injection | text, attribute values, names, comments, URLs, JSON and XML reaching the output | escaping on entry, write-time validation, the URL policy, `escape_json_script`, `escape_xml` |
 | A04 Insecure Design | an unsafe call that is only discouraged in a comment | types that cannot be built wrongly (`Markup`, `ChangeFreq`, private `indent`) |
 | A05 Security Misconfiguration | CI and release | pinned actions, read-only token, a release gated on `main` and green CI |

@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`molt-framework` 0.1.0 was its first release; this is 1.0.0. The `winged-rust 1.0.0` and
+`molt-framework` 0.1.0 was its first release; 1.0.0 froze the public API; 2.0.0 is the first release since that changes behaviour (see [`MIGRATION.md`](MIGRATION.md)). The `winged-rust 1.0.0` and
 `winged-rust 1.0.1` entries at the bottom are the crate's earlier history under its old name
 and are a different version line.
 
@@ -76,6 +76,10 @@ and are a different version line.
 
 ### Documentation
 
+- The README, its pt-BR copy, the getting-started guides, `SECURITY.md`, `CONTRIBUTING.md`
+  and `ROADMAP.md` describe 2.0: install lines say `"2.0"`, the feature lists name the new
+  APIs, 1.x stops receiving fixes, and the roadmap is the 2.x line. `MIGRATION.md` has one
+  section for 1.x to 2.0.0 (output changes, `clean()` and the marker, what is new).
 - `docs/capabilities.md`, `docs/pitfalls.md`, `docs/agents.md` and `llms.txt`, which ship in
   the published crate (the `.claude/` notes do not): is there an API for X by version and what
   is out of scope on purpose, the symptom-to-fix tables, a block to paste into a project's
