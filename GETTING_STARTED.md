@@ -6,13 +6,44 @@ no DOM, no runtime, no template language. Every snippet on this page is compiled
 
 ## Install
 
+New to Rust? [`docs/new-to-rust.md`](docs/new-to-rust.md) walks from installing Rust to a page
+open in your browser. The short version follows.
+
+**In a new project:**
+
+```bash
+cargo new hello-molt
+cd hello-molt
+cargo add molt-framework
+```
+
+**In a project you already have**, run the last command from the folder with your
+`Cargo.toml`:
+
+```bash
+cargo add molt-framework
+```
+
+Or add the line yourself:
+
 ```toml
 [dependencies]
-molt-framework = "1.0"
+molt-framework = "1.1"
 ```
 
 The package is `molt-framework` (`molt` on crates.io is an unrelated project); you import it
 as `molt`.
+
+## Run it
+
+Put the snippets below in `src/main.rs`, inside `fn main() { … }`, and start it with:
+
+```bash
+cargo run
+```
+
+`Element::render()` returns a `String`; print it with `println!("{}", card.render());`, or
+write it to a file as shown in [Writing a site to disk](#writing-a-site-to-disk).
 
 ## Your first element
 

@@ -39,6 +39,11 @@ and are a different version line.
 - A new logo: an isometric paper stack shedding its top sheet, with the feather, on the
   paper tile of the design system (`molt-logo.png`). It replaces `molt-logo.jpg` in the
   README and is now the rustdoc logo and favicon (`html_logo_url`, `html_favicon_url`).
+- `docs/new-to-rust.md`: a walkthrough for someone who has never used Rust (install, `cargo new`,
+  `cargo add`, `cargo run`, writing a page to disk and opening it), with a table of the errors a
+  newcomer hits. `GETTING_STARTED.md` and `README.md` now cover a new project and an existing
+  one separately, and say how to run the snippets. The Axum example in `README.md` is now a
+  complete program (it was missing the `Document` import and the `axum`/`tokio` dependencies).
 
 ## [1.0.1] - 2026-10-19
 

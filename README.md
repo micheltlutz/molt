@@ -120,14 +120,19 @@ The crate is on [crates.io](https://crates.io/crates/molt-framework) and its API
 documentation on [docs.rs](https://docs.rs/molt-framework). It is published as
 `molt-framework` — `molt` on crates.io is an unrelated project — and imported as `molt`.
 
-```toml
-[dependencies]
-molt-framework = "1.0"
-```
-
 ```bash
 cargo add molt-framework
 ```
+
+or, by hand, in `Cargo.toml`:
+
+```toml
+[dependencies]
+molt-framework = "1.1"
+```
+
+New to Rust? [`docs/new-to-rust.md`](docs/new-to-rust.md) goes from installing Rust to a page
+open in your browser, and says how to run it.
 
 ```rust
 use molt::prelude::*;
@@ -148,16 +153,36 @@ is no `axum`, `actix` or `tokio` feature, and none is planned, so the core keeps
 mandatory dependencies. With [Axum](https://crates.io/crates/axum), `Html` already accepts a
 `String`:
 
+A complete program, from an empty `cargo new`:
+
+```bash
+cargo add molt-framework axum
+cargo add tokio --features macros,rt-multi-thread
+```
+
 ```rust,ignore
-use axum::response::Html;
+use axum::{Router, response::Html, routing::get};
+use molt::Document;
 use molt::prelude::*;
 
 async fn home() -> Html<String> {
     let page = Document::new(Some("en"))
+        .head_children([meta().attr("charset", "UTF-8"), title().text("Molt + Axum")])
         .body_children([h1().text("Track every service")]);
     Html(page.render())
 }
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new().route("/", get(home));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
 ```
+
+`cargo run`, then open <http://localhost:3000>. `Document` is not in the prelude; import it
+from `molt` as above. Molt does not depend on `axum` or `tokio`, so your project adds them
+itself.
 
 If you want your own type to be a response, wrap the document in a newtype in your crate and
 implement the framework's trait there; the orphan rule allows it because the newtype is yours:
@@ -226,6 +251,7 @@ worth knowing about when depth comes from untrusted input. See
 
 ## Documentation
 
+- [`docs/new-to-rust.md`](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it.
 - [`GETTING_STARTED.md`](GETTING_STARTED.md): a first page, escaping, `html!`, SEO, a site on disk.
 - [`MIGRATION.md`](MIGRATION.md): from 0.1.0 to 1.0.0, change by change.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
