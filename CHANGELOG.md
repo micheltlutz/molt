@@ -23,6 +23,21 @@ and are a different version line.
 - `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
   (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
   and `root()`. `Document` gains the public field `html_attributes` (#111).
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
+- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
+  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
+  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
+- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
+  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
+  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
+  or `url(...)`; the doc says how to work with that (#126).
+
+### Documentation
+
+- `docs/performance.md` (and `docs/pt-BR/performance.md`): a checklist for shipping a fast
+  site built with Molt. Each item says whether it was measured by the site's author, is
+  general web behaviour, or is run as a doc test here (#129).
 
 ## [1.1.1] - 2026-10-22
 
