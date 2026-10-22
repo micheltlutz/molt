@@ -14,7 +14,7 @@
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
 [![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
-📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md)
+📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md) · 🇧🇷 [Português](docs/pt-BR/README.md)
 
 Molt is an embedded DSL: you describe the page in Rust, with a fluent builder or the `html!`
 macro, and the compiler checks it. The result is a tree of plain values rendered once as a
@@ -151,9 +151,7 @@ Features:
 Molt renders a `String`, and that is the whole integration contract with a web server: there
 is no `axum`, `actix` or `tokio` feature, and none is planned, so the core keeps zero
 mandatory dependencies. With [Axum](https://crates.io/crates/axum), `Html` already accepts a
-`String`:
-
-A complete program, from an empty `cargo new`:
+`String`, so a complete program, from an empty `cargo new`, looks like this:
 
 ```bash
 cargo add molt-framework axum

@@ -1,5 +1,7 @@
 # Getting started
 
+🇧🇷 [Versão em português](docs/pt-BR/GETTING_STARTED.md)
+
 Molt builds an HTML **string**. You assemble a tree of values, then render it once. There is
 no DOM, no runtime, no template language. Every snippet on this page is compiled and run by
 `cargo test --doc`.

@@ -1,5 +1,7 @@
 # New to Rust? Start here
 
+🇧🇷 [Versão em português](pt-BR/new-to-rust.md)
+
 This page takes you from an empty machine to a Molt page open in your browser. It assumes you
 have never used Rust. If you already have a Rust project, jump to
 [Add Molt to a project you already have](#add-molt-to-a-project-you-already-have).

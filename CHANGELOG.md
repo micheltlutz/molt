@@ -44,6 +44,9 @@ and are a different version line.
   newcomer hits. `GETTING_STARTED.md` and `README.md` now cover a new project and an existing
   one separately, and say how to run the snippets. The Axum example in `README.md` is now a
   complete program (it was missing the `Document` import and the `axum`/`tokio` dependencies).
+- Portuguese (pt-BR) translations of `README.md`, `GETTING_STARTED.md` and
+  `docs/new-to-rust.md` in `docs/pt-BR/`. The English files stay the reference; the translated
+  `GETTING_STARTED.md` is a doc test too, so its snippets cannot drift from the API.
 
 ## [1.0.1] - 2026-10-19
 
