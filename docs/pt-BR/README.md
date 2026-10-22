@@ -267,6 +267,7 @@ confiável. Veja o [`SECURITY.md`](../../SECURITY.md#rendering-depth-is-no-longe
   Molt e execute.
 - [`GETTING_STARTED.md`](GETTING_STARTED.md): uma primeira página, escape, `html!`, SEO e um
   site em disco.
+- [`performance.md`](performance.md): um checklist para publicar um site rápido e qual recurso do Molt cobre cada item.
 - [`MIGRATION.md`](../../MIGRATION.md) (inglês): da 0.1.0 para a 1.0.0, mudança por mudança.
 - [`SECURITY.md`](../../SECURITY.md) (inglês): o que é garantido, os limites e como relatar um
   problema.

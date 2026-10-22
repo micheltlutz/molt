@@ -97,4 +97,10 @@ mod guides {
 
     #[doc = include_str!("../docs/pt-BR/GETTING_STARTED.md")]
     mod getting_started_pt_br {}
+
+    #[doc = include_str!("../docs/performance.md")]
+    mod performance {}
+
+    #[doc = include_str!("../docs/pt-BR/performance.md")]
+    mod performance_pt_br {}
 }
