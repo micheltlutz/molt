@@ -441,6 +441,28 @@ ownership, and the existing test asserted that `dist` was accepted.
 
 ---
 
+### L42. A changelog entry can vanish in a merge and the build stays green
+
+(`CHANGELOG.md`, #134)
+
+Four entries of the 2.0.0 cycle (#112, #113, #114, #116, plus `ssg::OUTPUT_MARKER`) were gone
+from `[Unreleased]` although the code was in. Each PR had added a `### Added` heading under
+`[Unreleased]`, and git merged them without a conflict into four headings with the same name.
+The conflict resolver then read the section into a dict keyed by heading, so every pass kept
+only the last `### Added` and dropped the others; a rebuilt branch that took a whole file from
+an older branch (`git checkout <old> -- CHANGELOG.md`) did the same by hand. Nothing failed,
+because nothing compared the changelog with the code.
+
+- **Rule.** Do not take a whole file from another branch in a merge; resolve the conflict in
+  it. When a script merges sections, treat a repeated heading as a list to extend, never as a
+  key to overwrite.
+- **Rule.** Ask the code, not the history: every `pub` item added since the last tag has to be
+  named in `[Unreleased]` (`scripts/check-changelog.sh`, step 8 of `verify.sh`, run in CI with
+  the tags fetched).
+- **Guard.** `scripts/check-changelog.sh`
+
+---
+
 ## Process lessons
 
 ### L17. Chain commands with `&&` when a failure must stop the chain
