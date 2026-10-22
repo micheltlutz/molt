@@ -54,7 +54,7 @@ mão:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 O pacote se chama `molt-framework` (o nome `molt` no crates.io pertence a um projeto sem
@@ -247,3 +247,4 @@ primeiro e ignore os outros até corrigi-lo.
 - [O livro "The Rust Programming Language"](https://doc.rust-lang.org/book/) (inglês): a
   introdução oficial e gratuita à linguagem.
 - [docs.rs/molt-framework](https://docs.rs/molt-framework): a referência da API.
+- [www.molt-framework.io](https://www.molt-framework.io): o site do projeto, feito com o próprio Molt.

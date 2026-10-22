@@ -53,7 +53,7 @@ This adds one line under `[dependencies]` in `Cargo.toml`. You could also write 
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 The package is called `molt-framework` (the name `molt` on crates.io belongs to an unrelated
@@ -245,3 +245,4 @@ and ignore the rest until it is fixed.
 - [The Rust Book](https://doc.rust-lang.org/book/): the official, free introduction to the
   language.
 - [docs.rs/molt-framework](https://docs.rs/molt-framework): the API reference.
+- [www.molt-framework.io](https://www.molt-framework.io): the project site, built with Molt itself.

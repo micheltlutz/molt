@@ -6,7 +6,7 @@
 //! makes the `parallel` feature sound.
 
 use crate::core::attribute::Attribute;
-use crate::core::element::Element;
+use crate::core::element::{DebugNode, Descendants, Element};
 use crate::core::escape::write_escaped_text;
 use crate::core::render::{Render, RenderOptions};
 use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_sensitive};
@@ -19,7 +19,6 @@ use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_s
 /// let node = Node::from(div().text("hi"));
 /// assert_eq!(node.render(), "<div>hi</div>");
 /// ```
-#[derive(Debug)]
 #[non_exhaustive]
 pub enum Node {
     /// An element with a tag name, attributes and children.
@@ -112,6 +111,37 @@ impl PartialEq<&str> for Markup {
 }
 
 impl Node {
+    /// The first element below this node, in document order, with this tag.
+    ///
+    /// An element's own tag is not a match, only what is inside it; a fragment is transparent,
+    /// so the elements it holds count. See [`Element::find`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let nodes = Node::fragment([h1().text("Title").into(), p().text("Body").into()]);
+    /// assert_eq!(nodes.find("p").map(Render::render).as_deref(), Some("<p>Body</p>"));
+    /// ```
+    #[must_use]
+    pub fn find(&self, tag: &str) -> Option<&Element> {
+        Descendants::new(self.below()).find(|element| element.tag() == tag)
+    }
+
+    /// Every element below this node with this tag, in document order. See [`Node::find`].
+    pub fn find_all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Element> + 'a {
+        Descendants::new(self.below()).filter(move |element| element.tag() == tag)
+    }
+
+    /// What a search starts from: an element's children, a fragment's nodes, nothing for the rest.
+    fn below(&self) -> &[Node] {
+        match self {
+            Self::Element(element) => element.children(),
+            Self::Fragment(children) => children,
+            _ => &[],
+        }
+    }
+
     /// Creates a text node, escaping the content.
     #[must_use]
     pub fn text(content: impl AsRef<str>) -> Self {
@@ -212,11 +242,23 @@ impl Node {
     }
 }
 
-// `Clone` and `PartialEq` are written by hand, not derived: the derives recurse once per
-// level and a stack overflow is an abort, so comparing or copying a tree the renderer
-// handles fine would have killed the process. `Debug` is still derived — formatting a
-// tree that deep is a diagnostic nobody reads, and `{:?}` on one is documented as unsafe
-// in `SECURITY.md`.
+// `Clone`, `PartialEq` and `Debug` are written by hand, not derived: the derives recurse once
+// per level and a stack overflow is an abort, so comparing, copying or formatting a tree the
+// renderer handles fine would have killed the process. `Debug` is bounded rather than
+// iterative; see `DEBUG_MAX_DEPTH` in `element.rs`.
+/// As for [`Element`]: the same text the derive wrote, down to a depth limit, and `...` below it.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(format!("{:?}", Node::text("a<b")), r#"Text(Markup("a&lt;b"))"#);
+/// ```
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        DebugNode(self, 0).fmt(f)
+    }
+}
+
 impl Clone for Node {
     fn clone(&self) -> Self {
         crate::core::element::clone_tree(Source::Node(self))
@@ -344,6 +386,7 @@ pub(crate) fn write_element_tree(
 /// `push_compact_element`/`push_pretty_element` would for an `<html>` with two children.
 pub(crate) fn write_document_root(
     lang: Option<&str>,
+    attributes: &[Attribute],
     head: &Element,
     body: &Element,
     out: &mut String,
@@ -352,11 +395,7 @@ pub(crate) fn write_document_root(
     if options.pretty {
         options.write_indent(out, 0);
     }
-    out.push_str("<html");
-    if let Some(lang) = lang {
-        Attribute::new_static("lang", lang).write_into(out);
-    }
-    out.push('>');
+    write_html_open_tag(lang, attributes, out);
 
     // The stack is a LIFO: the last step pushed runs first.
     let steps = if options.pretty {
@@ -380,6 +419,18 @@ pub(crate) fn write_document_root(
     };
     // `<html>` is written above by hand, so head and body already sit one level down.
     run_steps(steps, out, options, 1);
+}
+
+/// Writes `<html lang="…" …>`: the one place the root's opening tag is written, so the whole
+/// render and the streamed render cannot drift. The attributes are checked as they would be on
+/// an `<html>` element in a tree.
+pub(crate) fn write_html_open_tag(lang: Option<&str>, attributes: &[Attribute], out: &mut String) {
+    out.push_str("<html");
+    if let Some(lang) = lang {
+        Attribute::new_static("lang", lang).write_into_in(out, false, "html");
+    }
+    write_attributes(attributes, out, false, "html");
+    out.push('>');
 }
 
 /// One unit of work for the writer.
@@ -998,6 +1049,98 @@ mod tests {
     fn content_goes_on_its_own_line_before_children() {
         let tree = div().text("lead").child(p().text("body"));
         assert_eq!(tree.render_pretty(), "<div>\n  lead\n  <p>body</p>\n</div>");
+    }
+
+    /// The site's contact block: a label child, then the value as text. It rendered the value
+    /// first because `text` filled a slot that the renderer always emits before the children.
+    #[test]
+    fn child_then_text_keeps_call_order() {
+        let tree = p().child(i().text("Owner: ")).text("Ada");
+        assert_eq!(tree.render(), "<p><i>Owner: </i>Ada</p>");
+        assert_eq!(tree.render_pretty(), "<p>\n  <i>Owner: </i>\n  Ada\n</p>");
+    }
+
+    #[test]
+    fn text_then_child_then_text_keeps_call_order() {
+        let tree = p().text("a ").child(span().text("b")).text(" c");
+        assert_eq!(tree.render(), "<p>a <span>b</span> c</p>");
+    }
+
+    #[test]
+    fn two_text_calls_append() {
+        assert_eq!(p().text("a").text("b").render(), "<p>ab</p>");
+        assert_eq!(p().text("a<").text("<b").render(), "<p>a&lt;&lt;b</p>");
+    }
+
+    #[test]
+    fn raw_text_follows_the_same_order_and_text_after_it_is_still_escaped() {
+        // The raw string is trusted markup written in the test.
+        let tree = p().raw_text("<i>").child(span()).raw_text("</i>").text("<");
+        assert_eq!(tree.render(), "<p><i><span></span></i>&lt;</p>");
+    }
+
+    #[test]
+    fn a_code_window_line_ends_with_its_newline() {
+        let line = span()
+            .child(span().text("1"))
+            .child(span().text(" let x = 1;"))
+            .text("\n");
+        assert_eq!(
+            line.render(),
+            "<span><span>1</span><span> let x = 1;</span>\n</span>"
+        );
+    }
+
+    #[test]
+    fn find_returns_the_first_match_in_document_order_and_never_the_element_itself() {
+        let tree = div()
+            .child(p().child(span().text("inner")))
+            .child(span().text("outer"));
+        assert_eq!(
+            tree.find("span").map(Render::render).as_deref(),
+            Some("<span>inner</span>")
+        );
+        assert_eq!(tree.find_all("span").count(), 2);
+        assert!(tree.find("div").is_none(), "only what is inside counts");
+        assert!(tree.find("table").is_none());
+    }
+
+    #[test]
+    fn find_all_lists_matches_in_document_order() {
+        let tree = ul().children_from(["a", "b", "c"].map(|x| li().text(x)));
+        let texts: Vec<String> = tree.find_all("li").map(Render::render).collect();
+        assert_eq!(texts, ["<li>a</li>", "<li>b</li>", "<li>c</li>"]);
+    }
+
+    #[test]
+    fn a_fragment_is_transparent_to_a_search() {
+        let nodes = Node::fragment([
+            Node::text("x"),
+            Node::fragment([Node::from(h1().text("T"))]),
+            Node::from(p().child(h1().text("U"))),
+        ]);
+        assert_eq!(nodes.find_all("h1").count(), 2);
+        assert!(Node::text("x").find("p").is_none());
+        let wrapper = Node::from(div().child(p()));
+        assert!(wrapper.find("div").is_none());
+        assert!(wrapper.find("p").is_some());
+    }
+
+    #[test]
+    fn attribute_reads_the_value_as_written_and_the_first_of_a_repeated_name() {
+        let link = a_like();
+        assert_eq!(link.attribute("href"), Some("/x?a=1&amp;b=2"));
+        assert_eq!(link.attribute("hidden"), Some(""));
+        assert_eq!(link.attribute("title"), Some("first"));
+        assert_eq!(link.attribute("missing"), None);
+    }
+
+    fn a_like() -> Element {
+        Element::new("a")
+            .attr("href", "/x?a=1&b=2")
+            .attr("title", "first")
+            .attr("title", "second")
+            .bool_attr("hidden")
     }
 
     #[test]

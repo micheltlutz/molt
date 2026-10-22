@@ -1,0 +1,31 @@
+# Molt
+
+> Molt (crate `molt-framework`, library `molt`) builds HTML as a tree of plain Rust values and renders it once to a `String`. Text and attribute values are escaped when they enter the tree. There is no DOM, no runtime and no template language, and no dependency in the default build. It is the HTML layer only: routing, servers, Markdown, and bundling CSS or JS are other tools' work.
+
+Paths below are relative to this file. The published crate and the repository have the same layout, so they are the same files in an unpacked `~/.cargo/registry/src/*/molt-framework-<version>/`. Read `docs/capabilities.md` before searching the source for an API: it says what exists in which version and what is left out on purpose.
+
+## Start here
+
+- [README.md](README.md): what the crate is, what it does not do, the install line
+- [docs/capabilities.md](docs/capabilities.md): is there an API for X? per version; out of scope by design
+- [docs/pitfalls.md](docs/pitfalls.md): wrong characters, missing output, wrong shape, compile errors, by symptom
+- [GETTING_STARTED.md](GETTING_STARTED.md): a first page, escaping, the `html!` macro, SEO, a site on disk
+
+## Reference
+
+- [docs/tag-catalog.md](docs/tag-catalog.md): every element constructor
+- [docs/performance.md](docs/performance.md): a checklist for shipping a fast site, and which helper covers each item
+- [examples/static_site.rs](examples/static_site.rs): a whole static site
+- [examples/marketing_page.rs](examples/marketing_page.rs): a whole page with SEO metadata
+- [SECURITY.md](SECURITY.md): what is guaranteed and the limits of it
+- [MIGRATION.md](MIGRATION.md): moving between versions
+- [CHANGELOG.md](CHANGELOG.md): what each version changed
+
+## Optional
+
+- [docs/agents.md](docs/agents.md): a block to paste into a project's `AGENTS.md`, and how to install the official skill
+- [molt-framework-skill](https://github.com/micheltlutz/molt-framework-skill): the official Claude Code skill, as a plugin
+- [docs/new-to-rust.md](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it
+- [ROADMAP.md](ROADMAP.md): what is likely next
+- [API reference on docs.rs](https://docs.rs/molt-framework)
+- [Project site](https://www.molt-framework.io)

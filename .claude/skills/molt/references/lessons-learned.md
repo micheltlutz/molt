@@ -100,15 +100,20 @@ created *during* the build is not closed.
 - **Rule.** Any function that visits every node uses an explicit `Vec` stack (see `Step` in
   `src/core/node.rs`, `clone_tree`/`trees_equal`/`hash_tree` in `src/core/element.rs`). `Drop`
   must be iterative too (`impl Drop for Element`). Write `Clone`, `PartialEq`, `Eq`, `Hash`
-  by hand for the tree types. `Debug` is the one derive that stays recursive; document it.
-- **Test rule.** In a deep-tree test use `assert!(a == b)`, **not** `assert_eq!`: on failure
-  `assert_eq!` formats both trees with the recursive `Debug` and overflows in the very case
-  under test. Clippy's `manual_assert_eq` objects; allow it with a comment saying why.
+  by hand for the tree types. `Debug` was left derived and recursive at first (it still
+  aborted `assert_eq!`); since #79 it is hand-written and stops at 128 levels with `...`.
+- **Test rule.** In a deep-tree test prefer `assert!(a == b)` to `assert_eq!`. On failure
+  `assert_eq!` formats both trees, which used to overflow in the very case under test and now
+  panics with a bounded message. Clippy's `manual_assert_eq` objects; allow it with a comment
+  saying why.
 - **Guard.** `cloning_and_comparing_a_very_deep_tree_does_not_abort`,
   `cloning_and_comparing_deep_fragments_does_not_abort`,
   `a_document_with_a_very_deep_body_renders_in_both_modes`,
   `auditing_a_very_deep_tree_does_not_abort`, `hashing_a_very_deep_tree_does_not_abort`,
-  `displaying_a_very_deep_tree_does_not_abort`
+  `displaying_a_very_deep_tree_does_not_abort`, `formatting_a_very_deep_tree_with_debug_does_not_abort`,
+  `debug_of_a_very_deep_tree_fits_in_a_small_stack`,
+  `a_failing_assert_eq_on_deep_trees_panics_instead_of_aborting`,
+  `debug_writes_what_the_derive_wrote`
 
 ### L7. Replace a clone with a borrow, then prove the bytes did not move
 
@@ -395,6 +400,66 @@ guess a permission scope you cannot confirm (`configure-pages` kept `pages: writ
 
 - **Guard.** `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
   `scripts/check-knowledge-base.sh`
+
+---
+
+### L40. A fluent builder promises that call order is document order
+
+(`src/core/node.rs`, #110)
+
+The site built a contact line as `p().child(strong().text("Owner: ")).text(NAME)` and the page
+showed `NAME` first. `Element` kept text in a `content` slot that the renderer always wrote
+before the children, so the position of `.text()` in the chain meant nothing, and a second
+`.text()` silently replaced the first. No test noticed: the assertions counted lines and
+looked for substrings, and only a screenshot showed it.
+
+- **Rule.** In a builder, anything that appends keeps the order of the calls. Text added after
+  a child is a child; text added before any child may stay in the cheap leaf slot.
+- **Rule.** Assert order on the rendered string (`<p><i>Owner: </i>Ada</p>`), not with
+  `contains` and not by counting.
+- **Guard.** `child_then_text_keeps_call_order`, `text_then_child_then_text_keeps_call_order`,
+  `two_text_calls_append`
+
+---
+
+### L41. A destructive call must know the directory is its own, not only that it is not catastrophic
+
+(`src/ssg.rs`, #115)
+
+`clean()` refused `/`, `..`, the home directory, the working directory and its ancestors. It
+still emptied `./dist` of whatever directory the process ran from: `StaticSiteGenerator::new("dist")`
+resolves against the cwd, so a build started from another project (`cargo run --manifest-path`)
+deleted that project's output. The guard was a list of catastrophic paths with no notion of
+ownership, and the existing test asserted that `dist` was accepted.
+
+- **Rule.** Before `remove_dir_all`, show the directory is yours: missing, empty, or carrying a
+  file you wrote (`.molt-output`). Refuse a symbolic link as the root.
+- **Rule.** Test ownership with a temporary directory and an absolute path, never by changing
+  the working directory (L5); the spelling of the path does not change the answer.
+- **Guard.** `clean_refuses_a_directory_it_did_not_make`, `clean_empties_a_directory_that_has_the_marker`,
+  `clean_refuses_an_output_directory_that_is_a_symlink`
+
+---
+
+### L42. A changelog entry can vanish in a merge and the build stays green
+
+(`CHANGELOG.md`, #134)
+
+Four entries of the 2.0.0 cycle (#112, #113, #114, #116, plus `ssg::OUTPUT_MARKER`) were gone
+from `[Unreleased]` although the code was in. Each PR had added a `### Added` heading under
+`[Unreleased]`, and git merged them without a conflict into four headings with the same name.
+The conflict resolver then read the section into a dict keyed by heading, so every pass kept
+only the last `### Added` and dropped the others; a rebuilt branch that took a whole file from
+an older branch (`git checkout <old> -- CHANGELOG.md`) did the same by hand. Nothing failed,
+because nothing compared the changelog with the code.
+
+- **Rule.** Do not take a whole file from another branch in a merge; resolve the conflict in
+  it. When a script merges sections, treat a repeated heading as a list to extend, never as a
+  key to overwrite.
+- **Rule.** Ask the code, not the history: every `pub` item added since the last tag has to be
+  named in `[Unreleased]` (or in the version section a release branch moves it to) (`scripts/check-changelog.sh`, step 8 of `verify.sh`, run in CI with
+  the tags fetched).
+- **Guard.** `scripts/check-changelog.sh`
 
 ---
 

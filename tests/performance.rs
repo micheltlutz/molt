@@ -242,3 +242,73 @@ fn displaying_a_very_deep_tree_does_not_abort() {
         VERY_DEEP
     );
 }
+
+/// `find` and `find_all` walk with an explicit stack, so a 100,000-level tree is no more a
+/// stack limit to search than it is to render.
+#[test]
+fn searching_a_very_deep_tree_does_not_abort() {
+    let mut node = Node::from(img().attr("src", "/a.png"));
+    for _ in 0..VERY_DEEP {
+        node = Node::from(div().child(node));
+    }
+    node = Node::fragment([node, Node::from(img().attr("src", "/b.png"))]);
+
+    assert_eq!(node.find_all("img").count(), 2);
+    assert_eq!(node.find_all("div").count(), VERY_DEEP);
+    let deepest = node.find("img").expect("an image");
+    assert_eq!(deepest.attribute("src"), Some("/a.png"));
+
+    let tree = deep_tree(VERY_DEEP);
+    assert!(tree.find("p").is_some());
+    assert_eq!(tree.find_all("div").count(), VERY_DEEP - 1);
+}
+
+/// `Debug` used to be the one derive that recursed once per level, so `{:?}`, and the message of
+/// a failing `assert_eq!`, aborted the process on a tree the renderer handles. It now stops at a
+/// depth limit and writes `...` below it (#79).
+#[test]
+fn formatting_a_very_deep_tree_with_debug_does_not_abort() {
+    let tree = deep_tree(VERY_DEEP);
+    let node = Node::from(deep_tree(VERY_DEEP));
+
+    for shown in [
+        format!("{tree:?}"),
+        format!("{tree:#?}"),
+        format!("{node:?}"),
+        format!("{node:#?}"),
+    ] {
+        assert!(shown.contains("..."));
+        // The pretty form of the 128 levels that are shown is about 1 MB; the tree is 100,000.
+        assert!(shown.len() < 2_000_000, "{} bytes", shown.len());
+    }
+}
+
+/// The recursion that is left is bounded by the depth limit, not by the tree, so it fits in a
+/// stack far smaller than a thread's default. The pretty form nests a padding writer per level.
+#[test]
+fn debug_of_a_very_deep_tree_fits_in_a_small_stack() {
+    let outcome = std::thread::Builder::new()
+        .stack_size(512 * 1024)
+        .spawn(|| {
+            let tree = deep_tree(VERY_DEEP);
+            format!("{tree:#?}").len()
+        })
+        .expect("a thread")
+        .join();
+    assert!(outcome.is_ok(), "formatting overflowed a 512 KiB stack");
+}
+
+/// A failing `assert_eq!` on two deep trees formats both with `Debug`; it has to panic with a
+/// message, not abort.
+#[test]
+fn a_failing_assert_eq_on_deep_trees_panics_instead_of_aborting() {
+    let result = std::thread::Builder::new()
+        .stack_size(512 * 1024)
+        .spawn(|| {
+            let (a, b) = (deep_tree(VERY_DEEP), deep_tree(VERY_DEEP).child(br()));
+            assert_eq!(a, b);
+        })
+        .expect("a thread")
+        .join();
+    assert!(result.is_err(), "the assertion should have failed");
+}

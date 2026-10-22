@@ -5,11 +5,105 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`molt-framework` 0.1.0 was its first release; this is 1.0.0. The `winged-rust 1.0.0` and
+`molt-framework` 0.1.0 was its first release; 1.0.0 froze the public API; 2.0.0 is the first release since that changes behaviour (see [`MIGRATION.md`](MIGRATION.md)). The `winged-rust 1.0.0` and
 `winged-rust 1.0.1` entries at the bottom are the crate's earlier history under its old name
 and are a different version line.
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-10-22
+
+A major release. The public API only grows: no public item was removed or changed, and the
+new ones are listed under *Added*. The rendered output and the runtime behaviour change in
+three places, on purpose: `text()` and `raw_text()` append in call order, `clean()` needs the
+`.molt-output` marker, and `Debug` stops at 128 levels. Each is under *Breaking*, *Security* or
+*Fixed* below, with its row in [`MIGRATION.md`](MIGRATION.md) (1.x to 2.0.0).
+
+### Breaking
+
+- `Element::text` and `Element::raw_text` append at the position of the call instead of
+  replacing a content slot that always rendered before the children. `p().child(x).text(y)`
+  now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
+  `MIGRATION.md`'s *Output changes* table.
+- `StaticSiteGenerator::clean` only empties a directory that is missing, empty, or holds the
+  `.molt-output` marker. Writing a page or an asset leaves the marker, so a site Molt built
+  keeps working; a `dist` made before 2.0.0, or by anything else, is refused once with
+  `SsgError::UnsafeCleanTarget` (#115). A row in `MIGRATION.md`.
+
+### Security
+
+- `clean()` with a relative path no longer empties the `./dist` of whatever directory the
+  process runs from: the output directory has to carry the marker. A symbolic link as the
+  output directory is refused too (#115).
+
+### Added
+
+- `scripts/check-changelog.sh`, step 8 of `scripts/verify.sh`: fails when a public item
+  added since the last release tag is not named in `[Unreleased]`. The CI verify job now
+  fetches the tags for it (#134).
+- `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
+  (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
+  and `root()`. `Document` gains the public field `html_attributes` (#111).
+- `SeoBuilder` setters `robots`, `viewport`, `canonical`, `alternate` (repeatable, `x-default`
+  included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
+  `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
+  a builder that does not call them renders what it did before (#112).
+- `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
+  directory, atomically per file, with a name filter. Symbolic links in the source are skipped
+  and the output directory is never copied into itself. Returns the number of files (#113).
+- `ssg::OUTPUT_MARKER`, the name of that file.
+- `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
+  versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
+  is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
+- `Element::find`, `Element::find_all` and `Node::find`, `Node::find_all`: search a tree for
+  elements by tag, in document order, with an explicit stack and without cloning; and
+  `Element::attribute(name)`, the value as written into the markup. For asserting on a built
+  tree in a test. There is no `text_content`: text is stored escaped, so it would have to
+  return markup, and `find(..).render()` already says that (#116).
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests)
+  and takes `type` from the extension (#128).
+- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
+  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
+  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
+- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
+  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
+  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
+  or `url(...)`; the doc says how to work with that (#126).
+- `.github/workflows/fuzz.yml`: the four fuzz targets run every night and on demand, on
+  nightly Rust with a pinned `cargo-fuzz`, with the corpus kept between runs and a crashing
+  input uploaded as an artifact. It is outside the pull-request gate, so a red run never blocks
+  a merge. `scripts/fuzz.sh` now runs every target even after one fails (#91).
+
+### Fixed
+
+- `Debug` for `Node` and `Element` no longer aborts the process on a deeply nested tree. It
+  was a derive that recursed once per level, so `{:?}` and the failure message of
+  `assert_eq!` on a 100,000-level tree overflowed the stack. It is now written by hand, prints
+  what the derive printed down to 128 levels, and writes `...` below that (#79).
+
+### Documentation
+
+- The official Claude Code skill, `using-molt-framework`, is documented in the README (and its
+  pt-BR copy), `docs/agents.md` and `llms.txt`: its repository is
+  [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill), installed with
+  `/plugin marketplace add` and `/plugin install`, or with `npx skills add`. It is submitted to
+  Anthropic's plugin directory and waiting for review.
+- The README, its pt-BR copy, the getting-started guides, `SECURITY.md`, `CONTRIBUTING.md`
+  and `ROADMAP.md` describe 2.0: install lines say `"2.0"`, the feature lists name the new
+  APIs, 1.x stops receiving fixes, and the roadmap is the 2.x line. `MIGRATION.md` has one
+  section for 1.x to 2.0.0 (output changes, `clean()` and the marker, what is new).
+- `docs/capabilities.md`, `docs/pitfalls.md`, `docs/agents.md` and `llms.txt`, which ship in
+  the published crate (the `.claude/` notes do not): is there an API for X by version and what
+  is out of scope on purpose, the symptom-to-fix tables, a block to paste into a project's
+  `AGENTS.md`, and an index in the llmstxt.org format. `scripts/check-knowledge-base.sh` checks
+  that they are in `cargo package --list` and that their links resolve (#135).
+- The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`,
+  so crates.io shows it), the READMEs, the getting-started guides and the crate documentation
+  (#117).
+- `docs/performance.md` (and `docs/pt-BR/performance.md`): a checklist for shipping a fast
+  site built with Molt. Each item says whether it was measured by the site's author, is
+  general web behaviour, or is run as a doc test here (#129).
 
 ## [1.1.1] - 2026-10-22
 

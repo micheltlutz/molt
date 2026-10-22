@@ -3,6 +3,8 @@
 //! A composite tree of plain values, escaped by default and rendered compact or pretty,
 //! compiled to native code or to `wasm32-unknown-unknown`.
 //!
+//! The project site, built with Molt itself, is <https://www.molt-framework.io>.
+//!
 //! # Getting started
 //!
 //! ```
@@ -97,4 +99,13 @@ mod guides {
 
     #[doc = include_str!("../docs/pt-BR/GETTING_STARTED.md")]
     mod getting_started_pt_br {}
+
+    #[doc = include_str!("../docs/performance.md")]
+    mod performance {}
+
+    #[doc = include_str!("../docs/capabilities.md")]
+    mod capabilities {}
+
+    #[doc = include_str!("../docs/pt-BR/performance.md")]
+    mod performance_pt_br {}
 }

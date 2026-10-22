@@ -15,9 +15,11 @@ patch release, and the advisory is published once users have had a chance to upg
 
 ## Supported versions
 
-The latest released version. There are no long-term support branches. When 1.0.0 ships, 0.1.x
-stops receiving fixes: [`MIGRATION.md`](MIGRATION.md) is the way forward, and several of the
-fixes below changed output, so they are not backported.
+The latest released version. There are no long-term support branches. When 2.0.0 ships, 1.x
+stops receiving fixes, as 0.1.x did at 1.0.0: [`MIGRATION.md`](MIGRATION.md) is the way
+forward, and several of the fixes below changed output or behaviour, so they are not
+backported. The 2.0.0 ones are the ownership check in `clean()` and a `Debug` that no longer
+aborts on a deep tree.
 
 ## How the guarantees map onto the OWASP Top 10 (2021)
 
@@ -27,7 +29,7 @@ and where each is enforced (the full table of inputs is in
 
 | category | in Molt | enforced by |
 | --- | --- | --- |
-| A01 Broken Access Control | path traversal and destructive operations in `StaticSiteGenerator` | component whitelist, symlink refusal, a pure `clean()` guard |
+| A01 Broken Access Control | path traversal and destructive operations in `StaticSiteGenerator` | component whitelist, symlink refusal, a pure `clean()` guard, and the `.molt-output` marker `clean()` requires |
 | A03 Injection | text, attribute values, names, comments, URLs, JSON and XML reaching the output | escaping on entry, write-time validation, the URL policy, `escape_json_script`, `escape_xml` |
 | A04 Insecure Design | an unsafe call that is only discouraged in a comment | types that cannot be built wrongly (`Markup`, `ChangeFreq`, private `indent`) |
 | A05 Security Misconfiguration | CI and release | pinned actions, read-only token, a release gated on `main` and green CI |
@@ -61,8 +63,10 @@ These are vulnerabilities:
 - `StaticSiteGenerator` writing outside its output directory (a `..` component, a root or
   drive prefix, or an existing symbolic link on the way), or `clean()` deleting outside it.
   `clean()` refuses `.`, the working directory and its ancestors, the home directory, and
-  top-level directories such as `/usr`. A symlink created *while* a build runs is a race this
-  crate does not close.
+  top-level directories such as `/usr`. Since 2.0.0 it also refuses a symbolic link and any
+  directory that has contents but no `.molt-output` marker, because a relative output path is
+  resolved against the current directory of the process, which may belong to another project.
+  A symlink created *while* a build runs is a race this crate does not close.
 
 ### Rendering depth is no longer bounded by the stack
 
@@ -88,9 +92,10 @@ with markup in it (`renderWithIndent(untrusted)` from JavaScript) would put that
 every line.
 
 `Document::render`, `audit`, `Clone` and `PartialEq` are iterative as well, so a document, an
-accessibility audit, a copy or a comparison of a 100,000-level tree is safe. **`Debug` is
-not**: `{:?}` (and the failure message of `assert_eq!`) on a tree that deep recurses and
-aborts. Compare with `assert!(a == b)` in tests that build trees that deep.
+accessibility audit, a copy or a comparison of a 100,000-level tree is safe. So is `Debug`
+since 2.0.0: `{:?}` (and the failure message of `assert_eq!`) writes the first 128 levels and
+`...` below them. Before 2.0.0 it recursed once per level and aborted the process on a tree
+that deep. The text is for people to read and is not a format.
 
 One residual, and it is not a stack limit on rendering: a bare `Node::Fragment` chain with
 no element anywhere in it is still freed recursively. Giving `Node` its own `Drop` would

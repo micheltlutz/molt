@@ -14,7 +14,7 @@
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
 [![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
-📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md) · 🇧🇷 [Português](docs/pt-BR/README.md)
+🌐 **[molt-framework.io](https://www.molt-framework.io)** · 📦 [crates.io](https://crates.io/crates/molt-framework) · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md) · 🇧🇷 [Português](docs/pt-BR/README.md)
 
 Molt is an embedded DSL: you describe the page in Rust, with a fluent builder or the `html!`
 macro, and the compiler checks it. The result is a tree of plain values rendered once as a
@@ -79,8 +79,9 @@ cannot become markup, and it is enforced where the data enters, not where you re
   the element.
 - `raw_text`, `Node::raw`, `Attribute::raw` and `trusted_url` are the only ways around any of
   this. They are named so an audit is one `grep`.
-- `unsafe_code = "forbid"`, `cargo deny` on the dependency graph, four fuzz targets, and
-  [`SECURITY.md`](SECURITY.md) maps every guarantee onto the OWASP Top 10.
+- `unsafe_code = "forbid"`, `cargo deny` on the dependency graph, four fuzz targets scheduled
+  to run every night, and [`SECURITY.md`](SECURITY.md) maps every guarantee onto the OWASP
+  Top 10.
 
 ```rust
 # use molt::prelude::*;
@@ -91,11 +92,12 @@ assert_eq!(a().attr("href", "javascript:alert(1)").render(), r##"<a href="#"></a
 
 **Robust under hostile input.** Rendering, cloning, comparing, auditing and dropping a tree
 all walk an explicit stack, never the call stack, so nesting depth cannot be turned into a
-process abort. A 100,000-level tree renders in both modes in the test suite, and
+process abort; `Debug` stops at 128 levels and writes `...`, so even a failing `assert_eq!`
+on a deep tree cannot abort. A 100,000-level tree renders in both modes in the test suite, and
 `RenderOptions::with_max_depth` bounds depth that comes from outside. Output is pinned
 byte for byte by golden fixtures: a change in markup is a failing test, never a surprise in
-production. The crate is 1.x, so what compiles today keeps compiling, and
-[`MIGRATION.md`](MIGRATION.md) shows every change that ever altered output.
+production. The crate is 2.x, so what compiles today keeps compiling, and
+[`MIGRATION.md`](MIGRATION.md) shows every change that altered output.
 
 **Light.** Zero mandatory dependencies: `cargo tree` on the default features shows one crate,
 this one. `wasm-bindgen` and `rayon` are opt-in features. The WebAssembly build is about
@@ -128,7 +130,7 @@ or, by hand, in `Cargo.toml`:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 New to Rust? [`docs/new-to-rust.md`](docs/new-to-rust.md) goes from installing Rust to a page
@@ -206,13 +208,19 @@ welcome as a separate project that depends on this one; see [`ROADMAP.md`](ROADM
 - **Fluent builder API** — `set_id`, `add_class`, `add_classes`, `set_style`, `attr`,
   `data_attr(s)`, `aria_attr(s)`, `set_role`, `child`, `text`, `raw_text`
 - **`html!` macro** — nesting, attributes, `@if` / `@else`, `@for`
-- **`Document`** — owns the doctype, renders pretty by default
+- **`Document`** — owns the doctype, renders pretty by default, and takes attributes on
+  `<html>` (`html_attr`)
 - **`Layout` trait** — reusable page shells
-- **SEO** — Open Graph, Twitter Cards, the common `<meta>` block, and a `SeoBuilder`
+- **SEO** — Open Graph, Twitter Cards, the common `<meta>` block, and a `SeoBuilder` with
+  canonical and `hreflang` links, locales, image size and alt, `theme-color` and `robots`
 - **Accessibility** — ARIA helpers plus an audit that finds images without `alt`, buttons
   with no accessible name, iframes without a title
-- **Sitemaps and RSS 2.0**
-- **Static site generation** — atomic writes, asset copying, optional parallelism
+- **Sitemaps and RSS 2.0** — sitemap entries can list `hreflang` alternates
+- **Static site generation** — atomic writes, asset and directory copying, content-hashed file
+  names, a `clean()` that only empties a directory Molt made, optional parallelism
+- **Delivery helpers** — `preload_font`, and `Element::csp_hash` for inline `<script>` and
+  `<style>` under a strict Content-Security-Policy
+- **Tree queries** — `find`, `find_all` and `attribute`, to assert on a built tree in a test
 - **WebAssembly** — the same API from JavaScript
 
 ## WebAssembly
@@ -247,19 +255,45 @@ depth limit — the writer walks an explicit stack rather than recursing — but
 worth knowing about when depth comes from untrusted input. See
 [`SECURITY.md`](SECURITY.md#rendering-depth-is-no-longer-bounded-by-the-stack).
 
+## Using Molt with an AI agent
+
+The official Claude Code skill, [`molt-framework-skill`](https://github.com/micheltlutz/molt-framework-skill),
+tells an agent which APIs exist in the version a project has, and the fix for the usual
+symptoms, before it searches the source. It is submitted to Anthropic's plugin directory and
+waiting for review; until then, install it from the repository.
+
+```text
+/plugin marketplace add micheltlutz/molt-framework-skill
+/plugin install molt-framework@molt
+```
+
+Or, from a terminal, with the [`skills`](https://github.com/vercel-labs/skills) installer:
+
+```bash
+npx skills add micheltlutz/molt-framework-skill --skill using-molt-framework -a claude-code
+```
+
+Without the skill, [`docs/agents.md`](docs/agents.md) has a block to paste into a project's
+`AGENTS.md`, and [`llms.txt`](llms.txt) is the index.
+
 ## Documentation
 
 - [`docs/new-to-rust.md`](docs/new-to-rust.md): never used Rust? install, create a project, add Molt, run it.
 - [`GETTING_STARTED.md`](GETTING_STARTED.md): a first page, escaping, `html!`, SEO, a site on disk.
-- [`MIGRATION.md`](MIGRATION.md): from 0.1.0 to 1.0.0, change by change.
+- [`docs/capabilities.md`](docs/capabilities.md): is there an API for X? by version, and what is out of scope on purpose.
+- [`docs/pitfalls.md`](docs/pitfalls.md): wrong characters, missing output, compile errors, by symptom.
+- [`docs/performance.md`](docs/performance.md): a checklist for shipping a fast site, and which Molt helper covers each item.
+- [`llms.txt`](llms.txt) and [`docs/agents.md`](docs/agents.md): an index for AI agents, and a block for a project's `AGENTS.md`.
+- [`MIGRATION.md`](MIGRATION.md): from 1.x to 2.0.0, and from 0.1.0 to 1.0.0, change by change.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
 - [`ROADMAP.md`](ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).
 - API reference on [docs.rs](https://docs.rs/molt-framework).
+- The project site, built with Molt itself: [www.molt-framework.io](https://www.molt-framework.io).
 
 ## Development
 
 ```bash
-./scripts/verify.sh        # build, test, clippy, fmt, catalog, fixtures, smoke test
+./scripts/verify.sh        # build, test, lint, catalog, fixtures, smoke test, docs, changelog
 cargo test                 # unit, integration and doc tests
 cargo bench                # render performance
 ```

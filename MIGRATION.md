@@ -1,3 +1,64 @@
+# Migrating from 1.x to 2.0.0
+
+2.0.0 changes three behaviours on purpose, because each was unsafe or surprising. **No public
+item was removed or changed**: the only public lines gone from `src/` since 1.1.1 are the two
+`#[derive(Debug)]`, replaced by hand-written impls, and the new public fields
+(`Document::html_attributes`, `SitemapUrl::alternates`) are on `#[non_exhaustive]` structs,
+which could not be built with a struct literal outside the crate anyway. What changes is the
+output and the runtime behaviour of code that already builds, so render your pages before and
+after (the `molt-migrate` skill in `.claude/skills` has the procedure).
+
+1. Bump the dependency: `molt-framework = "2.0"`.
+2. `cargo build`; nothing should need an edit.
+3. Render and diff your pages. The two rows of the table below that change markup are the
+   only place output moves.
+4. Run your site build once. If it calls `StaticSiteGenerator::clean` on a `dist` that Molt did
+   not write, read the last section.
+
+## Output changes (no edit needed unless you relied on the old behaviour)
+
+| input | 1.x | 2.0.0 |
+| --- | --- | --- |
+| `p().child(strong()).text("after")` | `<p>after<strong></strong></p>` (text always first) | `<p><strong></strong>after</p>` |
+| `p().text("a").text("b")` | `<p>b</p>` (the second call replaced the first) | `<p>ab</p>` |
+| `{:?}` or a failing `assert_eq!` on a tree deeper than 128 levels | recursed once per level and aborted the process on a very deep tree | writes the first 128 levels and `...` |
+
+`text` and `raw_text` now append where they are called. Text added before any child is still
+stored as the element's content, so a leaf like `p().text("x")` costs what it did. If you
+called `text` twice to overwrite, build the string once instead. The text of `Debug` is for
+people to read and was never a format; for a tree up to 128 levels deep it is the text the
+derive wrote.
+
+## `StaticSiteGenerator::clean` needs the marker
+
+`clean()` used to empty whatever `output_directory` named, and a relative path such as
+`"dist"` is resolved against the current directory of the **process**. A build started from
+another project (`cargo run --manifest-path ...`) emptied that project's `dist`. Now it empties
+a directory only if it is missing, empty, or contains `.molt-output`. Writing a page or an asset
+leaves the marker, so a site Molt builds with 2.0.0 keeps working.
+
+| situation | 1.x | 2.0.0 |
+| --- | --- | --- |
+| `clean(true)` on a `dist` Molt wrote with 2.0.0 or later | emptied | emptied (the marker is kept) |
+| `clean(true)` on a `dist` made by 1.x, or by another tool, with files in it | emptied | `SsgError::UnsafeCleanTarget`, nothing removed |
+| `clean(true)` on a missing or empty directory | created / left | the same, and the marker is written |
+| `clean(true)` when the output directory is a symbolic link | followed | `SsgError::UnsafeCleanTarget` |
+
+To adopt an existing directory, delete it by hand once (the next build recreates it) or create
+the file: `touch dist/.molt-output`. `ssg::OUTPUT_MARKER` holds the name. The file is uploaded
+with the rest of the site; it holds one line of text.
+
+## New in 2.0.0, nothing to migrate
+
+`Document::html_attr`, the `SeoBuilder` setters (`canonical`, `alternate`, `locale`, `robots`,
+…), `SitemapUrl::alternate`, `StaticSiteGenerator::copy_dir` and `copy_asset_hashed`,
+`preload_font`, `Element::csp_hash`, and `Element::find`, `find_all` and `attribute`. If you
+worked around one of their absences, the workaround keeps working.
+[`docs/capabilities.md`](docs/capabilities.md) has the full table, with the version each one
+starts in.
+
+---
+
 # Migrating from 0.1.0 to 1.0.0
 
 1.0.0 is the release where the public API stops moving. Getting there broke some of it, on

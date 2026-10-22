@@ -28,7 +28,6 @@ use crate::core::render::{Render, RenderOptions};
 ///     r#"<div class="card" id="hero"><h1>Welcome</h1><p>Fuel, tyres &amp; chain.</p></div>"#
 /// );
 /// ```
-#[derive(Debug)]
 pub struct Element {
     // `Cow` for the same reason as `Attribute::key`: the ~90 built-in constructors hand over
     // a `'static` literal, so `div()` allocates no tag name.
@@ -37,6 +36,93 @@ pub struct Element {
     content: Option<String>,
     children: Vec<Node>,
     self_closing: bool,
+}
+
+/// How many levels of nesting `{:?}` writes before it writes `...` instead.
+///
+/// `Debug` is the one traversal that is not an explicit stack, because it has to print in
+/// the shape `Formatter` expects, and `debug_struct` nests. The depth limit is what makes that
+/// safe: the recursion is at most this deep, whatever the tree is, so a 100,000-level tree
+/// costs the same stack as a 128-level one. It also keeps `assert_eq!` useful, since both
+/// trees are formatted when it fails and the output of a tree that deep would be unreadable
+/// and, pretty-printed, quadratic.
+const DEBUG_MAX_DEPTH: usize = 128;
+
+/// An [`Element`] being formatted, `depth` levels into the tree that `{:?}` started at.
+pub(crate) struct DebugElement<'a>(pub(crate) &'a Element, pub(crate) usize);
+
+impl std::fmt::Debug for DebugElement<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(element, depth) = *self;
+        f.debug_struct("Element")
+            .field("tag", &element.tag)
+            .field("attributes", &element.attributes)
+            .field("content", &element.content)
+            .field("children", &DebugChildren(&element.children, depth + 1))
+            .field("self_closing", &element.self_closing)
+            .finish()
+    }
+}
+
+/// A list of nodes `depth` levels in. Every path from a node to its descendants goes through
+/// here, so this is the one place the limit is checked.
+pub(crate) struct DebugChildren<'a>(pub(crate) &'a [Node], pub(crate) usize);
+
+impl std::fmt::Debug for DebugChildren<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(children, depth) = *self;
+        if depth > DEBUG_MAX_DEPTH {
+            return f.write_str("...");
+        }
+        f.debug_list()
+            .entries(children.iter().map(|child| DebugNode(child, depth)))
+            .finish()
+    }
+}
+
+/// A [`Node`] `depth` levels in.
+pub(crate) struct DebugNode<'a>(pub(crate) &'a Node, pub(crate) usize);
+
+impl std::fmt::Debug for DebugNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(node, depth) = *self;
+        match node {
+            Node::Element(element) => f
+                .debug_tuple("Element")
+                .field(&DebugElement(element, depth))
+                .finish(),
+            Node::Text(text) => f.debug_tuple("Text").field(text).finish(),
+            Node::Raw(text) => f.debug_tuple("Raw").field(text).finish(),
+            Node::Comment(text) => f.debug_tuple("Comment").field(text).finish(),
+            Node::Fragment(children) => f
+                .debug_tuple("Fragment")
+                .field(&DebugChildren(children, depth + 1))
+                .finish(),
+        }
+    }
+}
+
+/// Writes the same text the derive did for a tree up to [`DEBUG_MAX_DEPTH`] levels deep, with
+/// `{:#?}` for the multi-line form. Below that depth the children are written as `...`, so
+/// formatting a tree of any depth (a failing `assert_eq!` on one, say) cannot overflow the
+/// stack. The text is for people, not a format to parse, and may change.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+///
+/// let mut tree = p().text("bottom");
+/// for _ in 0..100_000 {
+///     tree = div().child(tree);
+/// }
+/// let shown = format!("{tree:?}");
+/// assert!(shown.starts_with(r#"Element { tag: "div""#));
+/// assert!(shown.contains("children: ..."));
+/// ```
+impl std::fmt::Debug for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        DebugElement(self, 0).fmt(f)
+    }
 }
 
 impl Clone for Element {
@@ -77,6 +163,38 @@ impl std::hash::Hash for Element {
 impl<N: Into<Node>> Extend<N> for Element {
     fn extend<I: IntoIterator<Item = N>>(&mut self, iter: I) {
         self.children.extend(iter.into_iter().map(Into::into));
+    }
+}
+
+/// The elements below some children, in document order, found with an explicit stack. A
+/// fragment is transparent: its children count as if they stood where it does.
+pub(crate) struct Descendants<'a> {
+    pending: Vec<&'a Node>,
+}
+
+impl<'a> Descendants<'a> {
+    pub(crate) fn new(children: &'a [Node]) -> Self {
+        Self {
+            pending: children.iter().rev().collect(),
+        }
+    }
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = &'a Element;
+
+    fn next(&mut self) -> Option<&'a Element> {
+        while let Some(node) = self.pending.pop() {
+            match node {
+                Node::Element(element) => {
+                    self.pending.extend(element.children.iter().rev());
+                    return Some(element);
+                }
+                Node::Fragment(children) => self.pending.extend(children.iter().rev()),
+                _ => {}
+            }
+        }
+        None
     }
 }
 
@@ -316,33 +434,134 @@ impl Element {
         self.self_closing
     }
 
+    // MARK: - Query
+
+    /// The first element below this one, in document order, with this tag.
+    ///
+    /// For asserting on a tree in a test without searching its rendered string. The search
+    /// uses an explicit stack, so a deep tree cannot overflow it, and it borrows: nothing is
+    /// cloned. This element itself is not a match, only what is inside it, and `tag` is
+    /// compared as written (`"div"`, not `"DIV"`).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let page = div()
+    ///     .child(nav().child(a().attr("href", "/docs").text("Docs")))
+    ///     .child(a().attr("href", "/blog").text("Blog"));
+    ///
+    /// let first = page.find("a").expect("a link");
+    /// assert_eq!(first.attribute("href"), Some("/docs"));
+    /// assert_eq!(first.render(), r#"<a href="/docs">Docs</a>"#);
+    /// assert!(page.find("table").is_none());
+    /// ```
+    #[must_use]
+    pub fn find(&self, tag: &str) -> Option<&Element> {
+        Descendants::new(&self.children).find(|element| element.tag() == tag)
+    }
+
+    /// Every element below this one with this tag, in document order. See [`Self::find`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let list = ul().children_from(["a", "b", "c"].map(|x| li().text(x)));
+    /// assert_eq!(list.find_all("li").count(), 3);
+    /// let last = list.find_all("li").last().expect("three items");
+    /// assert_eq!(last.render(), "<li>c</li>");
+    /// ```
+    pub fn find_all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Element> + 'a {
+        Descendants::new(&self.children).filter(move |element| element.tag() == tag)
+    }
+
+    /// The value of the first attribute with this name, **as it is written** into the markup.
+    ///
+    /// The value was escaped when it was set, so `attr("title", "a & b")` reads back as
+    /// `a &amp; b`. A boolean attribute reads as `""`; use [`Self::attributes`] and
+    /// [`Attribute::is_boolean`] to tell it from an empty value. The name is compared as
+    /// written. The URL policy is applied at render time, so a URL that will be written as
+    /// `#` still reads as it was set.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let link = a().attr("href", "/docs?x=1&y=2").bool_attr("download");
+    /// assert_eq!(link.attribute("href"), Some("/docs?x=1&amp;y=2"));
+    /// assert_eq!(link.attribute("download"), Some(""));
+    /// assert_eq!(link.attribute("target"), None);
+    /// ```
+    #[must_use]
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|attribute| attribute.key() == name)
+            .map(Attribute::value)
+    }
+
     // MARK: - Content
 
-    /// Sets the text content, escaping it.
+    /// Appends text, escaping it, at the position of the call.
     ///
-    /// Replaces any content already set.
+    /// Text added before any child lands in the element's **content**, which is the cheap
+    /// shape for a leaf (`p().text("x")` allocates no child list). Once the element has a
+    /// child, text becomes a text child instead, so the order of the calls is the order in the
+    /// markup: `p().child(strong()).text("after")` renders the text after the `<strong>`.
+    /// Calling it twice appends twice; it never replaces.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// let line = p()
+    ///     .text("Owner: ")
+    ///     .child(strong().text("Ada"))
+    ///     .text(" (admin)");
+    /// assert_eq!(line.render(), "<p>Owner: <strong>Ada</strong> (admin)</p>");
+    /// ```
     #[must_use]
     pub fn text(mut self, content: impl AsRef<str>) -> Self {
         let raw = content.as_ref();
-        let mut escaped = String::with_capacity(raw.len());
-        write_escaped_text(&mut escaped, raw, false);
-        self.content = Some(escaped);
+        if self.children.is_empty() {
+            let slot = self
+                .content
+                .get_or_insert_with(|| String::with_capacity(raw.len()));
+            write_escaped_text(slot, raw, false);
+        } else {
+            self.children.push(Node::text(raw));
+        }
         self
     }
 
-    /// Sets the text content **without** escaping it.
+    /// Appends text **without** escaping it, at the position of the call.
     ///
     /// The documented escape hatch for markup you already trust. `<script>` and `<style>`
-    /// use this by default.
+    /// use this by default. Position follows [`Self::text`]: content before the first child,
+    /// a raw child after it.
     ///
     /// **Do not put untrusted data in a `<script>` or `<style>` through this.** The element
     /// ends at the first `</script` (or `</style`) wherever it appears, including inside a
     /// JSON string. For JSON data use [`seo::json_ld`](crate::seo::json_ld) or
     /// [`seo::script_json`](crate::seo::script_json), which escape it; there is no safe way to
     /// embed untrusted text in script code.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// // The string is trusted markup written right here.
+    /// assert_eq!(p().raw_text("a &amp; b").render(), "<p>a &amp; b</p>");
+    /// ```
     #[must_use]
     pub fn raw_text(mut self, content: impl Into<String>) -> Self {
-        self.content = Some(content.into());
+        let content = content.into();
+        if !self.children.is_empty() {
+            self.children.push(Node::raw(content));
+        } else if let Some(slot) = &mut self.content {
+            slot.push_str(&content);
+        } else {
+            self.content = Some(content);
+        }
         self
     }
 
@@ -358,6 +577,53 @@ impl Element {
     pub fn children_from<N: Into<Node>>(mut self, children: impl IntoIterator<Item = N>) -> Self {
         self.children.extend(children.into_iter().map(Into::into));
         self
+    }
+
+    // MARK: - Content-Security-Policy
+
+    /// The CSP hash of this `<script>` or `<style>`: `sha256-` and the base64 SHA-256 of what
+    /// the browser reads between the tags. `None` for any other tag, and for a tag that is
+    /// self-closing.
+    ///
+    /// A page with `script-src 'self'` and no `'unsafe-inline'` still runs an inline script
+    /// whose hash is listed in the policy, and the same goes for `style-src`. Put the result
+    /// in single quotes there: `script-src 'self' 'sha256-…'`. Without the quotes it is also
+    /// the value of an `integrity` attribute.
+    ///
+    /// The hash covers the content **as it is written into the page**: text set with
+    /// [`Self::text`] is hashed after escaping, and [`Self::raw_text`] as it is. The child
+    /// nodes are hashed as the compact render writes them, so for an element with children the
+    /// pretty render, which indents them, does not match. The usual element, a single text,
+    /// renders the same in both. Change one byte and the hash changes, which is the point.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// // The script is code written right here, so `raw_text` is correct.
+    /// let theme = script().raw_text("document.documentElement.dataset.theme='dark';");
+    /// let hash = theme.csp_hash().expect("a script has a hash");
+    /// assert_eq!(hash, "sha256-IL7rwv2VOjU6vInkRwJTvFERJLVY80azmQFKaT/moJg=");
+    ///
+    /// let policy = format!("script-src 'self' '{hash}'");
+    /// assert!(policy.starts_with("script-src 'self' 'sha256-"));
+    /// assert_eq!(div().csp_hash(), None);
+    /// ```
+    #[must_use]
+    pub fn csp_hash(&self) -> Option<String> {
+        if !matches!(self.tag(), "script" | "style") || self.self_closing {
+            return None;
+        }
+        let mut body = String::new();
+        if let Some(content) = &self.content {
+            body.push_str(content);
+        }
+        let options = RenderOptions::compact();
+        for child in &self.children {
+            child.write_into(&mut body, &options, 0);
+        }
+        let digest = crate::core::digest::sha256(body.as_bytes());
+        Some(format!("sha256-{}", crate::core::digest::base64(&digest)))
     }
 
     // MARK: - Attributes
@@ -595,6 +861,112 @@ mod tests {
     }
 
     use super::*;
+
+    /// What the derive wrote for this tree, captured before it was replaced, so the manual impl
+    /// is the same text wherever the depth limit does not apply.
+    #[test]
+    fn debug_writes_what_the_derive_wrote() {
+        let tree = div()
+            .attr("id", "x")
+            .bool_attr("hidden")
+            .text("lead")
+            .child(p().text("a<b"))
+            .child(Node::fragment([
+                Node::raw("<i>"),
+                Node::comment("c"),
+                Node::text("t"),
+            ]));
+        assert_eq!(
+            format!("{tree:?}"),
+            r#"Element { tag: "div", attributes: [Attribute { key: "id", value: "x", is_boolean: false, is_trusted_url: false }, Attribute { key: "hidden", value: "", is_boolean: true, is_trusted_url: false }], content: Some("lead"), children: [Element(Element { tag: "p", attributes: [], content: Some("a&lt;b"), children: [], self_closing: false }), Fragment([Raw(Markup("<i>")), Comment(Markup("c")), Text(Markup("t"))])], self_closing: false }"#
+        );
+        assert_eq!(
+            format!("{:#?}", p().text("x").attr("id", "y")),
+            "Element {\n    tag: \"p\",\n    attributes: [\n        Attribute {\n            key: \"id\",\n            value: \"y\",\n            is_boolean: false,\n            is_trusted_url: false,\n        },\n    ],\n    content: Some(\n        \"x\",\n    ),\n    children: [],\n    self_closing: false,\n}"
+        );
+    }
+
+    /// A chain of `levels` nested `div`s.
+    fn chain(levels: usize) -> Element {
+        let mut tree = crate::elements::div();
+        for _ in 1..levels {
+            tree = crate::elements::div().child(tree);
+        }
+        tree
+    }
+
+    #[test]
+    fn debug_shows_the_whole_tree_up_to_the_depth_limit_and_dots_below_it() {
+        let at_the_limit = format!("{:?}", chain(DEBUG_MAX_DEPTH));
+        assert!(!at_the_limit.contains("..."), "{at_the_limit}");
+
+        let one_past = format!("{:?}", chain(DEBUG_MAX_DEPTH + 1));
+        assert_eq!(one_past.matches("...").count(), 1, "{one_past}");
+        assert!(one_past.contains("children: ..."), "{one_past}");
+    }
+
+    #[test]
+    fn debug_of_a_fragment_chain_is_bounded_too() {
+        let mut node = Node::fragment([]);
+        for _ in 0..100_000 {
+            node = Node::fragment([node]);
+        }
+        // Under an element, which frees what it holds iteratively; a bare chain of fragments is
+        // the documented exception and would overflow on drop, not on `Debug`.
+        let node = Node::from(crate::elements::div().child(node));
+        let shown = format!("{node:?}");
+        assert!(shown.contains("..."));
+        assert!(shown.len() < 100_000, "{} bytes", shown.len());
+    }
+
+    #[test]
+    fn csp_hash_covers_the_content_as_it_is_written_into_the_page() {
+        // Reference values from an independent SHA-256 (Python's hashlib).
+        assert_eq!(
+            crate::elements::style()
+                .raw_text("body{color:red}")
+                .csp_hash()
+                .as_deref(),
+            Some("sha256-FcQqt3aNlV7AZnGV4zkQRVeCeJOxbMPnQSx258L803E=")
+        );
+        // `text` escapes, and the browser reads the escaped bytes, so that is what is hashed.
+        assert_eq!(
+            script().text("a<b").csp_hash().as_deref(),
+            Some("sha256-ElKEL8tlu/71khLOyHevXk0zDglt1/FzVBvpN3U1gyU=")
+        );
+    }
+
+    #[test]
+    fn csp_hash_is_the_hash_of_what_sits_between_the_tags() {
+        let element = script()
+            .raw_text("let a = 1;")
+            .child(Node::raw(" let b = 2;"));
+        let rendered = element.render();
+        let inner = rendered
+            .strip_prefix("<script>")
+            .and_then(|rest| rest.strip_suffix("</script>"))
+            .expect("one script");
+        assert_eq!(inner, "let a = 1; let b = 2;");
+        let digest = crate::core::digest::sha256(inner.as_bytes());
+        assert_eq!(
+            element.csp_hash(),
+            Some(format!("sha256-{}", crate::core::digest::base64(&digest)))
+        );
+    }
+
+    #[test]
+    fn csp_hash_is_none_outside_script_and_style_and_tracks_every_byte() {
+        assert_eq!(div().text("x").csp_hash(), None);
+        assert_eq!(script().self_closing(true).csp_hash(), None);
+        assert_ne!(
+            crate::elements::style().raw_text("a{}").csp_hash(),
+            crate::elements::style().raw_text("a{} ").csp_hash()
+        );
+        assert!(
+            script().csp_hash().is_some(),
+            "an empty script still has a hash"
+        );
+    }
     use crate::core::RenderOptions;
     use crate::elements::{
         a, body, button, div, footer, head, header, html_tag, img, input_named, li, main_tag, meta,

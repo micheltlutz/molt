@@ -29,7 +29,7 @@ Ou adicione a linha você mesmo:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 O pacote se chama `molt-framework` (`molt` no crates.io é um projeto sem relação), e você o
@@ -190,7 +190,8 @@ handle que cada uma devolve; reutilizar um handle lança `null pointer passed to
 ## Para onde ir depois
 
 - [`README.md`](README.md): o que há na crate e o que ela não faz.
-- [`MIGRATION.md`](../../MIGRATION.md) (inglês): vindo da 0.1.0.
+- [`MIGRATION.md`](../../MIGRATION.md) (inglês): vindo da 1.x (para a 2.0.0) ou da 0.1.0.
 - [`SECURITY.md`](../../SECURITY.md) (inglês): o que é garantido e os limites dessa garantia.
   Leia antes de renderizar qualquer coisa que um usuário digitou.
 - [`docs/tag-catalog.md`](../tag-catalog.md): todos os construtores de elemento.
+- [www.molt-framework.io](https://www.molt-framework.io): o site do projeto, feito com o próprio Molt.

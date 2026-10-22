@@ -1,13 +1,13 @@
 [package]
 name = "molt-framework"
-version = "1.1.1"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Michel Anderson Lutz Teixeira <michel@micheltlutz.me>"]
 description = "Fast, type-safe HTML DSL and static site generation engine in Rust and WebAssembly"
 documentation = "https://docs.rs/molt-framework"
 repository = "https://github.com/micheltlutz/molt"
-homepage = "https://github.com/micheltlutz/molt"
+homepage = "https://www.molt-framework.io"
 license = "MIT"
 readme = "README.md"
 keywords = ["html", "dsl", "wasm", "static-site", "templating"]

@@ -166,7 +166,7 @@ impl RenderOptions {
 ///
 /// # Stability
 ///
-/// `Render` is part of the 1.x API. `write_into(&self, &mut String, &RenderOptions, usize)`
+/// `Render` is part of the stable API (since 1.0). `write_into(&self, &mut String, &RenderOptions, usize)`
 /// will not change, and no **required** method will be added; provided methods may be. The
 /// buffer is a `String` on purpose, so a whole tree renders into one allocation, and
 /// `depth` is the indentation level the output starts at (`0` for a root). Implementations
