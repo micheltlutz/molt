@@ -18,6 +18,11 @@ and are a different version line.
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
 
+### Added
+
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
