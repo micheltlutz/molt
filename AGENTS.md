@@ -99,6 +99,7 @@ When you learn something the hard way, add a lesson and its guard (`/lesson`).
 | `./scripts/verify.sh` | **before reporting any change as done** — superset of CI |
 | `cargo test` | unit, integration and doc tests |
 | `cargo test --test golden` | the byte-for-byte parity gate |
+| `./scripts/check-changelog.sh` | every `pub` item added since the last tag is named in `[Unreleased]` (part of `verify.sh`) |
 | `MOLT_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change, and only when asked |
 | `./scripts/generate-tag-catalog.sh` | after adding or renaming an element |
 | `cargo clippy --all-targets --all-features -- -D warnings` | lint |
