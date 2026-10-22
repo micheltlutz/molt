@@ -76,6 +76,11 @@ and are a different version line.
 
 ### Documentation
 
+- `docs/capabilities.md`, `docs/pitfalls.md`, `docs/agents.md` and `llms.txt`, which ship in
+  the published crate (the `.claude/` notes do not): is there an API for X by version and what
+  is out of scope on purpose, the symptom-to-fix tables, a block to paste into a project's
+  `AGENTS.md`, and an index in the llmstxt.org format. `scripts/check-knowledge-base.sh` checks
+  that they are in `cargo package --list` and that their links resolve (#135).
 - The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`,
   so crates.io shows it), the READMEs, the getting-started guides and the crate documentation
   (#117).
