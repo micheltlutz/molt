@@ -18,6 +18,12 @@ and are a different version line.
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
 
+### Added
+
+- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
+  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
+  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
