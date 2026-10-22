@@ -398,6 +398,25 @@ guess a permission scope you cannot confirm (`configure-pages` kept `pages: writ
 
 ---
 
+### L40. A fluent builder promises that call order is document order
+
+(`src/core/node.rs`, #110)
+
+The site built a contact line as `p().child(strong().text("Owner: ")).text(NAME)` and the page
+showed `NAME` first. `Element` kept text in a `content` slot that the renderer always wrote
+before the children, so the position of `.text()` in the chain meant nothing, and a second
+`.text()` silently replaced the first. No test noticed: the assertions counted lines and
+looked for substrings, and only a screenshot showed it.
+
+- **Rule.** In a builder, anything that appends keeps the order of the calls. Text added after
+  a child is a child; text added before any child may stay in the cheap leaf slot.
+- **Rule.** Assert order on the rendered string (`<p><i>Owner: </i>Ada</p>`), not with
+  `contains` and not by counting.
+- **Guard.** `child_then_text_keeps_call_order`, `text_then_child_then_text_keeps_call_order`,
+  `two_text_calls_append`
+
+---
+
 ### L41. A destructive call must know the directory is its own, not only that it is not catastrophic
 
 (`src/ssg.rs`, #115)

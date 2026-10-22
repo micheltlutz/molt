@@ -3,7 +3,7 @@
 
 use std::io::{self, Write};
 
-use crate::core::node::write_document_root;
+use crate::core::node::{write_document_root, write_html_open_tag};
 use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 use crate::elements::{body, head, html_tag};
 
@@ -34,6 +34,9 @@ use crate::elements::{body, head, html_tag};
 pub struct Document {
     /// The document language, rendered as `<html lang="…">`. Omitted when `None`.
     pub lang: Option<String>,
+    /// Further attributes on `<html>`, written after `lang` in insertion order. See
+    /// [`Document::html_attr`].
+    pub html_attributes: Vec<Attribute>,
     /// The `<head>` element.
     pub head: Element,
     /// The `<body>` element.
@@ -60,6 +63,7 @@ impl Document {
     pub fn new(lang: Option<&str>) -> Self {
         Self {
             lang: lang.map(ToString::to_string),
+            html_attributes: Vec::new(),
             head: head(),
             body: body(),
         }
@@ -70,9 +74,50 @@ impl Document {
     pub fn with_parts(lang: Option<&str>, head: Element, body: Element) -> Self {
         Self {
             lang: lang.map(ToString::to_string),
+            html_attributes: Vec::new(),
             head,
             body,
         }
+    }
+
+    /// Appends `key="value"` to the `<html>` element, escaping the value.
+    ///
+    /// For what has to be there before any script runs, such as `data-theme="dark"` or
+    /// `dir="rtl"`. Attributes come after `lang`, in the order they were added, and nothing
+    /// is deduplicated, like [`Element::attr`]. A name that is not safe to write is omitted,
+    /// and a URL value is checked, as on any element.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::Document;
+    /// let page = Document::new(Some("pt-BR")).html_attr("data-theme", "dark");
+    /// assert!(page.render().starts_with("<!DOCTYPE html>\n<html lang=\"pt-BR\" data-theme=\"dark\">"));
+    /// ```
+    #[must_use]
+    pub fn html_attr(mut self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
+        self.html_attributes.push(Attribute::new(key, value));
+        self
+    }
+
+    /// Appends several `<html>` attributes; see [`Document::html_attr`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::Document;
+    /// let page = Document::new(None).html_attrs([("class", "no-js"), ("dir", "rtl")]);
+    /// assert!(page.render().contains("<html class=\"no-js\" dir=\"rtl\">"));
+    /// ```
+    #[must_use]
+    pub fn html_attrs<K: Into<String>, V: AsRef<str>>(
+        mut self,
+        attributes: impl IntoIterator<Item = (K, V)>,
+    ) -> Self {
+        self.html_attributes.extend(
+            attributes
+                .into_iter()
+                .map(|(key, value)| Attribute::new(key, value)),
+        );
+        self
     }
 
     /// Appends nodes to the `<head>`.
@@ -95,10 +140,13 @@ impl Document {
     /// several tests want the tree rather than the serialized page.
     #[must_use]
     pub fn root(&self) -> Element {
-        let root = match &self.lang {
+        let mut root = match &self.lang {
             Some(lang) => html_tag().attr("lang", lang),
             None => html_tag(),
         };
+        for attribute in &self.html_attributes {
+            root = root.add_attribute(attribute.clone());
+        }
         root.child(self.head.clone()).child(self.body.clone())
     }
 
@@ -111,6 +159,7 @@ impl Document {
         // recursive, so a deep body aborted the process before anything was written.
         write_document_root(
             self.lang.as_deref(),
+            &self.html_attributes,
             &self.head,
             &self.body,
             &mut out,
@@ -167,11 +216,8 @@ impl Document {
     }
 
     fn html_open(&self) -> String {
-        let mut open = String::from("<!DOCTYPE html>\n<html");
-        if let Some(lang) = &self.lang {
-            Attribute::new_static("lang", lang).write_into(&mut open);
-        }
-        open.push('>');
+        let mut open = String::from("<!DOCTYPE html>\n");
+        write_html_open_tag(self.lang.as_deref(), &self.html_attributes, &mut open);
         open
     }
 
@@ -294,6 +340,11 @@ mod tests {
             Document::with_parts(Some("en"), head(), pre().text("  keep  ")),
             Document::with_parts(None, Element::new("bad tag"), body().text("t")),
             Document::with_parts(None, head(), body().self_closing(true)),
+            Document::new(Some("en"))
+                .html_attr("data-theme", "dark")
+                .html_attr("class", "a\"b")
+                .body_children([div().child(p().text("x"))]),
+            Document::new(None).html_attr("on load", "x"),
         ];
         for document in &documents {
             for options in [
@@ -307,6 +358,60 @@ mod tests {
                 assert_eq!(document.render_with(&options), expected, "{document:?}");
             }
         }
+    }
+
+    #[test]
+    fn html_attributes_follow_lang_in_every_render_path() {
+        use crate::elements::h1;
+        let page = Document::new(Some("pt-BR"))
+            .html_attr("data-theme", "dark")
+            .html_attrs([("dir", "ltr")])
+            .body_children([h1().text("Hi")]);
+        let open = "<html lang=\"pt-BR\" data-theme=\"dark\" dir=\"ltr\">";
+
+        assert_eq!(
+            page.render_compact(),
+            format!("<!DOCTYPE html>\n{open}<head></head><body><h1>Hi</h1></body></html>")
+        );
+        assert_eq!(
+            page.render(),
+            format!(
+                "<!DOCTYPE html>\n{open}\n  <head></head>\n  <body>\n    <h1>Hi</h1>\n  </body>\n</html>"
+            )
+        );
+        assert_eq!(
+            page.root().render(),
+            format!("{open}<head></head><body><h1>Hi</h1></body></html>")
+        );
+        for options in [RenderOptions::pretty(), RenderOptions::compact()] {
+            let mut streamed = Vec::new();
+            page.render_to(&mut streamed, &options).unwrap();
+            assert_eq!(
+                String::from_utf8(streamed).unwrap(),
+                page.render_with(&options)
+            );
+        }
+    }
+
+    #[test]
+    fn an_unsafe_html_attribute_name_is_omitted_and_a_value_is_escaped() {
+        let page = Document::new(None)
+            .html_attr("on load=alert(1) x", "1")
+            .html_attr("data-x", "\"><script>");
+        assert!(
+            page.render_compact()
+                .starts_with("<!DOCTYPE html>\n<html data-x=\"&quot;><script>\">"),
+            "{}",
+            page.render_compact()
+        );
+    }
+
+    #[test]
+    fn a_document_without_html_attributes_is_unchanged() {
+        assert_eq!(
+            Document::new(Some("en")).render_compact(),
+            "<!DOCTYPE html>\n<html lang=\"en\"><head></head><body></body></html>"
+        );
     }
 
     #[test]

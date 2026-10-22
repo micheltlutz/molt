@@ -1,3 +1,22 @@
+# Migrating from 1.x to 2.0.0
+
+2.0.0 changes two behaviours on purpose, because both were unsafe or surprising. Nothing
+fails to compile; what changes is the output of code that already builds, so render your
+pages before and after (the `molt-migrate` skill in `.claude/skills` has the procedure).
+
+## Output changes (no edit needed unless you relied on the old behaviour)
+
+| input | 1.x | 2.0.0 |
+| --- | --- | --- |
+| `p().child(strong()).text("after")` | `<p>after<strong></strong></p>` (text always first) | `<p><strong></strong>after</p>` |
+| `p().text("a").text("b")` | `<p>b</p>` (the second call replaced the first) | `<p>ab</p>` |
+
+`text` and `raw_text` now append where they are called. Text added before any child is still
+stored as the element's content, so a leaf like `p().text("x")` costs what it did. If you
+called `text` twice to overwrite, build the string once instead.
+
+---
+
 # Migrating from 0.1.0 to 1.0.0
 
 1.0.0 is the release where the public API stops moving. Getting there broke some of it, on
