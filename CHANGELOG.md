@@ -11,6 +11,13 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Added
+
+- `SeoBuilder` setters `robots`, `viewport`, `canonical`, `alternate` (repeatable, `x-default`
+  included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
+  `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
+  a builder that does not call them renders what it did before (#112).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
