@@ -6,6 +6,7 @@
 //! no re-export (`molt::core::escape::escape_text`, `molt::core::tags::is_void`).
 
 pub mod attribute;
+pub(crate) mod digest;
 pub mod element;
 pub mod escape;
 pub mod node;

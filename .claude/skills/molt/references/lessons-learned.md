@@ -417,6 +417,25 @@ looked for substrings, and only a screenshot showed it.
 
 ---
 
+### L41. A destructive call must know the directory is its own, not only that it is not catastrophic
+
+(`src/ssg.rs`, #115)
+
+`clean()` refused `/`, `..`, the home directory, the working directory and its ancestors. It
+still emptied `./dist` of whatever directory the process ran from: `StaticSiteGenerator::new("dist")`
+resolves against the cwd, so a build started from another project (`cargo run --manifest-path`)
+deleted that project's output. The guard was a list of catastrophic paths with no notion of
+ownership, and the existing test asserted that `dist` was accepted.
+
+- **Rule.** Before `remove_dir_all`, show the directory is yours: missing, empty, or carrying a
+  file you wrote (`.molt-output`). Refuse a symbolic link as the root.
+- **Rule.** Test ownership with a temporary directory and an absolute path, never by changing
+  the working directory (L5); the spelling of the path does not change the answer.
+- **Guard.** `clean_refuses_a_directory_it_did_not_make`, `clean_empties_a_directory_that_has_the_marker`,
+  `clean_refuses_an_output_directory_that_is_a_symlink`
+
+---
+
 ## Process lessons
 
 ### L17. Chain commands with `&&` when a failure must stop the chain

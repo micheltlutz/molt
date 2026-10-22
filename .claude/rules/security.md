@@ -28,6 +28,7 @@ Every place a caller-controlled string reaches the output is a row in the surfac
 - **Filesystem (`src/ssg.rs`):** output paths go through the component whitelist, the
   symlink refusal and the atomic write. Destructive functions have a pure guard, and the
   guard is what the tests exercise; never point them at the real working directory (L5).
+  `clean()` also checks ownership, not just that the path is not catastrophic (L41).
 - **`unsafe` is forbidden** crate-wide, tests included. If it seems necessary, the plan is
   wrong: stop and say so.
 - A security fix that changes output for some input updates `SECURITY.md`, `CHANGELOG.md`

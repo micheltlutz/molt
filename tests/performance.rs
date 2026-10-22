@@ -242,3 +242,23 @@ fn displaying_a_very_deep_tree_does_not_abort() {
         VERY_DEEP
     );
 }
+
+/// `find` and `find_all` walk with an explicit stack, so a 100,000-level tree is no more a
+/// stack limit to search than it is to render.
+#[test]
+fn searching_a_very_deep_tree_does_not_abort() {
+    let mut node = Node::from(img().attr("src", "/a.png"));
+    for _ in 0..VERY_DEEP {
+        node = Node::from(div().child(node));
+    }
+    node = Node::fragment([node, Node::from(img().attr("src", "/b.png"))]);
+
+    assert_eq!(node.find_all("img").count(), 2);
+    assert_eq!(node.find_all("div").count(), VERY_DEEP);
+    let deepest = node.find("img").expect("an image");
+    assert_eq!(deepest.attribute("src"), Some("/a.png"));
+
+    let tree = deep_tree(VERY_DEEP);
+    assert!(tree.find("p").is_some());
+    assert_eq!(tree.find_all("div").count(), VERY_DEEP - 1);
+}
