@@ -11,6 +11,14 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Added
+
+- `Element::find`, `Element::find_all` and `Node::find`, `Node::find_all`: search a tree for
+  elements by tag, in document order, with an explicit stack and without cloning; and
+  `Element::attribute(name)`, the value as written into the markup. For asserting on a built
+  tree in a test. There is no `text_content`: text is stored escaped, so it would have to
+  return markup, and `find(..).render()` already says that (#116).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
