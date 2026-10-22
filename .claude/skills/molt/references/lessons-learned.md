@@ -100,15 +100,20 @@ created *during* the build is not closed.
 - **Rule.** Any function that visits every node uses an explicit `Vec` stack (see `Step` in
   `src/core/node.rs`, `clone_tree`/`trees_equal`/`hash_tree` in `src/core/element.rs`). `Drop`
   must be iterative too (`impl Drop for Element`). Write `Clone`, `PartialEq`, `Eq`, `Hash`
-  by hand for the tree types. `Debug` is the one derive that stays recursive; document it.
-- **Test rule.** In a deep-tree test use `assert!(a == b)`, **not** `assert_eq!`: on failure
-  `assert_eq!` formats both trees with the recursive `Debug` and overflows in the very case
-  under test. Clippy's `manual_assert_eq` objects; allow it with a comment saying why.
+  by hand for the tree types. `Debug` was left derived and recursive at first (it still
+  aborted `assert_eq!`); since #79 it is hand-written and stops at 128 levels with `...`.
+- **Test rule.** In a deep-tree test prefer `assert!(a == b)` to `assert_eq!`. On failure
+  `assert_eq!` formats both trees, which used to overflow in the very case under test and now
+  panics with a bounded message. Clippy's `manual_assert_eq` objects; allow it with a comment
+  saying why.
 - **Guard.** `cloning_and_comparing_a_very_deep_tree_does_not_abort`,
   `cloning_and_comparing_deep_fragments_does_not_abort`,
   `a_document_with_a_very_deep_body_renders_in_both_modes`,
   `auditing_a_very_deep_tree_does_not_abort`, `hashing_a_very_deep_tree_does_not_abort`,
-  `displaying_a_very_deep_tree_does_not_abort`
+  `displaying_a_very_deep_tree_does_not_abort`, `formatting_a_very_deep_tree_with_debug_does_not_abort`,
+  `debug_of_a_very_deep_tree_fits_in_a_small_stack`,
+  `a_failing_assert_eq_on_deep_trees_panics_instead_of_aborting`,
+  `debug_writes_what_the_derive_wrote`
 
 ### L7. Replace a clone with a borrow, then prove the bytes did not move
 

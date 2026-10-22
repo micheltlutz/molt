@@ -86,7 +86,8 @@ and examples. If you think you need it:
   `Eq`, `Hash` for recursive types; make `Drop` iterative. See L6 and the existing
   `Step`/`clone_tree`/`trees_equal`/`hash_tree`.
 - A feature that handles untrusted nesting is not done until a 100,000-level test exists.
-- `Debug` stays derived and recursive. Say so in the docs; do not assert-format deep trees.
+- `Debug` is hand-written and stops at a depth limit (`DEBUG_MAX_DEPTH`), writing `...`; keep
+  its text identical to the derive's above that limit (`debug_writes_what_the_derive_wrote`).
 
 ## 5. API design (before 1.0 and after)
 

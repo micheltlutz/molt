@@ -90,9 +90,10 @@ with markup in it (`renderWithIndent(untrusted)` from JavaScript) would put that
 every line.
 
 `Document::render`, `audit`, `Clone` and `PartialEq` are iterative as well, so a document, an
-accessibility audit, a copy or a comparison of a 100,000-level tree is safe. **`Debug` is
-not**: `{:?}` (and the failure message of `assert_eq!`) on a tree that deep recurses and
-aborts. Compare with `assert!(a == b)` in tests that build trees that deep.
+accessibility audit, a copy or a comparison of a 100,000-level tree is safe. So is `Debug`
+since 2.0.0: `{:?}` (and the failure message of `assert_eq!`) writes the first 128 levels and
+`...` below them. Before 2.0.0 it recursed once per level and aborted the process on a tree
+that deep. The text is for people to read and is not a format.
 
 One residual, and it is not a stack limit on rendering: a bare `Node::Fragment` chain with
 no element anywhere in it is still freed recursively. Giving `Node` its own `Drop` would

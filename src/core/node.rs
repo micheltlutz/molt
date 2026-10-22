@@ -6,7 +6,7 @@
 //! makes the `parallel` feature sound.
 
 use crate::core::attribute::Attribute;
-use crate::core::element::{Descendants, Element};
+use crate::core::element::{DebugNode, Descendants, Element};
 use crate::core::escape::write_escaped_text;
 use crate::core::render::{Render, RenderOptions};
 use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_sensitive};
@@ -19,7 +19,6 @@ use crate::core::tags::{is_raw_text, is_valid_tag_name, is_void, is_whitespace_s
 /// let node = Node::from(div().text("hi"));
 /// assert_eq!(node.render(), "<div>hi</div>");
 /// ```
-#[derive(Debug)]
 #[non_exhaustive]
 pub enum Node {
     /// An element with a tag name, attributes and children.
@@ -243,11 +242,23 @@ impl Node {
     }
 }
 
-// `Clone` and `PartialEq` are written by hand, not derived: the derives recurse once per
-// level and a stack overflow is an abort, so comparing or copying a tree the renderer
-// handles fine would have killed the process. `Debug` is still derived — formatting a
-// tree that deep is a diagnostic nobody reads, and `{:?}` on one is documented as unsafe
-// in `SECURITY.md`.
+// `Clone`, `PartialEq` and `Debug` are written by hand, not derived: the derives recurse once
+// per level and a stack overflow is an abort, so comparing, copying or formatting a tree the
+// renderer handles fine would have killed the process. `Debug` is bounded rather than
+// iterative; see `DEBUG_MAX_DEPTH` in `element.rs`.
+/// As for [`Element`]: the same text the derive wrote, down to a depth limit, and `...` below it.
+///
+/// # Examples
+/// ```
+/// use molt::prelude::*;
+/// assert_eq!(format!("{:?}", Node::text("a<b")), r#"Text(Markup("a&lt;b"))"#);
+/// ```
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        DebugNode(self, 0).fmt(f)
+    }
+}
+
 impl Clone for Node {
     fn clone(&self) -> Self {
         crate::core::element::clone_tree(Source::Node(self))

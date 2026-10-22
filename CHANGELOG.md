@@ -51,6 +51,13 @@ and are a different version line.
   site built with Molt. Each item says whether it was measured by the site's author, is
   general web behaviour, or is run as a doc test here (#129).
 
+### Fixed
+
+- `Debug` for `Node` and `Element` no longer aborts the process on a deeply nested tree. It
+  was a derive that recursed once per level, so `{:?}` and the failure message of
+  `assert_eq!` on a 100,000-level tree overflowed the stack. It is now written by hand, prints
+  what the derive printed down to 128 levels, and writes `...` below that (#79).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
