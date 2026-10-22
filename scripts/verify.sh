@@ -49,6 +49,9 @@ fi
 step "3/8  Lint"
 run "cargo fmt --check" cargo fmt --all --check
 run "cargo clippy" cargo clippy --locked --all-targets --all-features -- -D warnings
+# The Documentation workflow builds the rustdoc for GitHub Pages with warnings as errors, and it
+# only runs on `main`, so a pull request never showed a broken intra-doc link (L43).
+run "cargo doc (warnings are errors)" env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 if command -v cargo-deny >/dev/null 2>&1; then
   run "cargo deny" cargo deny check advisories bans licenses sources
 else
