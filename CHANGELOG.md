@@ -17,6 +17,48 @@ and are a different version line.
   replacing a content slot that always rendered before the children. `p().child(x).text(y)`
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
+- `StaticSiteGenerator::clean` only empties a directory that is missing, empty, or holds the
+  `.molt-output` marker. Writing a page or an asset leaves the marker, so a site Molt built
+  keeps working; a `dist` made before 2.0.0, or by anything else, is refused once with
+  `SsgError::UnsafeCleanTarget` (#115). A row in `MIGRATION.md`.
+
+### Security
+
+- `clean()` with a relative path no longer empties the `./dist` of whatever directory the
+  process runs from: the output directory has to carry the marker. A symbolic link as the
+  output directory is refused too (#115).
+
+### Added
+
+- `Document::html_attr` and `Document::html_attrs`: attributes on `<html>` after `lang`
+  (`data-theme`, `dir`, `class`), written the same by `render`, `render_compact`, `render_to`
+  and `root()`. `Document` gains the public field `html_attributes` (#111).
+- `SeoBuilder` setters `robots`, `viewport`, `canonical`, `alternate` (repeatable, `x-default`
+  included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
+  `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
+  a builder that does not call them renders what it did before (#112).
+- `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
+  directory, atomically per file, with a name filter. Symbolic links in the source are skipped
+  and the output directory is never copied into itself. Returns the number of files (#113).
+- `ssg::OUTPUT_MARKER`, the name of that file.
+- `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
+  versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
+  is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
+- `Element::find`, `Element::find_all` and `Node::find`, `Node::find_all`: search a tree for
+  elements by tag, in document order, with an explicit stack and without cloning; and
+  `Element::attribute(name)`, the value as written into the markup. For asserting on a built
+  tree in a test. There is no `text_content`: text is stored escaped, so it would have to
+  return markup, and `find(..).render()` already says that (#116).
+
+### Documentation
+
+- The official site, https://www.molt-framework.io, is linked from `Cargo.toml` (`homepage`, so crates.io shows it),
+  the READMEs, the getting-started guides and the crate documentation (#117).
+
+### Added
+
+- `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
+  (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
 
 ### Added
 
