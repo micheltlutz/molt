@@ -14,7 +14,7 @@
 [![WebAssembly](https://img.shields.io/badge/wasm32-supported-654ff0.svg)](#webassembly)
 [![Sponsor](https://img.shields.io/github/sponsors/micheltlutz?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/micheltlutz)
 
-📦 **[molt-framework on crates.io](https://crates.io/crates/molt-framework)** · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md) · 🇧🇷 [Português](docs/pt-BR/README.md)
+🌐 **[molt-framework.io](https://www.molt-framework.io)** · 📦 [crates.io](https://crates.io/crates/molt-framework) · 📚 [docs.rs](https://docs.rs/molt-framework) · 🚀 [Getting started](GETTING_STARTED.md) · 🇧🇷 [Português](docs/pt-BR/README.md)
 
 Molt is an embedded DSL: you describe the page in Rust, with a fluent builder or the `html!`
 macro, and the compiler checks it. The result is a tree of plain values rendered once as a
@@ -255,6 +255,7 @@ worth knowing about when depth comes from untrusted input. See
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, the limits, how to report a problem.
 - [`ROADMAP.md`](ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).
 - API reference on [docs.rs](https://docs.rs/molt-framework).
+- The project site, built with Molt itself: [www.molt-framework.io](https://www.molt-framework.io).
 
 ## Development
 
