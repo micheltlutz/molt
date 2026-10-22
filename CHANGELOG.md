@@ -60,6 +60,12 @@ and are a different version line.
 - `preload_font(href)`: `<link rel="preload" as="font" …>` that always carries `crossorigin`
   (per the web platform, without it the font is fetched twice; not exercised by the tests) and takes `type` from the extension (#128).
 
+### Added
+
+- `Element::csp_hash`: the `sha256-…` hash of what a `<script>` or `<style>` holds, for a
+  Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
+  SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the

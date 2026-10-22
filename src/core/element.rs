@@ -493,6 +493,53 @@ impl Element {
         self
     }
 
+    // MARK: - Content-Security-Policy
+
+    /// The CSP hash of this `<script>` or `<style>`: `sha256-` and the base64 SHA-256 of what
+    /// the browser reads between the tags. `None` for any other tag, and for a tag that is
+    /// self-closing.
+    ///
+    /// A page with `script-src 'self'` and no `'unsafe-inline'` still runs an inline script
+    /// whose hash is listed in the policy, and the same goes for `style-src`. Put the result
+    /// in single quotes there: `script-src 'self' 'sha256-…'`. Without the quotes it is also
+    /// the value of an `integrity` attribute.
+    ///
+    /// The hash covers the content **as it is written into the page**: text set with
+    /// [`Self::text`] is hashed after escaping, and [`Self::raw_text`] as it is. The child
+    /// nodes are hashed as the compact render writes them, so for an element with children the
+    /// pretty render, which indents them, does not match. The usual element, a single text,
+    /// renders the same in both. Change one byte and the hash changes, which is the point.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// // The script is code written right here, so `raw_text` is correct.
+    /// let theme = script().raw_text("document.documentElement.dataset.theme='dark';");
+    /// let hash = theme.csp_hash().expect("a script has a hash");
+    /// assert_eq!(hash, "sha256-IL7rwv2VOjU6vInkRwJTvFERJLVY80azmQFKaT/moJg=");
+    ///
+    /// let policy = format!("script-src 'self' '{hash}'");
+    /// assert!(policy.starts_with("script-src 'self' 'sha256-"));
+    /// assert_eq!(div().csp_hash(), None);
+    /// ```
+    #[must_use]
+    pub fn csp_hash(&self) -> Option<String> {
+        if !matches!(self.tag(), "script" | "style") || self.self_closing {
+            return None;
+        }
+        let mut body = String::new();
+        if let Some(content) = &self.content {
+            body.push_str(content);
+        }
+        let options = RenderOptions::compact();
+        for child in &self.children {
+            child.write_into(&mut body, &options, 0);
+        }
+        let digest = crate::core::digest::sha256(body.as_bytes());
+        Some(format!("sha256-{}", crate::core::digest::base64(&digest)))
+    }
+
     // MARK: - Attributes
 
     /// Appends an attribute. Does not deduplicate.
@@ -728,6 +775,55 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn csp_hash_covers_the_content_as_it_is_written_into_the_page() {
+        // Reference values from an independent SHA-256 (Python's hashlib).
+        assert_eq!(
+            crate::elements::style()
+                .raw_text("body{color:red}")
+                .csp_hash()
+                .as_deref(),
+            Some("sha256-FcQqt3aNlV7AZnGV4zkQRVeCeJOxbMPnQSx258L803E=")
+        );
+        // `text` escapes, and the browser reads the escaped bytes, so that is what is hashed.
+        assert_eq!(
+            script().text("a<b").csp_hash().as_deref(),
+            Some("sha256-ElKEL8tlu/71khLOyHevXk0zDglt1/FzVBvpN3U1gyU=")
+        );
+    }
+
+    #[test]
+    fn csp_hash_is_the_hash_of_what_sits_between_the_tags() {
+        let element = script()
+            .raw_text("let a = 1;")
+            .child(Node::raw(" let b = 2;"));
+        let rendered = element.render();
+        let inner = rendered
+            .strip_prefix("<script>")
+            .and_then(|rest| rest.strip_suffix("</script>"))
+            .expect("one script");
+        assert_eq!(inner, "let a = 1; let b = 2;");
+        let digest = crate::core::digest::sha256(inner.as_bytes());
+        assert_eq!(
+            element.csp_hash(),
+            Some(format!("sha256-{}", crate::core::digest::base64(&digest)))
+        );
+    }
+
+    #[test]
+    fn csp_hash_is_none_outside_script_and_style_and_tracks_every_byte() {
+        assert_eq!(div().text("x").csp_hash(), None);
+        assert_eq!(script().self_closing(true).csp_hash(), None);
+        assert_ne!(
+            crate::elements::style().raw_text("a{}").csp_hash(),
+            crate::elements::style().raw_text("a{} ").csp_hash()
+        );
+        assert!(
+            script().csp_hash().is_some(),
+            "an empty script still has a hash"
+        );
+    }
     use crate::core::RenderOptions;
     use crate::elements::{
         a, body, button, div, footer, head, header, html_tag, img, input_named, li, main_tag, meta,
