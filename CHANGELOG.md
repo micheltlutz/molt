@@ -17,6 +17,16 @@ and are a different version line.
   replacing a content slot that always rendered before the children. `p().child(x).text(y)`
   now renders `y` after `x`, and calling `text` twice renders both (#110). A row in
   `MIGRATION.md`'s *Output changes* table.
+- `StaticSiteGenerator::clean` only empties a directory that is missing, empty, or holds the
+  `.molt-output` marker. Writing a page or an asset leaves the marker, so a site Molt built
+  keeps working; a `dist` made before 2.0.0, or by anything else, is refused once with
+  `SsgError::UnsafeCleanTarget` (#115). A row in `MIGRATION.md`.
+
+### Security
+
+- `clean()` with a relative path no longer empties the `./dist` of whatever directory the
+  process runs from: the output directory has to carry the marker. A symbolic link as the
+  output directory is refused too (#115).
 
 ### Added
 
@@ -30,6 +40,7 @@ and are a different version line.
 - `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
   directory, atomically per file, with a name filter. Symbolic links in the source are skipped
   and the output directory is never copied into itself. Returns the number of files (#113).
+- `ssg::OUTPUT_MARKER`, the name of that file.
 
 ## [1.1.1] - 2026-10-22
 
