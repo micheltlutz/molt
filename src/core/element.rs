@@ -102,7 +102,7 @@ impl std::fmt::Debug for DebugNode<'_> {
     }
 }
 
-/// Writes the same text the derive did for a tree up to [`DEBUG_MAX_DEPTH`] levels deep, with
+/// Writes the same text the derive did for a tree up to 128 levels deep, with
 /// `{:#?}` for the multi-line form. Below that depth the children are written as `...`, so
 /// formatting a tree of any depth (a failing `assert_eq!` on one, say) cannot overflow the
 /// stack. The text is for people, not a format to parse, and may change.

@@ -11,6 +11,12 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Fixed
+
+- A doc comment of `Debug for Element` linked to a private constant, which broke the rustdoc
+  build for GitHub Pages (`-D warnings`). The published crate and docs.rs were not affected.
+  `scripts/verify.sh` now builds the rustdoc the same way.
+
 ## [2.0.0] - 2026-10-22
 
 A major release. The public API only grows: no public item was removed or changed, and the

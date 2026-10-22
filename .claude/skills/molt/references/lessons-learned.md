@@ -463,6 +463,23 @@ because nothing compared the changelog with the code.
 
 ---
 
+### L43. A workflow that runs only on `main` has to be reproduced before the merge
+
+(`scripts/verify.sh`, 2.0.0)
+
+`docs.yml` builds the rustdoc for GitHub Pages with `RUSTDOCFLAGS="-D warnings"` and runs only on
+a push to `main`. The doc comment of `Debug for Element` (#79) linked with brackets to a private
+constant, which `-D warnings` turns into an error, and nothing on a pull request ran that build:
+the release was merged and tagged, the crate published, and only then did Pages fail.
+
+- **Rule.** Whatever a workflow that is not part of a pull request's checks does, put the same
+  command in `verify.sh`, so it fails on the branch.
+- **Rule.** Do not link with brackets to a private item from a public doc comment; write it as
+  plain code.
+- **Guard.** `scripts/verify.sh`
+
+---
+
 ## Process lessons
 
 ### L17. Chain commands with `&&` when a failure must stop the chain
