@@ -30,7 +30,7 @@ Or add the line yourself:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 The package is `molt-framework` (`molt` on crates.io is an unrelated project); you import it
@@ -191,7 +191,7 @@ call returns; reusing one throws `null pointer passed to rust`.
 ## Where to go next
 
 - [`README.md`](README.md): what is in the crate, and what it does not do.
-- [`MIGRATION.md`](MIGRATION.md): coming from 0.1.0.
+- [`MIGRATION.md`](MIGRATION.md): coming from 1.x (to 2.0.0) or from 0.1.0.
 - [`SECURITY.md`](SECURITY.md): what is guaranteed, and the limits of it. Read it before you
   render anything a user typed.
 - [`docs/tag-catalog.md`](docs/tag-catalog.md): every element constructor.

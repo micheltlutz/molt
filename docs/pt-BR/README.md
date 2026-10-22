@@ -88,7 +88,8 @@ lembra de aplicá-la.
   qualquer uma dessas proteções. Têm nomes próprios para que uma auditoria seja um único
   `grep`.
 - `unsafe_code = "forbid"`, `cargo deny` sobre o grafo de dependências, quatro alvos de fuzzing
-  e um [`SECURITY.md`](../../SECURITY.md) (em inglês) que mapeia cada garantia no OWASP Top 10.
+  agendados para rodar toda noite e um [`SECURITY.md`](../../SECURITY.md) (em inglês) que
+  mapeia cada garantia no OWASP Top 10.
 
 ```rust
 # use molt::prelude::*;
@@ -101,10 +102,11 @@ assert_eq!(a().attr("href", "javascript:alert(1)").render(), r##"<a href="#"></a
 árvore usam sempre uma pilha explícita, nunca a pilha de chamadas. Assim, a profundidade do
 aninhamento não consegue derrubar o processo. Uma árvore de 100.000 níveis é renderizada nos
 dois modos na suíte de testes, e `RenderOptions::with_max_depth` limita a profundidade que vem
-de fora. A saída é fixada byte a byte por fixtures *golden*: uma mudança na marcação é um teste
-que falha, nunca uma surpresa em produção. A crate está na versão 1.x, então o que compila
-hoje continua compilando, e o [`MIGRATION.md`](../../MIGRATION.md) (em inglês) lista toda
-mudança que já alterou a saída.
+de fora; o `Debug` para em 128 níveis e escreve `...`, então nem um `assert_eq!` que falha numa
+árvore funda derruba o processo. A saída é fixada byte a byte por fixtures *golden*: uma
+mudança na marcação é um teste que falha, nunca uma surpresa em produção. A crate está na
+versão 2.x, então o que compila hoje continua compilando, e o
+[`MIGRATION.md`](../../MIGRATION.md) (em inglês) lista toda mudança que alterou a saída.
 
 **Leve.** Zero dependências obrigatórias: `cargo tree` com as features padrão mostra uma única
 crate, esta. `wasm-bindgen` e `rayon` são features opcionais. A build WebAssembly tem cerca de
@@ -137,7 +139,7 @@ ou, à mão, no `Cargo.toml`:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 Nunca usou Rust? O guia [`new-to-rust.md`](new-to-rust.md) vai da instalação do Rust até uma
@@ -217,14 +219,21 @@ por exemplo) é bem-vinda como projeto separado que dependa desta; veja o
 - **API de builder fluente**: `set_id`, `add_class`, `add_classes`, `set_style`, `attr`,
   `data_attr(s)`, `aria_attr(s)`, `set_role`, `child`, `text`, `raw_text`
 - **Macro `html!`**: aninhamento, atributos, `@if` / `@else`, `@for`
-- **`Document`**: cuida do doctype e renderiza indentado por padrão
+- **`Document`**: cuida do doctype, renderiza indentado por padrão e aceita atributos no
+  `<html>` (`html_attr`)
 - **Trait `Layout`**: estruturas de página reutilizáveis
-- **SEO**: Open Graph, Twitter Cards, o bloco `<meta>` comum e um `SeoBuilder`
+- **SEO**: Open Graph, Twitter Cards, o bloco `<meta>` comum e um `SeoBuilder` com links
+  canonical e `hreflang`, locales, tamanho e alt da imagem, `theme-color` e `robots`
 - **Acessibilidade**: helpers de ARIA e uma auditoria que encontra imagens sem `alt`, botões
   sem nome acessível e iframes sem título
-- **Sitemaps e RSS 2.0**
-- **Geração de site estático**: gravação atômica, cópia de arquivos estáticos, paralelismo
-  opcional
+- **Sitemaps e RSS 2.0**: as entradas do sitemap podem listar alternativas `hreflang`
+- **Geração de site estático**: gravação atômica, cópia de arquivos e de diretórios, nomes de
+  arquivo com hash do conteúdo, um `clean()` que só esvazia um diretório que o Molt criou e
+  paralelismo opcional
+- **Recursos de entrega**: `preload_font` e `Element::csp_hash`, para `<script>` e `<style>`
+  inline sob uma Content-Security-Policy estrita
+- **Consulta à árvore**: `find`, `find_all` e `attribute`, para afirmar sobre uma árvore
+  montada num teste
 - **WebAssembly**: a mesma API a partir de JavaScript
 
 ## WebAssembly
@@ -271,7 +280,7 @@ confiável. Veja o [`SECURITY.md`](../../SECURITY.md#rendering-depth-is-no-longe
 - [`pitfalls.md`](../pitfalls.md) (inglês): caracteres errados, saída faltando e erros de compilação, por sintoma.
 - [`performance.md`](performance.md): um checklist para publicar um site rápido e qual recurso do Molt cobre cada item.
 - [`llms.txt`](../../llms.txt) e [`agents.md`](../agents.md) (inglês): um índice para agentes de IA e um bloco para o `AGENTS.md` de um projeto.
-- [`MIGRATION.md`](../../MIGRATION.md) (inglês): da 0.1.0 para a 1.0.0, mudança por mudança.
+- [`MIGRATION.md`](../../MIGRATION.md) (inglês): da 1.x para a 2.0.0, e da 0.1.0 para a 1.0.0, mudança por mudança.
 - [`SECURITY.md`](../../SECURITY.md) (inglês): o que é garantido, os limites e como relatar um
   problema.
 - [`ROADMAP.md`](../../ROADMAP.md) e [`CHANGELOG.md`](../../CHANGELOG.md) (inglês).
@@ -281,7 +290,7 @@ confiável. Veja o [`SECURITY.md`](../../SECURITY.md#rendering-depth-is-no-longe
 ## Desenvolvimento
 
 ```bash
-./scripts/verify.sh        # build, testes, clippy, fmt, catálogo, fixtures, smoke test
+./scripts/verify.sh        # build, testes, lint, catálogo, fixtures, smoke test, docs, changelog
 cargo test                 # testes unitários, de integração e de documentação
 cargo bench                # desempenho da renderização
 ```

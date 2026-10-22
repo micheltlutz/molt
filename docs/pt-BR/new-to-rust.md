@@ -54,7 +54,7 @@ mão:
 
 ```toml
 [dependencies]
-molt-framework = "1.1"
+molt-framework = "2.0"
 ```
 
 O pacote se chama `molt-framework` (o nome `molt` no crates.io pertence a um projeto sem
