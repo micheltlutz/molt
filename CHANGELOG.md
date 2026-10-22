@@ -66,6 +66,13 @@ and are a different version line.
   Content-Security-Policy that lists inline content instead of allowing `'unsafe-inline'`.
   SHA-256 and base64 are written in the crate, so there is still no dependency (#127).
 
+### Added
+
+- `StaticSiteGenerator::copy_asset_hashed(from, dir)`: copies a file to `dir/name.<hash>.ext`
+  (64-bit FNV-1a of the content) and returns the URL, so CSS and JS can be cached for a year
+  without serving a stale copy after a rebuild. It renames one file and rewrites no `import`
+  or `url(...)`; the doc says how to work with that (#126).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the

@@ -367,6 +367,88 @@ impl StaticSiteGenerator {
         Ok(copied)
     }
 
+    /// Copies a file into `dir` under a name that holds a hash of its content, and returns the
+    /// URL to use for it.
+    ///
+    /// `site.css` copied to `"css"` becomes `css/site.<hash>.css` and the result is
+    /// `"/css/site.<hash>.css"`, ready for [`stylesheet`](crate::elements::stylesheet) or
+    /// [`script_src`](crate::elements::script_src). The same bytes always give the same name and
+    /// different bytes a different one, so a cache can keep the file for a year
+    /// (`Cache-Control: public, max-age=31536000, immutable`) and a new build still reaches
+    /// every visitor. `dir` of `""` or `"."` is the output directory itself. The copy is atomic,
+    /// like [`copy_asset`](Self::copy_asset), and writes the bytes that were hashed, so a file
+    /// that changes mid-build cannot get the wrong name.
+    ///
+    /// The hash is 64-bit FNV-1a, written out in full as 16 hex digits. It names content for a
+    /// cache and is **not** a security measure: it is trivially forged. For a hash a browser
+    /// checks, see [`Element::csp_hash`](crate::core::Element::csp_hash).
+    ///
+    /// # What it does not do
+    ///
+    /// It renames one file and rewrites nothing. A module that imports another by relative
+    /// path (`import './motion.js'`) keeps asking for the old name, and so does a `url(...)` in
+    /// a stylesheet. Either concatenate those scripts into one file before copying it, or copy
+    /// the files they refer to first and write their returned URLs into the file you then copy.
+    /// An earlier version of the file stays in the directory until [`clean`](Self::clean).
+    /// The file name should be URL-safe, because it is returned as it is.
+    ///
+    /// # Errors
+    /// Returns an error if `from` cannot be read, its name is not valid UTF-8, or `dir` is
+    /// unsafe (see [`copy_asset`](Self::copy_asset)).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// use molt::ssg::StaticSiteGenerator;
+    ///
+    /// let base = std::env::temp_dir().join(format!("molt-hashed-{}", std::process::id()));
+    /// std::fs::create_dir_all(&base)?;
+    /// std::fs::write(base.join("site.css"), "body{color:red}")?;
+    ///
+    /// let site = StaticSiteGenerator::new(base.join("dist"));
+    /// let url = site.copy_asset_hashed(base.join("site.css"), "css")?;
+    /// assert_eq!(url, "/css/site.c0e0533c847ec633.css");
+    /// assert_eq!(
+    ///     stylesheet(&url).render(),
+    ///     r#"<link href="/css/site.c0e0533c847ec633.css" rel="stylesheet">"#
+    /// );
+    /// assert!(base.join("dist/css/site.c0e0533c847ec633.css").is_file());
+    /// # std::fs::remove_dir_all(&base)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn copy_asset_hashed(&self, from: impl AsRef<Path>, dir: &str) -> Result<String> {
+        let from = from.as_ref();
+        let bytes = fs::read(from).map_err(io_error(from))?;
+        let Some(name) = from.file_name().and_then(OsStr::to_str) else {
+            return Err(SsgError::InvalidPath {
+                path: from.to_string_lossy().into_owned(),
+                reason: "has no file name in UTF-8",
+            });
+        };
+
+        // A leading dot is part of the stem (`.htaccess`), not an extension.
+        let hashed = match name.rsplit_once('.') {
+            Some((stem, extension)) if !stem.is_empty() => {
+                format!("{stem}.{:016x}.{extension}", fnv1a_64(&bytes))
+            }
+            _ => format!("{name}.{:016x}", fnv1a_64(&bytes)),
+        };
+        // Splitting drops the empty segment a leading slash leaves, which would turn `/etc`
+        // into the relative `etc`; a root is refused by `resolve`, so ask it first.
+        if dir.starts_with(['/', '\\']) {
+            self.resolve(dir)?;
+        }
+        let relative = dir
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .chain(std::iter::once(hashed.as_str()))
+            .collect::<Vec<_>>()
+            .join("/");
+
+        self.write_atomic(&relative, |file| file.write_all(&bytes))?;
+        Ok(format!("/{relative}"))
+    }
+
     /// Removes the output directory, optionally recreating it empty.
     ///
     /// Only a directory Molt can show is its own is emptied: one that does not exist, is
@@ -522,6 +604,13 @@ impl StaticSiteGenerator {
         }
         Ok(resolved)
     }
+}
+
+/// 64-bit FNV-1a. Names content for a cache; it is not a security hash.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 /// A sibling of `destination` that no other writer will pick.
@@ -757,6 +846,83 @@ mod tests {
                 .unwrap()
                 .contains("DOCTYPE")
         );
+    }
+
+    #[test]
+    fn fnv1a_matches_the_published_vectors() {
+        assert_eq!(fnv1a_64(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a_64(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a_64(b"foobar"), 0x8594_4171_f739_67e8);
+    }
+
+    #[test]
+    fn a_hashed_copy_is_named_by_its_content_and_returns_the_url() {
+        let dir = TempDir::new("hashed");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        let source = dir.0.join("site.css");
+
+        fs::write(&source, "body{color:red}").expect("written");
+        let red = site.copy_asset_hashed(&source, "css").expect("copied");
+        assert_eq!(red, "/css/site.c0e0533c847ec633.css");
+        assert_eq!(
+            fs::read_to_string(dir.0.join("out/css/site.c0e0533c847ec633.css")).expect("copy"),
+            "body{color:red}"
+        );
+
+        // Same bytes, same name; different bytes, a different one; the old file stays.
+        assert_eq!(site.copy_asset_hashed(&source, "css").expect("again"), red);
+        fs::write(&source, "body{color:blue}").expect("written");
+        let blue = site.copy_asset_hashed(&source, "css").expect("copied");
+        assert_eq!(blue, "/css/site.91db968e2dbb7470.css");
+        assert!(dir.0.join("out/css/site.c0e0533c847ec633.css").is_file());
+        assert!(only_files_named(
+            &dir.0.join("out/css"),
+            &["site.91db968e2dbb7470.css", "site.c0e0533c847ec633.css"]
+        ));
+    }
+
+    #[test]
+    fn a_hashed_name_keeps_the_last_extension_and_copes_with_none() {
+        let dir = TempDir::new("hashed-names");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        for (name, expected) in [
+            ("app.min.js", "/app.min.af63dc4c8601ec8c.js"),
+            ("LICENSE", "/LICENSE.af63dc4c8601ec8c"),
+            (".htaccess", "/.htaccess.af63dc4c8601ec8c"),
+        ] {
+            let source = dir.0.join(name);
+            fs::write(&source, "a").expect("written");
+            assert_eq!(
+                site.copy_asset_hashed(&source, "").expect("copied"),
+                expected
+            );
+        }
+        assert_eq!(
+            site.copy_asset_hashed(dir.0.join("LICENSE"), "./a//b/")
+                .expect("copied"),
+            "/a/b/LICENSE.af63dc4c8601ec8c"
+        );
+    }
+
+    #[test]
+    fn a_hashed_copy_refuses_a_destination_that_escapes_and_a_missing_source() {
+        let dir = TempDir::new("hashed-refused");
+        let site = StaticSiteGenerator::new(dir.0.join("out"));
+        let source = dir.0.join("a.css");
+        fs::write(&source, "a").expect("written");
+
+        for to in ["../x", "/abs", "/", "a/../../b"] {
+            let error = site.copy_asset_hashed(&source, to).expect_err("refused");
+            assert!(
+                matches!(error, SsgError::InvalidPath { .. }),
+                "{to}: {error}"
+            );
+        }
+        assert!(!dir.0.join("out").exists());
+        let error = site
+            .copy_asset_hashed(dir.0.join("missing.css"), "css")
+            .expect_err("fails");
+        assert!(matches!(error, SsgError::Io { .. }), "{error}");
     }
 
     #[test]
