@@ -27,6 +27,9 @@ and are a different version line.
   included), `locale`, `locale_alternate`, `image_size`, `image_alt`, `theme_color` and
   `color_scheme`. Each tag is written only when its setter is called, in a fixed order, so
   a builder that does not call them renders what it did before (#112).
+- `StaticSiteGenerator::copy_dir` and `copy_dir_where`: copy a directory tree into the output
+  directory, atomically per file, with a name filter. Symbolic links in the source are skipped
+  and the output directory is never copied into itself. Returns the number of files (#113).
 
 ## [1.1.1] - 2026-10-22
 
