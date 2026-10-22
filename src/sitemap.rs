@@ -124,6 +124,12 @@ pub struct SitemapUrl {
     /// directly is checked again when the sitemap is rendered: out of range is clamped and
     /// a non-finite one is left out, because `NaN` is not a number a sitemap can hold.
     pub priority: Option<f64>,
+    /// Other-language versions of this page, as `(hreflang, href)` pairs.
+    ///
+    /// Set through [`SitemapUrl::alternate`]. Written as `<xhtml:link rel="alternate">`
+    /// elements; a pair whose `href` is not an absolute `http(s)` URL or whose `hreflang` is
+    /// not a language tag (or `x-default`) is left out when the sitemap is rendered.
+    pub alternates: Vec<(String, String)>,
 }
 
 impl SitemapUrl {
@@ -146,6 +152,31 @@ impl SitemapUrl {
     #[must_use]
     pub fn changefreq(mut self, changefreq: ChangeFreq) -> Self {
         self.changefreq = Some(changefreq);
+        self
+    }
+
+    /// Adds an other-language version of this page: `hreflang` is a language tag such as
+    /// `pt-BR`, or `x-default`; `href` is its absolute URL.
+    ///
+    /// List every version on each entry, **including the page itself**, as search engines
+    /// expect. Entries are written in call order. The `xmlns:xhtml` namespace is declared only
+    /// when at least one alternate is written, so a sitemap without them is unchanged.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::sitemap::{SitemapGenerator, SitemapUrl};
+    ///
+    /// let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://example.com/en/")
+    ///     .alternate("en", "https://example.com/en/")
+    ///     .alternate("pt-BR", "https://example.com/pt/")]);
+    /// assert!(xml.contains(r#"xmlns:xhtml="http://www.w3.org/1999/xhtml""#));
+    /// assert!(xml.contains(
+    ///     r#"<xhtml:link rel="alternate" hreflang="pt-BR" href="https://example.com/pt/"/>"#
+    /// ));
+    /// ```
+    #[must_use]
+    pub fn alternate(mut self, hreflang: impl Into<String>, href: impl Into<String>) -> Self {
+        self.alternates.push((hreflang.into(), href.into()));
         self
     }
 
@@ -179,11 +210,33 @@ impl SitemapGenerator {
     pub fn generate(urls: &[SitemapUrl]) -> String {
         let mut xml = String::with_capacity(256 + urls.len() * 160);
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        xml.push_str("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        xml.push_str("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"");
+        // Declared only when something uses it, so the header of a sitemap without alternates
+        // stays what the golden fixture pins.
+        if urls
+            .iter()
+            .filter(|url| is_http_url(&url.loc))
+            .any(|url| url.alternates.iter().any(is_valid_alternate))
+        {
+            xml.push_str(" xmlns:xhtml=\"http://www.w3.org/1999/xhtml\"");
+        }
+        xml.push_str(">\n");
 
         for url in urls.iter().filter(|url| is_http_url(&url.loc)) {
             xml.push_str("  <url>\n");
             let _ = writeln!(xml, "    <loc>{}</loc>", escape_xml(&url.loc));
+            for (hreflang, href) in url
+                .alternates
+                .iter()
+                .filter(|pair| is_valid_alternate(pair))
+            {
+                let _ = writeln!(
+                    xml,
+                    "    <xhtml:link rel=\"alternate\" hreflang=\"{}\" href=\"{}\"/>",
+                    escape_xml(hreflang),
+                    escape_xml(href)
+                );
+            }
             if let Some(lastmod) = &url.lastmod {
                 let _ = writeln!(xml, "    <lastmod>{}</lastmod>", escape_xml(lastmod));
             }
@@ -243,6 +296,19 @@ impl SitemapGenerator {
     }
 }
 
+/// Whether an `(hreflang, href)` pair can be written: an absolute `http(s)` URL, and a language
+/// tag. A tag is not parsed against BCP 47 here; it must be `x-default` or start with a letter
+/// and hold only ASCII letters, digits and `-`, at most 35 characters, which is every
+/// registered tag and nothing that could carry markup.
+fn is_valid_alternate((hreflang, href): &(String, String)) -> bool {
+    is_http_url(href)
+        && hreflang.len() <= 35
+        && hreflang.starts_with(|c: char| c.is_ascii_alphabetic())
+        && hreflang
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 /// A priority the protocol can hold: clamped into `0.0..=1.0`, and `None` for `NaN`/infinity.
 fn valid_priority(priority: f64) -> Option<f64> {
     priority.is_finite().then(|| priority.clamp(0.0, 1.0))
@@ -263,6 +329,49 @@ fn format_priority(priority: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alternates_declare_the_xhtml_namespace_and_list_every_version() {
+        let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/en/")
+            .alternate("en", "https://e.com/en/")
+            .alternate("pt-BR", "https://e.com/pt/?a=1&b=2")
+            .alternate("x-default", "https://e.com/")]);
+        assert!(xml.contains(
+            "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" \
+             xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">\n"
+        ));
+        assert!(xml.contains(
+            "    <loc>https://e.com/en/</loc>\n\
+             \x20   <xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"https://e.com/en/\"/>\n\
+             \x20   <xhtml:link rel=\"alternate\" hreflang=\"pt-BR\" href=\"https://e.com/pt/?a=1&amp;b=2\"/>\n\
+             \x20   <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"https://e.com/\"/>\n"
+        ));
+    }
+
+    #[test]
+    fn without_alternates_the_header_has_no_xhtml_namespace() {
+        let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/")]);
+        assert!(!xml.contains("xhtml"), "{xml}");
+    }
+
+    #[test]
+    fn a_hostile_alternate_is_left_out_and_does_not_declare_the_namespace() {
+        let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/")
+            .alternate("en", "javascript:alert(1)")
+            .alternate("en\"/><x", "https://e.com/en/")
+            .alternate("", "https://e.com/")
+            .alternate("1en", "https://e.com/")
+            .alternate("e".repeat(36), "https://e.com/")]);
+        assert!(!xml.contains("xhtml"), "{xml}");
+    }
+
+    #[test]
+    fn an_alternate_on_an_entry_that_is_left_out_declares_nothing() {
+        let xml = SitemapGenerator::generate(&[
+            SitemapUrl::new("javascript:alert(1)").alternate("en", "https://e.com/en/")
+        ]);
+        assert!(!xml.contains("xhtml"), "{xml}");
+    }
 
     #[test]
     fn a_sitemap_has_an_xml_declaration_and_a_urlset() {

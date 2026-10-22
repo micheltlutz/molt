@@ -1,3 +1,22 @@
+# Migrating from 1.x to 2.0.0
+
+2.0.0 changes two behaviours on purpose, because both were unsafe or surprising. Nothing
+fails to compile; what changes is the output of code that already builds, so render your
+pages before and after (the `molt-migrate` skill in `.claude/skills` has the procedure).
+
+## Output changes (no edit needed unless you relied on the old behaviour)
+
+| input | 1.x | 2.0.0 |
+| --- | --- | --- |
+| `p().child(strong()).text("after")` | `<p>after<strong></strong></p>` (text always first) | `<p><strong></strong>after</p>` |
+| `p().text("a").text("b")` | `<p>b</p>` (the second call replaced the first) | `<p>ab</p>` |
+
+`text` and `raw_text` now append where they are called. Text added before any child is still
+stored as the element's content, so a leaf like `p().text("x")` costs what it did. If you
+called `text` twice to overwrite, build the string once instead.
+
+---
+
 # Migrating from 0.1.0 to 1.0.0
 
 1.0.0 is the release where the public API stops moving. Getting there broke some of it, on
@@ -242,3 +261,23 @@ let tree = div().child(div().child(div().child(p().text("deep"))));
 let bounded = RenderOptions::compact().with_max_depth(2);
 assert_eq!(tree.render_with(&bounded), "<div><div></div></div>");
 ```
+
+---
+
+## 2.0.0: `StaticSiteGenerator::clean` needs the marker
+
+`clean()` used to empty whatever `output_directory` named, and a relative path such as
+`"dist"` is resolved against the current directory of the **process**. A build started from
+another project (`cargo run --manifest-path ...`) emptied that project's `dist`. Now it empties
+a directory only if it is missing, empty, or contains `.molt-output`.
+
+| situation | 1.x | 2.0.0 |
+| --- | --- | --- |
+| `clean(true)` on a `dist` Molt wrote with 2.0.0 or later | emptied | emptied (the marker is kept) |
+| `clean(true)` on a `dist` made by 1.x, or by another tool, with files in it | emptied | `SsgError::UnsafeCleanTarget`, nothing removed |
+| `clean(true)` on a missing or empty directory | created / left | the same, and the marker is written |
+| `clean(true)` when the output directory is a symbolic link | followed | `SsgError::UnsafeCleanTarget` |
+
+To adopt an existing directory, delete it by hand once (the next build recreates it) or create
+the file: `touch dist/.molt-output`. `ssg::OUTPUT_MARKER` holds the name. The file is uploaded
+with the rest of the site; it holds one line of text.

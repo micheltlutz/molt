@@ -80,6 +80,38 @@ impl<N: Into<Node>> Extend<N> for Element {
     }
 }
 
+/// The elements below some children, in document order, found with an explicit stack. A
+/// fragment is transparent: its children count as if they stood where it does.
+pub(crate) struct Descendants<'a> {
+    pending: Vec<&'a Node>,
+}
+
+impl<'a> Descendants<'a> {
+    pub(crate) fn new(children: &'a [Node]) -> Self {
+        Self {
+            pending: children.iter().rev().collect(),
+        }
+    }
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = &'a Element;
+
+    fn next(&mut self) -> Option<&'a Element> {
+        while let Some(node) = self.pending.pop() {
+            match node {
+                Node::Element(element) => {
+                    self.pending.extend(element.children.iter().rev());
+                    return Some(element);
+                }
+                Node::Fragment(children) => self.pending.extend(children.iter().rev()),
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
 /// Feeds a tree to a hasher with an explicit stack, matching [`trees_equal`]: trees that
 /// compare equal hash equal, and a deep tree cannot overflow the stack on the way.
 pub(crate) fn hash_tree<H: std::hash::Hasher>(root: Source<'_>, state: &mut H) {
@@ -316,33 +348,134 @@ impl Element {
         self.self_closing
     }
 
+    // MARK: - Query
+
+    /// The first element below this one, in document order, with this tag.
+    ///
+    /// For asserting on a tree in a test without searching its rendered string. The search
+    /// uses an explicit stack, so a deep tree cannot overflow it, and it borrows: nothing is
+    /// cloned. This element itself is not a match, only what is inside it, and `tag` is
+    /// compared as written (`"div"`, not `"DIV"`).
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let page = div()
+    ///     .child(nav().child(a().attr("href", "/docs").text("Docs")))
+    ///     .child(a().attr("href", "/blog").text("Blog"));
+    ///
+    /// let first = page.find("a").expect("a link");
+    /// assert_eq!(first.attribute("href"), Some("/docs"));
+    /// assert_eq!(first.render(), r#"<a href="/docs">Docs</a>"#);
+    /// assert!(page.find("table").is_none());
+    /// ```
+    #[must_use]
+    pub fn find(&self, tag: &str) -> Option<&Element> {
+        Descendants::new(&self.children).find(|element| element.tag() == tag)
+    }
+
+    /// Every element below this one with this tag, in document order. See [`Self::find`].
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let list = ul().children_from(["a", "b", "c"].map(|x| li().text(x)));
+    /// assert_eq!(list.find_all("li").count(), 3);
+    /// let last = list.find_all("li").last().expect("three items");
+    /// assert_eq!(last.render(), "<li>c</li>");
+    /// ```
+    pub fn find_all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Element> + 'a {
+        Descendants::new(&self.children).filter(move |element| element.tag() == tag)
+    }
+
+    /// The value of the first attribute with this name, **as it is written** into the markup.
+    ///
+    /// The value was escaped when it was set, so `attr("title", "a & b")` reads back as
+    /// `a &amp; b`. A boolean attribute reads as `""`; use [`Self::attributes`] and
+    /// [`Attribute::is_boolean`] to tell it from an empty value. The name is compared as
+    /// written. The URL policy is applied at render time, so a URL that will be written as
+    /// `#` still reads as it was set.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    ///
+    /// let link = a().attr("href", "/docs?x=1&y=2").bool_attr("download");
+    /// assert_eq!(link.attribute("href"), Some("/docs?x=1&amp;y=2"));
+    /// assert_eq!(link.attribute("download"), Some(""));
+    /// assert_eq!(link.attribute("target"), None);
+    /// ```
+    #[must_use]
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|attribute| attribute.key() == name)
+            .map(Attribute::value)
+    }
+
     // MARK: - Content
 
-    /// Sets the text content, escaping it.
+    /// Appends text, escaping it, at the position of the call.
     ///
-    /// Replaces any content already set.
+    /// Text added before any child lands in the element's **content**, which is the cheap
+    /// shape for a leaf (`p().text("x")` allocates no child list). Once the element has a
+    /// child, text becomes a text child instead, so the order of the calls is the order in the
+    /// markup: `p().child(strong()).text("after")` renders the text after the `<strong>`.
+    /// Calling it twice appends twice; it never replaces.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// let line = p()
+    ///     .text("Owner: ")
+    ///     .child(strong().text("Ada"))
+    ///     .text(" (admin)");
+    /// assert_eq!(line.render(), "<p>Owner: <strong>Ada</strong> (admin)</p>");
+    /// ```
     #[must_use]
     pub fn text(mut self, content: impl AsRef<str>) -> Self {
         let raw = content.as_ref();
-        let mut escaped = String::with_capacity(raw.len());
-        write_escaped_text(&mut escaped, raw, false);
-        self.content = Some(escaped);
+        if self.children.is_empty() {
+            let slot = self
+                .content
+                .get_or_insert_with(|| String::with_capacity(raw.len()));
+            write_escaped_text(slot, raw, false);
+        } else {
+            self.children.push(Node::text(raw));
+        }
         self
     }
 
-    /// Sets the text content **without** escaping it.
+    /// Appends text **without** escaping it, at the position of the call.
     ///
     /// The documented escape hatch for markup you already trust. `<script>` and `<style>`
-    /// use this by default.
+    /// use this by default. Position follows [`Self::text`]: content before the first child,
+    /// a raw child after it.
     ///
     /// **Do not put untrusted data in a `<script>` or `<style>` through this.** The element
     /// ends at the first `</script` (or `</style`) wherever it appears, including inside a
     /// JSON string. For JSON data use [`seo::json_ld`](crate::seo::json_ld) or
     /// [`seo::script_json`](crate::seo::script_json), which escape it; there is no safe way to
     /// embed untrusted text in script code.
+    ///
+    /// # Examples
+    /// ```
+    /// use molt::prelude::*;
+    /// // The string is trusted markup written right here.
+    /// assert_eq!(p().raw_text("a &amp; b").render(), "<p>a &amp; b</p>");
+    /// ```
     #[must_use]
     pub fn raw_text(mut self, content: impl Into<String>) -> Self {
-        self.content = Some(content.into());
+        let content = content.into();
+        if !self.children.is_empty() {
+            self.children.push(Node::raw(content));
+        } else if let Some(slot) = &mut self.content {
+            slot.push_str(&content);
+        } else {
+            self.content = Some(content);
+        }
         self
     }
 
