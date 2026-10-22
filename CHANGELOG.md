@@ -11,6 +11,12 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Added
+
+- `SitemapUrl::alternate(hreflang, href)` and the public field `alternates`: other-language
+  versions written as `<xhtml:link rel="alternate">`. `xmlns:xhtml` is declared only when one
+  is written; a pair with a non-`http(s)` URL or a malformed language tag is left out (#114).
+
 ## [1.1.1] - 2026-10-22
 
 A documentation release. The public API and the rendered output do not change; the
