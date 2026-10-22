@@ -15,6 +15,8 @@ paths:
   the crate; the skill's `pitfalls.md` keeps only the contributor rows. Fix a row in one place.
   `docs/capabilities.md` has a *Since* column: add a row, with its version, for every new
   public API. `./scripts/check-knowledge-base.sh` fails if these pages leave the package (#135).
+  The official skill (`micheltlutz/molt-framework-skill`) bundles snapshots of both pages: after
+  a release that changes them, run its `scripts/sync-references.sh <tag>` and raise its version.
 - `docs/tag-catalog.md` is generated. Run `./scripts/generate-tag-catalog.sh`; never edit
   it.
 - `docs/history/` is where the Swift origin lives. Nothing in `src/`, `tests/` or `scripts/`
