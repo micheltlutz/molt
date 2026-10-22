@@ -344,6 +344,7 @@ pub(crate) fn write_element_tree(
 /// `push_compact_element`/`push_pretty_element` would for an `<html>` with two children.
 pub(crate) fn write_document_root(
     lang: Option<&str>,
+    attributes: &[Attribute],
     head: &Element,
     body: &Element,
     out: &mut String,
@@ -352,11 +353,7 @@ pub(crate) fn write_document_root(
     if options.pretty {
         options.write_indent(out, 0);
     }
-    out.push_str("<html");
-    if let Some(lang) = lang {
-        Attribute::new_static("lang", lang).write_into(out);
-    }
-    out.push('>');
+    write_html_open_tag(lang, attributes, out);
 
     // The stack is a LIFO: the last step pushed runs first.
     let steps = if options.pretty {
@@ -380,6 +377,18 @@ pub(crate) fn write_document_root(
     };
     // `<html>` is written above by hand, so head and body already sit one level down.
     run_steps(steps, out, options, 1);
+}
+
+/// Writes `<html lang="…" …>`: the one place the root's opening tag is written, so the whole
+/// render and the streamed render cannot drift. The attributes are checked as they would be on
+/// an `<html>` element in a tree.
+pub(crate) fn write_html_open_tag(lang: Option<&str>, attributes: &[Attribute], out: &mut String) {
+    out.push_str("<html");
+    if let Some(lang) = lang {
+        Attribute::new_static("lang", lang).write_into_in(out, false, "html");
+    }
+    write_attributes(attributes, out, false, "html");
+    out.push('>');
 }
 
 /// One unit of work for the writer.
