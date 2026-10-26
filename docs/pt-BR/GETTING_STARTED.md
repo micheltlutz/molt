@@ -187,6 +187,25 @@ document.body.innerHTML = page.render();
 Toda chamada do builder **consome** o handle que você passa. Encadeie as chamadas, ou guarde o
 handle que cada uma devolve; reutilizar um handle lança `null pointer passed to rust`.
 
+## Construtores cujo nome não é a tag
+
+Quase todo construtor tem o nome da tag: `div()`, `h1()`, `img()`. Três não têm, e são os que
+você vai procurar pelo nome errado.
+
+| HTML | Rust | Motivo |
+| --- | --- | --- |
+| `<main>` | `main_tag()` | o `fn main` de um binário encobriria um `main()` importado do prelude |
+| `<html>` | `html_tag()` | o mesmo sufixo `_tag`, por coerência com `main_tag()` |
+| `<label for>` | `label_for(id)` | `for` é palavra reservada; o atributo renderizado continua `for` |
+
+```rust
+use molt::prelude::*;
+
+assert_eq!(main_tag().render(), "<main></main>");
+assert_eq!(html_tag().render(), "<html></html>");
+assert_eq!(label_for("email").render(), r#"<label for="email"></label>"#);
+```
+
 ## Para onde ir depois
 
 - [`README.md`](README.md): o que há na crate e o que ela não faz.

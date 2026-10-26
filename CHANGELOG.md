@@ -11,11 +11,25 @@ and are a different version line.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-26
+
+A patch release. No public item and no rendered output changed, so there is nothing to migrate.
+
+### Changed
+
+- `GETTING_STARTED.md` and its Portuguese edition list the constructors whose name is not the
+  tag, `main_tag()`, `html_tag()` and `label_for(id)`, with the reason for each and a doctest
+  that renders them (#151). Documentation only: no public item or output changed.
+- The release pipeline's pinned actions moved to `crates-io-auth-action` 1.0.6,
+  `install-action` 2.87.30 and `rust-cache` 2.9.3 (#148, #149, #150), and Dependabot now opens
+  its pull requests against `develop` (#152). None of this is in the published crate.
+
 ### Fixed
 
 - A doc comment of `Debug for Element` linked to a private constant, which broke the rustdoc
-  build for GitHub Pages (`-D warnings`). The published crate and docs.rs were not affected.
-  `scripts/verify.sh` now builds the rustdoc the same way.
+  build for GitHub Pages (`-D warnings`). The published crate and docs.rs were not affected,
+  but the 2.0.0 source still carried the comment; 2.0.1 is the first release without it
+  (#147). `scripts/verify.sh` now builds the rustdoc the same way.
 
 ## [2.0.0] - 2026-10-22
 

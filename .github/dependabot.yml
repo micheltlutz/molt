@@ -1,12 +1,17 @@
 version: 2
 updates:
+  # `develop` is where work lands; `main` receives releases only (see git-workflow.md).
+  # Dependabot reads this file from the default branch, so the target applies from the
+  # first release that carries it.
   - package-ecosystem: cargo
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
