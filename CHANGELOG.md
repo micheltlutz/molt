@@ -11,6 +11,12 @@ and are a different version line.
 
 ## [Unreleased]
 
+### Changed
+
+- `GETTING_STARTED.md` and its Portuguese edition list the constructors whose name is not the
+  tag, `main_tag()`, `html_tag()` and `label_for(id)`, with the reason for each and a doctest
+  that renders them (#151). Documentation only: no public item or output changed.
+
 ### Fixed
 
 - A doc comment of `Debug for Element` linked to a private constant, which broke the rustdoc
