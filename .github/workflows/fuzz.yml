@@ -47,7 +47,7 @@ jobs:
           cache-on-failure: true
       # Pinned: a new cargo-fuzz changes how the targets are built, and that is better seen in a
       # pull request that bumps this number than in a night's run.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-fuzz@0.13.2
       # The corpus is restored from the newest earlier run and saved under this run's id, so it
